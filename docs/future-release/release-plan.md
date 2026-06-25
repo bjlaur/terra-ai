@@ -129,6 +129,17 @@ Based on user's run script pattern. NOPASSWD yay build, then remove NOPASSWD.
 9. Rate limiting
 10. Containerfile polish
 
+## Done (in 0.0.2)
+
+- Test tool (Textual, irssi-like) + screenshot tests
+- Additional providers (Gemini, OpenAI, Ollama) + fallback chain
+- Web search (provider-native + DuckDuckGo fallback)
+- ergo integration testing
+- Context compaction (.compact) with session rotation
+- UX commands: .noisy, .setlocation, .help, .effort, .clear
+- Performance stats (.stats)
+- 80+ tests
+
 ## Done (moved to 0.0.1)
 
 - SOPEL plugin entry point

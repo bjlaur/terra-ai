@@ -65,3 +65,7 @@ High priority:
 - Multi-server support
 - Rate limiting
 - Containerfile polish
+
+0.0.2 test tool testing:
+- [ ] Write DB-based tests for `.addprompt` / `.rmprompt` (check prompts table directly so user can verify manually)
+- [ ] Run --real API tests (R1–R5) with OPENROUTER_API_KEY set

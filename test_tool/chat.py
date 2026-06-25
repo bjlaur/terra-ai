@@ -125,18 +125,23 @@ class TerraAITestClient:
                     self.bot.say(ai_response)
             return list(self.bot.messages)
 
-        # Custom prompt check
-        prompt_response = self.terra.prompts.match_prompt(self.server, text)
-        if prompt_response:
-            self.bot.say(prompt_response)
-            return list(self.bot.messages)
-
         # Trigger phrase — route to AI with history
         trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
         if text.lower().startswith(trigger_phrase.lower()):
             ai_text = text[len(trigger_phrase):].strip()
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, ai_text, include_history=True
+            )
+            if response:
+                self.bot.say(response)
+            return list(self.bot.messages)
+
+        # Unknown .command — forward to AI (matches plugin.py behavior:
+        # anything starting with . that isn't a management command goes to AI)
+        if text.startswith("."):
+            full_text = text[1:].strip()
+            response = self.terra.handle_ai_message(
+                self.server, self.channel, self.nick, full_text, include_history=True
             )
             if response:
                 self.bot.say(response)
@@ -193,9 +198,11 @@ def run_interactive():
         cursor_pos = 0
         completions_shown = False  # True when completion hints are on the hint line
 
-        # Nicks to tab-complete. In a real IRC client this is the channel
-        # member list; here the only other entity is the bot.
-        tab_nicks = ["TerraAI"]
+        # Completions for Tab. In a real IRC client this completes nicks
+        # from the channel member list; here the only other entity is the
+        # bot. We include the trigger-phrase suffix so the user can
+        # immediately type their message after completing.
+        tab_completions = ["TerraAI: "]
 
         def clear_hint_line():
             """Clear the completion hint line (row above input)."""
@@ -283,26 +290,25 @@ def run_interactive():
                             buf = []
                         cursor_pos = len(buf)
                         redraw_input("".join(buf))
-                elif key == 9:  # Tab completion — complete nicks
+                elif key == 9:  # Tab completion
                     current = "".join(buf[:cursor_pos])
-                    # Only complete the first word (nicks don't contain spaces)
                     if " " in current:
                         curses.beep()
                     else:
-                        # Case-insensitive prefix match against known nicks
-                        matches = [n for n in tab_nicks
-                                   if n.lower().startswith(current.lower())]
+                        # Case-insensitive prefix match against completions
+                        matches = [c for c in tab_completions
+                                   if c.lower().startswith(current.lower())]
                         if matches:
-                            # Complete to the common prefix (case from first match)
                             common = matches[0]
                             for m in matches[1:]:
                                 while not m.lower().startswith(common.lower()):
                                     common = common[:-1]
-                            buf = list(common)
+                            # Preserve case from the completion entry
+                            completed = common if current else common
+                            buf = list(completed)
                             cursor_pos = len(buf)
                             redraw_input("".join(buf))
                             if len(matches) > 1:
-                                # Show all matches on the hint line
                                 clear_hint_line()
                                 try:
                                     chat.addstr(height - 3, 0, "  ".join(matches[:8]),

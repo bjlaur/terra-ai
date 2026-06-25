@@ -55,13 +55,17 @@ class TestTestTool:
         assert len(responses) > 0
         assert "opted in" in responses[0]
 
-    def test_send_ai_message(self, terra):
-        """Test sending an AI message."""
+    def test_regular_message_ignored(self, terra):
+        """Test that regular messages (no trigger) are ignored by the bot.
+
+        Real IRC bots only respond to the trigger phrase — regular chat
+        should not produce a response.
+        """
         from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
         responses = client.send_message("hello")
-        assert len(responses) > 0
+        assert len(responses) == 0, "Regular message should not produce a response"
 
     def test_send_as_different_nick(self, terra):
         """Test sending as different users."""
@@ -71,19 +75,20 @@ class TestTestTool:
         responses = client.send_as("other-user", "hello")
         assert len(responses) > 0
 
-    def test_custom_prompt_flow(self, terra):
-        """Test creating and matching a custom prompt."""
+    def test_unknown_command_routes_to_ai(self, terra):
+        """Test that unknown .commands are forwarded to AI (not answered locally).
+
+        Any .command that isn't a management command should go to AI.
+        The AI generates the response — we just verify a non-empty response.
+        """
         from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
 
-        # Add prompt
-        add_response = client.send_message(".addprompt wea sunny")
-        assert "Added" in add_response[0]
-
-        # Trigger prompt
-        trigger_response = client.send_message(".wea")
-        assert "sunny" in trigger_response[0].lower()
+        # Send unknown .command — should route to AI
+        response = client.send_message(".what's 2+2")
+        assert len(response) > 0, "Unknown .command produced no response"
+        assert response[0].strip() != "", "Unknown .command produced empty response"
 
     def test_help_command(self, terra):
         """Test help command."""
@@ -182,10 +187,79 @@ class TestInteractiveMode:
         assert "optin" in stdout.lower() or "optin" in stderr.lower(), \
             "Help command response not found"
 
-    def test_interactive_tab_completes_nick(self, env_setup):
-        """Test that Tab completes the bot nick: 'Ter<Tab>' -> 'TerraAI'."""
+    def test_interactive_tab_completes_trigger(self, env_setup):
+        """Test that Tab completes to trigger phrase: 'Ter<Tab>' -> 'TerraAI: '."""
         stdout, stderr = self._run_interactive([b"Ter\t", b"quit\n"])
         assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
-        # After Tab, the input line should contain the completed nick "TerraAI"
-        assert "TerraAI" in stdout, \
-            "Tab did not complete 'Ter' to 'TerraAI' in the input line"
+        # After Tab, the input line should contain the full trigger phrase
+        assert "TerraAI:" in stdout, \
+            "Tab did not complete 'Ter' to 'TerraAI: ' in the input line"
+
+
+# --- Real API tests (skipped unless OPENROUTER_API_KEY is set) ---
+
+HAS_REAL_API = bool(os.environ.get("OPENROUTER_API_KEY"))
+
+
+@pytest.mark.skipif(not HAS_REAL_API, reason="OPENROUTER_API_KEY not set")
+class TestRealAPI:
+    """Tests that hit the real AI provider.
+
+    Run with: OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
+    """
+
+    @pytest.fixture
+    def real_terra(self, db):
+        config = TerraConfig()
+        config.sqlite_path = db.config.path
+        config.provider.api_key = os.environ["OPENROUTER_API_KEY"]
+        return TerraAI(config)
+
+    def test_real_effort_level(self, real_terra):
+        """Test .effort low sets the level and responds with confirmation."""
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = real_terra
+        responses = client.send_message(".effort low")
+        assert len(responses) > 0
+        assert "low" in responses[0].lower()
+
+    def test_real_unknown_command_goes_to_ai(self, real_terra):
+        """Test that unknown .commands are forwarded to AI in real API.
+
+        Any .command that isn't a management command should go to AI.
+        We verify a non-empty AI response comes back.
+        """
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = real_terra
+
+        # Send unknown .command — should route to AI
+        resp = client.send_message(".what's 2+2")
+        assert len(resp) > 0, "Unknown .command produced no AI response"
+        assert resp[0].strip() != ""
+
+    def test_real_noisy_toggle(self, real_terra):
+        """Test .noisy toggles noisy mode (no API call needed)."""
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = real_terra
+        # Toggle on
+        resp_on = client.send_message(".noisy")
+        assert len(resp_on) > 0
+        assert "ON" in resp_on[0].upper()
+        # Toggle off
+        resp_off = client.send_message(".noisy")
+        assert len(resp_off) > 0
+        assert "OFF" in resp_off[0].upper()
+
+    def test_real_setlocation_goes_to_ai(self, real_terra):
+        """Test .setlocation forwards to AI for response."""
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = real_terra
+        client.send_message(".optin")
+        resp = client.send_message(".setlocation Portland, OR")
+        assert len(resp) > 0
+        # Response should be AI-generated, not "Your location is set to..."
+        assert "your location is set" not in resp[0].lower()

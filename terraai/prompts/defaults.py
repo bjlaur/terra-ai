@@ -43,7 +43,7 @@ IRC has a character limit. You will follow that limit. Give concise and truthful
 # Management commands that never go to AI
 MANAGEMENT_COMMANDS = {
     "optin", "optout", "noisy", "addprompt", "rmprompt",
-    "listprompts", "compact", "ai", "stats", "help", "setlocation", "effort",
+    "listprompts", "compact", "clear", "ai", "stats", "help", "setlocation", "effort",
 }
 
 # Effort levels

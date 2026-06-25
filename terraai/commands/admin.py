@@ -54,6 +54,18 @@ class AdminCommands:
         new_session = context.compact(server, channel)
         return f"Context compacted. New session: {new_session[:8]}..."
 
+    def handle_clear(self, server: str, channel: str) -> str:
+        """Handle .clear command — wipe conversation history and start fresh."""
+        import uuid
+        new_session_id = str(uuid.uuid4())
+        self.db.conn.execute(
+            "UPDATE sessions SET active_session_id = ?, updated_at = datetime('now') "
+            "WHERE server = ? AND channel = ?",
+            (new_session_id, server, channel)
+        )
+        self.db.conn.commit()
+        return f"Session cleared. New session: {new_session_id[:8]}..."
+
     def handle_stats(self, server: str, channel: str) -> str:
         """Handle .stats command."""
         rows = self.db.conn.execute(
@@ -84,5 +96,5 @@ class AdminCommands:
         return (
             "Commands: .optin, .optout, .noisy, .ai <prompt>, "
             ".addprompt <trigger> <text>, .rmprompt <number>, .listprompts, "
-            ".setlocation <city, state>, .compact, .stats, .help, .effort [level]"
+            ".setlocation <city, state>, .compact, .clear, .stats, .help, .effort [level]"
         )

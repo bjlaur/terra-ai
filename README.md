@@ -67,6 +67,7 @@ python -m py_compile terraai/*.py terraai/**/*.py
 | `.rmprompt <number>` | Remove custom prompt |
 | `.listprompts` | List all custom prompts |
 | `.compact` | Compact conversation history |
+| `.clear` | Clear conversation history and start fresh |
 | `.stats` | Show performance stats |
 | `.help` | Show available commands |
 | `.effort [level]` | Set reasoning effort |
