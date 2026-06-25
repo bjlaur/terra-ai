@@ -115,6 +115,20 @@ class TerraAITestClient:
             response = self.terra.handle_management(self.server, self.channel, self.nick, text)
             if response:
                 self.bot.say(response)
+            elif text.lower().startswith(".setlocation"):
+                # Hybrid command: stored locally, now forward to AI for response
+                ai_text = f"{self.nick} {text}"
+                ai_response = self.terra.handle_ai_message(
+                    self.server, self.channel, self.nick, ai_text, include_history=True
+                )
+                if ai_response:
+                    self.bot.say(ai_response)
+            return list(self.bot.messages)
+
+        # Custom prompt check
+        prompt_response = self.terra.prompts.match_prompt(self.server, text)
+        if prompt_response:
+            self.bot.say(prompt_response)
             return list(self.bot.messages)
 
         # Trigger phrase — route to AI with history

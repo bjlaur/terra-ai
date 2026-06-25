@@ -300,7 +300,7 @@ These commands **create or modify custom prompts**. The scope depends on who sen
 | `.optin` | `.optin` | `UPDATE users SET opted_in=1`. | "You are now opted in. TerraAI will respond to you." |
 | `.optout` | `.optout` | `UPDATE users SET opted_in=0` + `DELETE FROM conversation_history WHERE nick=?`. | "You are opted out. Your history has been forgotten." |
 | `.noisy` | `.noisy` | Toggles `noisy` boolean for that nick. When enabled, bot sends status notices (e.g., "Looking up weather...", "Sending to OpenRouter...", "Checking local prompts..."). | "Noisy mode ON." / "Noisy mode OFF." |
-| `.setlocation` | `.setlocation <city, state>` | **Hybrid:** (1) Sent to AI as `<nick> .setlocation \<city, state\>` so the AI "learns" the location. (2) Processed locally: creates a custom prompt with prompt=`<nick> .setlocation \<city, state\>`, response=`ok`. Responds directly: "Your location is set to \<city, state\>." No separate column in DB. | "Your location is set to \<city, state\>." |
+| `.setlocation` | `.setlocation <city, state>` | **Hybrid:** (1) Processed locally: creates a custom prompt with prompt=`<nick> .setlocation \<city, state\>`, response=`ok`. (2) Forwarded to AI as `<nick> .setlocation \<city, state\>` so the AI "learns" the location. The AI provides the response — no direct confirmation is injected. No separate column in DB. | (AI-generated response) |
 
 ### 5.3 AI Trigger Phrase
 

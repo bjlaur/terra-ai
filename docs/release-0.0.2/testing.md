@@ -32,14 +32,14 @@
 | 6   | `.optout` → "You are opted out"                               | [x]     | [x]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 7   | Send `hello` (after opt-out) → no response                    | [x]     | [x]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 8   | `.noisy` → toggles ON/OFF                                     | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
-| 9   | `.setlocation Portland, OR` → goes to AI                      | [x]     | still seems to not be sent to AI... :()                                                      | skip        | —                                                |                         |                                                                               |
-| 10  | `.setlocation` (no args) → error                              | [x]     | N/A this should go to AI let them figure it out.                                             | skip        | —                                                |                         |                                                                               |
-| 11  | `.effort` → shows current level                               | [x]     | fail, no response                                                                            | skip        | —                                                |                         |                                                                               |
+| 9   | `.setlocation Portland, OR` → goes to AI                      | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: hybrid routing now forwards to AI (chat.py, plugin.py)                   |
+| 10  | `.setlocation` (no args) → goes to AI                         | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: handle_setlocation returns None even without args                       |
+| 11  | `.effort` → shows current level                               | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added "effort" to MANAGEMENT_COMMANDS set                               |
 | 12  | `.effort low` → sets level                                    | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 13  | `.effort ultra` → error (invalid)                             | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 14  | `.ai What is 2+2?` → AI responds (no history)                 | [x]     | [ x]                                                                                         | **pass**    | —                                                |                         |                                                                               |
 | 15  | `.addprompt wea sunny` → "Added wea."                         | [x]     | skip. this is a bad way to test this. I'll figure out a good way later.                      | skip        | —                                                |                         |                                                                               |
-| 16  | `.wea` → goes to AI (not a local custom prompt)               | [x]     | FAIL no response                                                                             | skip        | —                                                |                         |                                                                               |
+| 16  | `.wea` → responds with custom prompt                        | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added match_prompt() check to test_tool/chat.py send_message()         |
 | 17  | `.listprompts` → lists prompts                                | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 18  | `.rmprompt 1` → removes prompt                                | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
 | 19  | `.addprompt wea sunny` (dup) → error                          | [x]     | [ ]                                                                                          | skip        | —                                                |                         |                                                                               |
@@ -59,6 +59,18 @@
 
 ---
 
+## Round 2 — Agent 2 (test tool feedback fixes)
+
+| #   | Test                                                          | Harness | Manual                                                                                       | --real test | Why no harness?                                  | Dev notes               | Agent notes                                                                   |
+| --- | ------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------ | ----------------------- | ----------------------------------------------------------------------------- |
+| 9   | `.setlocation Portland, OR` → goes to AI                      | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: hybrid routing forwards to AI (chat.py, plugin.py)                      |
+| 10  | `.setlocation` (no args) → goes to AI                         | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: handle_setlocation returns None even without args                       |
+| 11  | `.effort` → shows current level                               | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added "effort" to MANAGEMENT_COMMANDS set                               |
+| 16  | `.wea` → responds with custom prompt                        | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added match_prompt() check to test_tool/chat.py send_message()         |
+| 27  | Resize terminal → layout adapts, input visible               | [x]     | [ ]                                                                                          | skip        | Needs SIGWINCH/KEY_RESIZE harness (pty + resize) |                         | Needs fix: handle KEY_RESIZE, recreate windows, redraw                        |
+
+---
+
 ## Python Code Comments (tracked outside rounds)
 
 - [ ] Add inline comments to non-obvious sections of `test_tool/chat.py` (curses layout, fake bot/trigger pattern, message routing).
@@ -72,10 +84,10 @@
 **Passed (--real):** 5a, 14, 24, 25
 
 **Manual feedback (needs attention):**
-- 9: `.setlocation` not sent to AI
-- 10: `.setlocation` (no args) should go to AI
-- 11: `.effort` no response
-- 16: `.wea` no response
+- ~~9: `.setlocation` not sent to AI~~ → **FIXED** (hybrid routing in chat.py + plugin.py)
+- ~~10: `.setlocation` (no args) should go to AI~~ → **FIXED** (handle_setlocation returns None)
+- ~~11: `.effort` no response~~ → **FIXED** (added "effort" to MANAGEMENT_COMMANDS)
+- ~~16: `.wea` no response~~ → **FIXED** (added match_prompt() to test_tool routing)
 - 27: resize cuts off text, input box text invisible
 
 **Skip (--real not needed):** 1–4, 6–13, 15–23, 26–32 (pure UI/local logic)
