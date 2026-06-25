@@ -57,8 +57,9 @@ python -m py_compile terraai/*.py terraai/**/*.py
 
 | Command | Description |
 |---------|-------------|
-| `TerraAI: <text>` | Talk to the bot directly |
-| `.<text>` | Shorthand (e.g. `.wea` for weather) |
+| `TerraAI: <text>` | Talk to the bot directly (trigger phrase in channels) |
+| `/msg TerraAI <text>` | Send a private message (no trigger phrase needed) |
+| `.<text>` | Shorthand (unknown .commands are forwarded to AI) |
 | `.ai <prompt>` | Context-free AI prompt |
 | `.optin` / `.optout` | Toggle AI responses |
 | `.noisy` | Toggle status notices |
