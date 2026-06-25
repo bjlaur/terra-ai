@@ -2,6 +2,10 @@
 
 Arch packages for the Containerfile. Installed via pacman, not pip.
 
+```bash
+sudo pacman -S --noconfirm python-yaml python-openai python-httpx
+```
+
 ## Required (0.0.1)
 
 | Package | Source | Purpose |
@@ -9,6 +13,7 @@ Arch packages for the Containerfile. Installed via pacman, not pip.
 | `sopel` | AUR (yay) | IRC bot framework |
 | `python-yaml` | extra | Config parsing |
 | `python-openai` | extra | AI provider client |
+| `python-httpx` | extra | HTTP client (OpenRouter provider) |
 
 ## Future
 

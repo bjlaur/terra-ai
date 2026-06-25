@@ -1,0 +1,108 @@
+"""Tests for TerraAI prompt and context managers."""
+
+import os
+import tempfile
+
+import pytest
+
+from terraai.context.manager import ContextManager
+from terraai.database import DBConfig, Database
+from terraai.prompts.manager import PromptManager
+
+
+@pytest.fixture
+def db():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    config = DBConfig(path=path, wal=False)
+    database = Database(config)
+    yield database
+    os.unlink(path)
+
+
+@pytest.fixture
+def prompts(db):
+    return PromptManager(db, trigger_char=".")
+
+
+@pytest.fixture
+def context(db, prompts):
+    return ContextManager(db, prompts)
+
+
+class TestPromptManager:
+    def test_is_management_command(self, prompts):
+        assert prompts.is_management_command(".optin") is True
+        assert prompts.is_management_command(".optout") is True
+        assert prompts.is_management_command(".ai hello") is True
+        assert prompts.is_management_command(".help") is True
+        assert prompts.is_management_command(".wea") is False
+        assert prompts.is_management_command("hello") is False
+
+    def test_get_system_prompt(self, prompts):
+        sp = prompts.get_system_prompt()
+        assert "TerraAI" in sp
+        assert "{triggerchar}" not in sp  # Should be interpolated
+
+    def test_context_seed(self, prompts):
+        seed = prompts.get_context_seed("irc.example.com", "#chan")
+        assert len(seed) > 0
+        assert seed[0]["role"] == "user"
+        assert seed[0]["source"] == "system"
+
+    def test_add_and_match_prompt(self, prompts):
+        prompts.add_prompt("irc.example.com", ".wea", "sunny", "admin")
+        result = prompts.match_prompt("irc.example.com", ".wea")
+        assert result == "sunny"
+
+    def test_match_prompt_not_found(self, prompts):
+        result = prompts.match_prompt("irc.example.com", ".unknown")
+        assert result is None
+
+    def test_remove_prompt(self, prompts):
+        prompts.add_prompt("irc.example.com", ".wea", "sunny")
+        assert prompts.remove_prompt("irc.example.com", ".wea") is True
+        assert prompts.match_prompt("irc.example.com", ".wea") is None
+
+    def test_list_prompts(self, prompts):
+        prompts.add_prompt("irc.example.com", ".wea", "sunny")
+        prompts.add_prompt("irc.example.com", ".bye", "goodbye")
+        all_prompts = prompts.list_prompts("irc.example.com")
+        assert len(all_prompts) == 2
+
+    def test_effort(self, prompts):
+        assert prompts.effort == "high"
+        assert prompts.set_effort("low") is True
+        assert prompts.effort == "low"
+        assert prompts.set_effort("invalid") is False
+        assert prompts.effort == "low"  # Unchanged
+
+
+class TestContextManager:
+    def test_compose_context(self, context):
+        ctx = context.compose_context("irc.example.com", "#chan", "hello", "nick")
+        assert len(ctx) > 0
+        assert ctx[0]["role"] == "system"  # System prompt
+        assert ctx[-1]["role"] == "user"  # Current message
+        assert ctx[-1]["content"] == "hello"
+
+    def test_save_exchange(self, context):
+        context.save_exchange("irc.example.com", "#chan", "nick", "hello", "hi there")
+        history = context.history.recent("irc.example.com", "#chan")
+        assert len(history) == 2
+        assert history[0]["content"] == "hello"
+        assert history[1]["content"] == "hi there"
+
+    def test_save_system_message(self, context):
+        context.save_system_message("irc.example.com", "#chan", "nick", "location: chicago")
+        history = context.history.recent("irc.example.com", "#chan")
+        assert len(history) == 1
+        assert history[0]["source"] == "system"
+
+    def test_compact(self, context):
+        context.save_exchange("irc.example.com", "#chan", "nick", "hello", "hi")
+        new_session = context.compact("irc.example.com", "#chan")
+        assert new_session is not None
+        # After compact, history should be empty (new session)
+        history = context.history.recent("irc.example.com", "#chan")
+        assert len(history) == 0

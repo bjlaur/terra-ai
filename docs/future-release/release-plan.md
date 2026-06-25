@@ -31,12 +31,16 @@ Two-tier approach:
 ---
 
 ### 3. Test Tool (Textual)
-**Priority**: MEDIUM
+**Priority**: MEDIUM (right after 0.0.1)
 **Effort**: Medium
 
 irssi-like terminal UI using Textual for interactive testing. Single channel view, scrollable history, input line.
 
-**Files**: `test_tool/irc_client.py`
+Inspiration: `/mnt/jbrowse/tools/svg_screenshot_poc.py` — uses `app.run_test()` + `pilot.press()` + `settle()` pattern. We can use a similar approach without SVG export — just verify bot responses.
+
+**Test the test tool**: The test tool itself needs automated tests. Use Textual's `run_test()` + `pilot` to simulate user input and verify bot responses. **Screenshots + visual inspection** — export SVGs and look at them to verify the UI looks right. This is how jbrowse does it (`/mnt/jbrowse/tools/svg_screenshot_poc.py`).
+
+**Files**: `test_tool/irc_client.py`, `tests/test_tool.py`
 
 ---
 

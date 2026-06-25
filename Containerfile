@@ -18,7 +18,7 @@ RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
     rm -rf /tmp/yay
 
 # Install Python packages from repos
-RUN sudo pacman -S --noconfirm python-openai python-yaml python-aiohttp python-beautifulsoup4 python-dotenv python-textual
+RUN sudo pacman -S --noconfirm python-openai python-yaml python-httpx python-aiohttp python-beautifulsoup4 python-dotenv python-textual
 
 # Install sopel from AUR
 RUN yay -S --needed --noconfirm sopel
