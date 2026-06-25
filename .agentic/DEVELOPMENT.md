@@ -52,7 +52,7 @@ pytest tests/
 
 ## File Naming Conventions
 
-- `testing.md` — manual testing checklist. Follow the jbrowse format: `/mnt/jbrowse/docs/release-X.Y.Z/ipc-fastfollower-testing.md` (legend, columns: Harness / Manual / --real test / Why no harness? / Dev notes / Agent notes, rounds per agent).
+- `testing.md` — manual testing checklist. Follow the jbrowse format: `/mnt/jbrowse/docs/release-X.Y.Z/ipc-fastfollower-testing.md` (legend, columns: Harness / Manual / --real test / Why no harness? / Dev notes / Agent notes, rounds per agent). **Dev notes column is for the human developer only — agents must leave it blank.**
 - `testing-results.md` — actual results from running tests
 - NOT `test-requests.md`, NOT `manual-testing-results.md`
 

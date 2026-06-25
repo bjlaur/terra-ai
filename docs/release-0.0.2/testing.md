@@ -12,7 +12,7 @@
 - **Manual** — `[x]` if verified in the test tool (`python test_tool/chat.py`), `[ ]` if not yet tested manually.
 - **--real test** — `pass` / `fail` / `skip`. Run against real API (not mocked). Skip only if the test is NOT AI-dependent (pure UI/local logic doesn't need it). All AI behavior MUST be tested with `--real`.
 - **Why no harness?** — Briefly explain why a pytest test doesn't exist (or `—` if it does).
-- **Dev notes** — Leave BLANK. For the developer (human) to fill in during manual testing.
+- **Dev notes** — Leave BLANK. This is for the **human developer** (you) to fill in during manual testing. Agents: do NOT write in this column.
 - **Agent notes** — Agent writes here with fix descriptions, test results, and status updates.
 
 ---
