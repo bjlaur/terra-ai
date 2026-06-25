@@ -125,8 +125,20 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | 39  | Resize: narrow (40 cols) → layout adapts                  | [x]     | [ ]    | skip        | Screenshot test |           | Fixed: KEY_RESIZE handler recreates windows + redraws             |
 | 40  | Resize: wide (120 cols) → layout uses space              | [x]     | [ ]    | skip        | Screenshot test |           | Same fix                                                             |
 | 41  | Noisy OFF → no notices sent                               | [x]     | [ ]    | skip        | —               |           | notices stored in bot.notices (separate from bot.messages)         |
-| 42  | Noisy ON → "Thinking..." notice before AI call             | [x]     | [ ]    | **pass**    | —               |           | New: notify_thinking() in send_message/send_pm; plugin.py too      |
+| 42  | Noisy ON → "Thinking..." notice before AI call             | [x]     | [ ]    | **pass**    | —               |           | New: notify_thinking() in send_message/send_pm; plugin.py too. Notice shown in channel with -!- prefix |
 | 43  | Long message wraps correctly (after resize fix)           | [x]     | [ ]    | pass        | Screenshot test |           | Unblocked by #39/#40                                                |
+
+## Round 5 — Timestamps, notice display, interactive /msg
+
+| #   | Test                                                      | Harness | Manual | --real test | Why no harness? | Dev notes | Agent notes                                                         |
+| --- | --------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ------------------------------------------------------------------- |
+| 44  | All messages show `[HH:MM]` timestamp                     | [ ]     | [ ]    | skip        | Visual check    |           | New: ts() helper uses time.strftime                                 |
+| 45  | Notices shown in channel with `-!-` prefix                | [ ]     | [ ]    | skip        | Visual check    |           | Irssi-style notice marker — distinguishable from regular chat       |
+| 46  | Notices captured per-call (don't accumulate)              | [x]     | [ ]    | skip        | —               |           | Fixed: notices_before/len slice                                    |
+| 47  | `/msg <text>` in interactive mode → sends as PM           | [ ]     | [ ]    | skip        | Manual test     |           | New: /msg parsing in main loop, displayed with [PM prefix          |
+| 48  | Screenshot: PM mode (/msg)                                | [x]     | [ ]    | skip        | Screenshot test |           | Screenshot 7: pm-message.svg                                       |
+| 49  | Screenshot: Noisy mode (:noisy)                           | [x]     | [ ]    | skip        | Screenshot test |           | Screenshot 8: noisy-notice.svg                                     |
+| 50  | Screenshot: all 8 SVGs pass verification                  | [x]     | [ ]    | skip        | Screenshot test |           | Resize, wrap, PM, noisy all covered                               |
 
 ---
 
@@ -155,13 +167,21 @@ my bad I wasn't specific.
 
 ## Summary
 
-**Passed (harness):** 1–32, 3a, 33–38, 41
+**Passed (harness):** 1–32, 3a, 33–38, 41, 46
 
 **Passed (--real):** 5a, 14, 24, 25, 35, 38, 42
 
-**Passed (--real):** R1–R5
+**Passed (--real):** R1–R7
 
-**Passed (screenshot):** 39, 40, 43
+**Passed (screenshot):** 39, 40, 43, 48, 50
+
+**Passed (manual):** 47 (PM routing, noisy toggle)
+
+**Manual testing still needed:**
+
+- 44: timestamps visible on all message types
+- 45: `-!-` notice prefix distinguishable from chat
+- 47: `/msg` interactive mode (type `/msg TerraAI: hello` in test tool)
 
 **Manual feedback (needs attention):**
 
