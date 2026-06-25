@@ -1,7 +1,7 @@
 """Admin commands for TerraAI."""
 
-from terraai.database import Database
-from terraai.prompts.manager import PromptManager
+from terra_ai.database import Database
+from terra_ai.prompts.manager import PromptManager
 
 
 class AdminCommands:
@@ -49,7 +49,7 @@ class AdminCommands:
 
     def handle_compact(self, server: str, channel: str, nick: str) -> str:
         """Handle .compact command."""
-        from terraai.context.manager import ContextManager
+        from terra_ai.context.manager import ContextManager
         context = ContextManager(self.db, self.prompts)
         new_session = context.compact(server, channel)
         return f"Context compacted. New session: {new_session[:8]}..."

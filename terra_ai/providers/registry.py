@@ -2,7 +2,7 @@
 
 import logging
 
-from terraai.providers.base import AIProvider
+from terra_ai.providers.base import AIProvider
 
 logger = logging.getLogger("terraai")
 

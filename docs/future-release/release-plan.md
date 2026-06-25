@@ -75,7 +75,7 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - Context compaction (.compact) with session rotation
 - UX commands: .noisy, .setlocation, .help, .effort, .clear
 - Performance stats (.stats)
-- 80+ tests
+- 107+ unit tests
 
 ## Done (moved to 0.0.1)
 
@@ -95,13 +95,18 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - ergo integration tests (smoke, IRC protocol, SOPEL bot connect/join)
 - SOPEL + TerraAI test config examples committed
 - Missing 0.0.1 commands: .noisy, .setlocation, .help, .effort, .compact, .stats
-- 83 unit tests + 9 ergo integration tests passing
+- 107+ unit tests + 9 ergo integration tests passing
 
 ## Done (carried from 0.0.2, unblocked by other agent)
 
 - SOPEL bot message dispatch fix (IRCv3)
 - SSL/TLS for ergo
 - Context compaction (.compact command)
+- Package rename: `terraai/` → `terra_ai/`
+- SOPEL module visibility fix
+- SQLite thread safety fix
+- Configurable botnick
+- Admin optout
 
 ## Done (moved to 0.0.3)
 

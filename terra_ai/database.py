@@ -24,7 +24,7 @@ class Database:
         self.config = config or DBConfig()
         db_path = Path(self.config.path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path))
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         if self.config.wal:
             self.conn.execute("PRAGMA journal_mode=WAL")

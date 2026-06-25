@@ -5,9 +5,9 @@ import tempfile
 
 import pytest
 
-from terraai.context.manager import ContextManager
-from terraai.database import DBConfig, Database
-from terraai.prompts.manager import PromptManager
+from terra_ai.context.manager import ContextManager
+from terra_ai.database import DBConfig, Database
+from terra_ai.prompts.manager import PromptManager
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ class TestPromptManager:
 
     def test_get_system_prompt(self, prompts):
         sp = prompts.get_system_prompt()
-        assert "TerraAI" in sp
+        # With no config, botnick defaults to "" so no name appears
         assert "{triggerchar}" not in sp  # Should be interpolated
 
     def test_context_seed(self, prompts):

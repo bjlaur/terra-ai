@@ -13,9 +13,9 @@ import os
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from terraai.bot import TerraAI
-from terraai.config import TerraConfig
-from terraai.database import Database, DBConfig
+from terra_ai.bot import TerraAI
+from terra_ai.config import TerraConfig
+from terra_ai.database import Database, DBConfig
 
 
 class FakeTrigger:
@@ -80,7 +80,7 @@ class TerraAITestClient:
     def _load_config(self, path):
         """Load config, fall back to defaults if file missing."""
         try:
-            from terraai.config import load_config
+            from terra_ai.config import load_config
             return load_config(path)
         except FileNotFoundError:
             config = TerraConfig()
@@ -99,11 +99,13 @@ class TerraAITestClient:
         """
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
+        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "")
+        trigger_char = self.terra.prompts.trigger_char if self.terra.prompts else ""
 
         # .ai command — context-free (checked first because .ai is in the
         # management command list but handle_management returns None for it)
-        if text.startswith(".ai "):
-            ai_text = text[4:]
+        if text.startswith(f"{trigger_char}ai "):
+            ai_text = text[len(trigger_char) + 3:]
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, ai_text, include_history=False
             )
@@ -115,7 +117,7 @@ class TerraAITestClient:
             response = self.terra.handle_management(self.server, self.channel, self.nick, text)
             if response:
                 self.bot.say(response)
-            elif text.lower().startswith(".setlocation"):
+            elif text.lower().startswith(f"{trigger_char}setlocation"):
                 # Hybrid command: stored locally, now forward to AI for response
                 ai_text = f"{self.nick} {text}"
                 ai_response = self.terra.handle_ai_message(
@@ -126,7 +128,6 @@ class TerraAITestClient:
             return list(self.bot.messages)
 
         # Trigger phrase — route to AI with history
-        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
         if text.lower().startswith(trigger_phrase.lower()):
             ai_text = text[len(trigger_phrase):].strip()
             response = self.terra.handle_ai_message(
@@ -138,8 +139,8 @@ class TerraAITestClient:
 
         # Unknown .command — forward to AI (matches plugin.py behavior:
         # anything starting with . that isn't a management command goes to AI)
-        if text.startswith("."):
-            full_text = text[1:].strip()
+        if text.startswith(trigger_char):
+            full_text = text[len(trigger_char):].strip()
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, full_text, include_history=True
             )
@@ -165,6 +166,7 @@ def run_interactive():
     client = TerraAITestClient()
 
     def main(stdscr):
+        botnick = client.terra.config.bot.get("bot_nick", "")
         # Note: curses.wrapper() already called cbreak(), noecho(), etc.
         # Don't call them again or they'll error.
         curses.curs_set(1)
@@ -202,7 +204,8 @@ def run_interactive():
         # from the channel member list; here the only other entity is the
         # bot. We include the trigger-phrase suffix so the user can
         # immediately type their message after completing.
-        tab_completions = ["TerraAI: "]
+        trigger_phrase = client.terra.config.bot.get("trigger_phrase", "")
+        tab_completions = [trigger_phrase] if trigger_phrase else []
 
         def clear_hint_line():
             """Clear the completion hint line (row above input)."""
@@ -359,7 +362,7 @@ def run_interactive():
             visible = messages[-max_lines:]
             for i, msg in enumerate(visible):
                 try:
-                    if msg.startswith("<TerraAI>"):
+                    if msg.startswith(f"<{botnick}>"):
                         chat.addstr(i, 0, msg, curses.color_pair(1))
                     else:
                         chat.addstr(i, 0, msg)
@@ -369,7 +372,7 @@ def run_interactive():
 
             # Show "thinking" indicator
             try:
-                chat.addstr(len(visible), 0, "<TerraAI> ...", curses.color_pair(1))
+                chat.addstr(len(visible), 0, f"<{botnick}> ...", curses.color_pair(1))
             except curses.error:
                 pass
             chat.refresh()
@@ -379,14 +382,14 @@ def run_interactive():
 
             # Replace "thinking" with actual response
             for r in responses:
-                messages.append(f"<TerraAI> {r}")
+                messages.append(f"<{botnick}> {r}")
 
             # Redraw chat with response
             chat.clear()
             visible = messages[-max_lines:]
             for i, msg in enumerate(visible):
                 try:
-                    if msg.startswith("<TerraAI>"):
+                    if msg.startswith(f"<{botnick}>"):
                         chat.addstr(i, 0, msg, curses.color_pair(1))
                     else:
                         chat.addstr(i, 0, msg)
@@ -401,7 +404,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Non-interactive mode for testing
         client = TerraAITestClient()
-        print("TerraAI Test Client")
+        botnick = client.terra.config.bot.get("bot_nick", "")
+        print(f"{botnick or 'TerraAI'} Test Client")
         print("=" * 40)
 
         # Test management commands

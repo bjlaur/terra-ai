@@ -14,8 +14,8 @@ import time
 
 import pytest
 
-from terraai.config import TerraConfig
-from terraai.database import DBConfig, Database
+from terra_ai.config import TerraConfig
+from terra_ai.database import DBConfig, Database
 
 # Check if ergo is reachable
 def ergo_available():
@@ -53,7 +53,7 @@ def terra(db):
     config.sqlite_path = db.config.path
     config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "")
     config.bot["nick"] = "TerraAI"
-    from terraai.bot import TerraAI
+    from terra_ai.bot import TerraAI
     return TerraAI(config)
 
 
@@ -262,42 +262,43 @@ class TestErgoSopelBot:
     TEST_CHANNEL = "#terra-ai-agent1"
     PLUGIN_LIST = [
         "admin", "adminchannel", "ping", "reload",
-        "safety", "tell", "coretasks", "terraai",
+        "safety", "tell", "coretasks", "terra_ai",
     ]
+    COMMAND_PREFIX = "-"  # Must match [core] prefix in sopel_config
+    BOT_NICK = "TerraAI"  # Must match [core] nick in sopel_config
 
     @pytest.fixture
     def sopel_config(self, tmp_path):
         """Create a minimal SOPEL config file for testing."""
-        db_path = tmp_path / "terraai.db"
+        db_path = tmp_path / "terra_ai.db"
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         plugins_lines = "\n    ".join(self.PLUGIN_LIST)
         config_content = f"""[core]
-nick = TerraAIBot
+nick = TerraAI
 host = {self.ERGO_HOST}
 port = {self.ERGO_PORT}
 use_ssl = false
 owner = agent1
 channels = {self.TEST_CHANNEL}
+prefix = -
+help_prefix = -
 extra = {project_dir}
 enable =
     {plugins_lines}
 
-[commands]
-prefix = .
-
 [terraai]
-config_path = {tmp_path / "terraai.yaml"}
+config_path = {tmp_path / "terra_ai.yaml"}
 """
         config_file = tmp_path / "sopel.cfg"
         config_file.write_text(config_content)
 
         # TerraAI yaml config
-        terraai_yaml = tmp_path / "terraai.yaml"
+        terraai_yaml = tmp_path / "terra_ai.yaml"
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         terraai_yaml.write_text(f"""bot:
   trigger_phrase: "TerraAI:"
-  bot_nick: "TerraAIBot"
+  bot_nick: "TerraAI"
 provider:
   name: openrouter
   model: openrouter/owl-alpha
@@ -305,6 +306,7 @@ provider:
 sqlite_path: "{db_path}"
 admin_nicks:
   - agent1
+default_optin: true
 """)
 
         return config_file
@@ -440,26 +442,24 @@ admin_nicks:
             timeout=10
         )
         assert names_line is not None, "Did not receive NAMES reply"
-        assert "TerraAIBot" in names_line, "TerraAIBot not in channel"
+        assert self.BOT_NICK in names_line, "TerraAI not in channel"
 
         self._irc_quit(sock)
 
     def test_bot_responds_to_help(self, sopel_bot_process):
-        """Test that the bot responds to .help command."""
+        """Test that the bot responds to help command."""
         sock = self._irc_connect("TestHelp")
         self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)  # Let join complete fully
+        time.sleep(2)
 
-        # Send .help command
-        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :.help\r\n".encode())
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}help\r\n".encode())
 
-        # Look for a response from the bot
         response = self._irc_read_until(
             sock,
-            lambda line: "TerraAIBot" in line and "PRIVMSG" in line and self.TEST_CHANNEL in line,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line and self.TEST_CHANNEL in line,
             timeout=15
         )
-        assert response is not None, "Bot did not respond to .help"
+        assert response is not None, "Bot did not respond to help command"
 
         self._irc_quit(sock)
 
@@ -475,9 +475,99 @@ admin_nicks:
         # Look for a response from the bot (this will hit the real AI API)
         response = self._irc_read_until(
             sock,
-            lambda line: "TerraAIBot" in line and "PRIVMSG" in line,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
             timeout=30
         )
         assert response is not None, "Bot did not respond to TerraAI: trigger"
+
+        self._irc_quit(sock)
+
+    def test_bot_responds_to_unknown_command(self, sopel_bot_process):
+        """Test that unknown commands are routed to AI and get a response."""
+        sock = self._irc_connect("TestUnknown")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)
+
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}what is 2+2\r\n".encode())
+
+        response = self._irc_read_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=30
+        )
+        assert response is not None, "Bot did not respond to unknown command"
+
+        self._irc_quit(sock)
+
+    def test_bot_ignores_regular_messages(self, sopel_bot_process):
+        """Test that regular messages (no trigger, no .command) are ignored."""
+        sock = self._irc_connect("TestIgnore")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)
+
+        # Send a regular message — should be ignored
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :just regular chatter\r\n".encode())
+
+        # Bot should NOT respond — read for a short window and confirm no bot message
+        # We send a help command after to verify bot is still alive
+        time.sleep(3)
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}help\r\n".encode())
+
+        response = self._irc_read_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=15
+        )
+        assert response is not None, "Bot did not respond to help (may have crashed?)"
+
+        self._irc_quit(sock)
+
+    def test_bot_noisy_toggle(self, sopel_bot_process):
+        """Test that .noisy toggles status notices."""
+        sock = self._irc_connect("TestNoisy")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)
+
+        # Toggle noisy ON
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}noisy\r\n".encode())
+
+        # Should see a notice about noisy mode
+        response = self._irc_read_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "Noisy" in line,
+            timeout=10
+        )
+        assert response is not None, "Bot did not respond to .noisy toggle"
+
+        self._irc_quit(sock)
+
+    def test_bot_optin_optout(self, sopel_bot_process):
+        """Test that .optout prevents responses and .optin re-enables."""
+        sock = self._irc_connect("TestOptInOut")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)
+
+        # Opt out
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}optout\r\n".encode())
+        response = self._irc_read_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "opted out" in line,
+            timeout=10
+        )
+        assert response is not None, "Bot did not confirm opt-out"
+
+        # Now send trigger — should NOT respond
+        time.sleep(1)
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: hello\r\n".encode())
+        time.sleep(3)
+
+        # Opt back in
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}optin\r\n".encode())
+        response = self._irc_read_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "opted in" in line,
+            timeout=10
+        )
+        assert response is not None, "Bot did not confirm opt-in"
 
         self._irc_quit(sock)

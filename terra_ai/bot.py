@@ -3,15 +3,15 @@
 import logging
 import time
 
-from terraai.commands.admin import AdminCommands
-from terraai.commands.user import UserCommands
-from terraai.config import TerraConfig
-from terraai.context.manager import ContextManager
-from terraai.database import Database, DBConfig
-from terraai.providers.base import Message
-from terraai.providers.openrouter import OpenRouterProvider
-from terraai.providers.registry import ProviderRegistry
-from terraai.prompts.manager import PromptManager
+from terra_ai.commands.admin import AdminCommands
+from terra_ai.commands.user import UserCommands
+from terra_ai.config import TerraConfig
+from terra_ai.context.manager import ContextManager
+from terra_ai.database import Database, DBConfig
+from terra_ai.providers.base import Message
+from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.registry import ProviderRegistry
+from terra_ai.prompts.manager import PromptManager
 
 logger = logging.getLogger("terraai")
 
@@ -26,7 +26,8 @@ class TerraAI:
     def __init__(self, config: TerraConfig):
         self.config = config
         self.db = Database(DBConfig(path=config.sqlite_path))
-        self.prompts = PromptManager(self.db, trigger_char=".")
+        trigger_char = config.bot.get("trigger_char", ".") if config else "."
+        self.prompts = PromptManager(self.db, trigger_char=trigger_char, config=config)
         self.context = ContextManager(self.db, self.prompts)
         self.admin = AdminCommands(self.db, self.prompts)
         self.user = UserCommands(self.db, self.prompts)
@@ -60,7 +61,7 @@ class TerraAI:
         if not self.is_opted_in(server, nick):
             return False
         # Don't respond to our own messages
-        if nick == self.config.bot.get("bot_nick", "TerraAI"):
+        if nick == self.config.bot.get("bot_nick", ""):
             return False
         return True
 
@@ -99,7 +100,7 @@ class TerraAI:
         elif command == ".optin":
             return self.user.handle_optin(server, nick)
         elif command == ".optout":
-            return self.user.handle_optout(server, nick)
+            return self.user.handle_optout(server, nick, args, self.config.admin_nicks)
         elif command == ".noisy":
             return self.user.handle_noisy(server, nick)
         elif command == ".setlocation":

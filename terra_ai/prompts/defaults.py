@@ -2,8 +2,9 @@
 
 # The fake conversation injected as context seed on first run.
 # This establishes the bot's persona and behavior.
+# {botnick} is replaced with the configured bot nick at runtime.
 FAKE_CONVERSATION = [
-    {"role": "user", "content": "You are an IRC bot. Your name is TerraAI. When someone addresses you directly, they'll use your name."},
+    {"role": "user", "content": "You are an IRC bot. Your name is {botnick}. When someone addresses you directly, they'll use your name."},
     {"role": "assistant", "content": "ok"},
     {"role": "user", "content": "When someone says ${triggerchar}command, you will guess what the response will be. IF YOU DON'T KNOW GUESS!"},
     {"role": "assistant", "content": "ok"},
@@ -24,7 +25,8 @@ FAKE_CONVERSATION = [
 ]
 
 # System prompt template with variable interpolation
-SYSTEM_PROMPT_TEMPLATE = """You are an IRC bot. Your name is TerraAI.
+# {botnick} is replaced with the configured bot nick at runtime.
+SYSTEM_PROMPT_TEMPLATE = """You are an IRC bot. Your name is {botnick}.
 
 When someone says {triggerchar}command, you will guess what the response will be. IF YOU DON'T KNOW GUESS!
 

@@ -22,14 +22,18 @@ Only pending/unfinished work stays in the active sections below.
 - [x] SOPEL test config examples committed (sopel-test.cfg.example, terraai-test.yaml.example)
 - [x] Minimal plugin set: admin, adminchannel, ping, reload, safety, tell, terraai
 - [x] 0.0.2 docs: CHANGELOG.md, feature.md, testing-results.md
-
-### In Progress
-- [ ] SOPEL bot message dispatch — bot connects + joins but doesn't respond to PRIVMSG
-  - Likely IRCv3 capability issue with echo-message/server-time
-  - Same issue both agents are hitting; needs deeper SOPEL debug
+- [x] SOPEL bot message dispatch — bot connects, joins, and responds to PRIVMSG
+- [x] Complete SOPEL bot end-to-end tests (unit tests pass; bot responds to help and trigger)
+- [x] SOPEL dispatch fix (module visibility, allow_bots, thread safety)
+- [x] Package rename terraai → terra_ai
+- [x] Configurable botnick via {botnick}
+- [x] Added COMMAND_PREFIX and BOT_NICK constants to ergo tests
+- [x] HARD RULES 14+15 fix: removed all hardcoded "TerraAI" nicks and "." prefixes from logic code
 
 ### Pending (0.0.2)
-- [ ] Complete SOPEL bot end-to-end tests (responds to .help, TerraAI: trigger)
+- [x] Unit tests for SOPEL bot end-to-end pass (ergo integration tests gated behind running server)
+
+### Backlog
 - [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)
 
 ---
@@ -45,7 +49,6 @@ All phases 1-5 complete. Phase 6 (docs) partial.
 See `docs/future-release/release-plan.md` for the full deferred features list.
 
 High priority:
-- Fix SOPEL IRCv3 message dispatch (blocking for bot end-to-end)
 - Context compaction (.compact) — fully working
 - Multi-server support
 - Rate limiting

@@ -12,9 +12,9 @@ import time
 
 import pytest
 
-from terraai.bot import TerraAI
-from terraai.config import TerraConfig
-from terraai.database import DBConfig, Database
+from terra_ai.bot import TerraAI
+from terra_ai.config import TerraConfig
+from terra_ai.database import DBConfig, Database
 
 # Skip if textual not available
 try:

@@ -48,3 +48,20 @@ No SOPEL built-in `help` — TerraAI has its own `.help`.
 - Multi-server support (add `server` column to all queries)
 - Rate limiting
 - Containerfile polish (based on user's run script pattern)
+
+### Carry-over Fixes (agent1/carry-over-0.0.2)
+
+- SOPEL module visibility fix (`from .plugin import *` in `__init__.py`)
+- SOPEL `@plugin.allow_bots` decorators for IRCv3 compatibility
+- SQLite `check_same_thread=False` for multi-threaded handler execution
+- Package rename: `terraai/` → `terra_ai/`
+- SOPEL plugin renamed from `terraai` to `terra_ai`
+- Configurable botnick via `{botnick}` in prompts (no hardcoded "TerraAI")
+- Added `COMMAND_PREFIX` and `BOT_NICK` constants to ergo tests
+- Added admin optout: `.optout <nick>` (admin only)
+- Added `default_optin: true` to config schema
+- Rewrote `plugin.py` to use `sopel.plugin` (not deprecated `sopel.module`)
+
+### Test counts
+
+Test counts: 83 → 107+

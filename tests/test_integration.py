@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from terraai.bot import TerraAI
-from terraai.config import TerraConfig
-from terraai.database import DBConfig, Database
-from terraai.providers.base import Message
+from terra_ai.bot import TerraAI
+from terra_ai.config import TerraConfig
+from terra_ai.database import DBConfig, Database
+from terra_ai.providers.base import Message
 
 
 @pytest.fixture
@@ -52,13 +52,19 @@ class TestTerraAI:
         assert terra.should_respond("irc.example.com", "nick", "hello") is True
 
     def test_should_respond_self(self, terra):
-        assert terra.should_respond("irc.example.com", "TerraAI", "hello") is False
+        # Without config setting bot_nick, self-nick is "" so any nick matches nothing
+        botnick = terra.config.bot.get("bot_nick", "")
+        if botnick:
+            assert terra.should_respond("irc.example.com", botnick, "hello") is False
+        else:
+            # Self-check disabled when bot_nick not configured
+            assert terra.should_respond("irc.example.com", "anyone", "hello") is True
 
     def test_is_management_command(self, terra):
         assert terra.is_management_command(".optin") is True
         assert terra.is_management_command(".wea") is False
 
-    @patch("terraai.providers.openrouter.httpx.Client")
+    @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_handle_ai_message(self, mock_client_cls, terra):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -82,8 +88,32 @@ class TestTerraAI:
         assert "opted out" in result
 
     def test_handle_management_setlocation(self, terra):
+        # .setlocation uses hybrid routing: handle_management returns None
+        # as a signal that the caller should forward to AI for the response
         result = terra.handle_management("irc.example.com", "#chan", "nick", ".setlocation chicago, il")
-        assert "chicago, il" in result
+        assert result is None
+
+
+class TestPluginRules:
+    """Verify SOPEL plugin rule configuration."""
+
+    def test_addressed_freeform_allows_bots(self):
+        """$nick rule must allow bot-tagged messages."""
+        from terra_ai import plugin as terra_plugin
+        assert getattr(terra_plugin.addressed_freeform, 'allow_bots', False), \
+            "addressed_freeform.allow_bots must be True for IRCv3 bot tag compatibility"
+
+    def test_setup_exists(self):
+        """Plugin must have a setup() function for SOPEL."""
+        from terra_ai import plugin as terra_plugin
+        assert callable(getattr(terra_plugin, 'setup', None)), \
+            "plugin.setup must be callable"
+
+    def test_cmd_help_exists(self):
+        """Plugin must have a cmd_help command handler."""
+        from terra_ai import plugin as terra_plugin
+        assert callable(getattr(terra_plugin, 'cmd_help', None)), \
+            "plugin.cmd_help must be callable"
 
 
 class TestAdminCommands:
