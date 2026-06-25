@@ -20,7 +20,7 @@ Each item has a reason and a target release (TBD unless noted).
 | 29   | Special characters `!@#$%^&*()`                            | Low priority                     | TBD |
 | 30   | Unicode `héllo wörld 日本語`                                  | Low priority                     | TBD |
 | 31   | `.stats` from non-admin nick                               | Needs admin-gate decision        | TBD |
-| 32   | `.compact` from non-admin nick                             | Needs admin-gate decision        | TBD |
+| 32   | `.compact` from non-admin nick                             | **RESOLVED** — gated to admin   | 0.0.2 |
 
 ---
 
@@ -43,6 +43,5 @@ See [TODO.md](../../.agentic/TODO.md) item: "Write DB-based tests for .addprompt
 
 ## Admin gating decision (#31, #32)
 
-Should `.stats` and `.compact` be restricted to admin nicks?
-Current behavior: any user who is opted-in can run these.
-Decision needed before testing.
+- **`.compact`** — **RESOLVED** — gated to admin only (Round 4 #33)
+- **`.stats`** — still needs decision (any user can currently run it)

@@ -4,7 +4,7 @@
 **Agent:** agent2
 **Branch:** `agent2/prompts-and-ux-fixes`
 **Clone:** `~/agentic-repos/terra-ai-agent2/`
-**Status:** Mid-flight — rework plan drafted, not yet executed
+**Status:** Mid-flight — polling harness written (partially verified), rework plan drafted, not yet executed
 
 ---
 
@@ -40,13 +40,16 @@
 - 100+ unit tests passing
 - 7 --real tests passing (effort, unknown command, noisy, setlocation, PM trigger, PM effort, noisy notice)
 - 8 screenshot SVGs passing
-- Added `test_async_ai_call` — verifies background thread + SQLite cross-thread
+- Added `test_async_ai_call` — verifies background thread + SQLite cross-thread (passes with real API)
 - Added `test_interactive_tab_completes_midline`
-- Added `test_interactive_accepts_pm` — uses polling harness
-- Added `test_interactive_noisy_notice` — uses polling harness
+- Added `test_interactive_accepts_pm` — uses polling harness (PASSES)
+- Added `test_interactive_noisy_notice` — uses polling harness (FAILS — AI not responding in test env, works live)
+- Added `test_pm_direct_message`, `test_pm_setlocation_forwards_to_ai`
+- Added `test_interactive_empty_input`, `test_interactive_ctrl_d_exits`, `test_interactive_history_navigation`
 - Added `_run_interactive_poll()` helper — polls for expected output before sending next input
-- Removed opt-out gate from test tool (core bot concern, not test tool)
-- Created `testing-agent2-v2.md` — comprehensive 63-test checklist with "Mine" column for human
+- Added SQLite threading fix (`check_same_thread=False`) + `test_async_ai_call` with real API
+- Created `testing-agent2-v2.md` — comprehensive 68-test checklist with "Mine" column for human
+- Created `docs/misc/claude-didn't-listen.md` — report on async testing gap
 
 ### Docs Updated
 - CHANGELOG.md — agent2 section with all features
@@ -72,7 +75,7 @@ Updated tests to use it:
 - `test_interactive_accepts_pm` — polls for `[PM]`
 - `test_interactive_noisy_notice` — polls for `-!- Thinking`
 
-**Status:** Code written, NOT yet verified (test run was interrupted)
+**Status:** Partially verified — test_interactive_accepts_pm PASSES, test_interactive_noisy_notice FAILS (AI not responding in test environment, works live). Polling harness works correctly.
 
 ### SQLite Threading Fix
 - `terraai/database.py` line 26: added `check_same_thread=False` to `sqlite3.connect()`
@@ -109,6 +112,7 @@ See `docs/release-0.0.2/rework-plan.md` for full details. Summary:
 Branch: `agent2/prompts-and-ux-fixes` (ahead of `release-0.0.2`)
 
 Commits (most recent first):
+- `9a8dd26` — Add polling harness for interactive tests + async testing report
 - `fd0ad50` — Update testing-agent2.md Round 7 + cleanup deferred list
 - `524fcb4` — Add rework-plan.md: SOPEL-native plugin architecture
 - `c116970` — Fix SQLite threading for async AI calls, add async test, fix tab completion
@@ -141,7 +145,7 @@ Commits (most recent first):
 
 ## What Needs Doing
 
-1. **Verify polling harness** — run `test_interactive_noisy_notice` and `test_interactive_accepts_pm`
+1. **Fix noisy notice test** — investigate why AI doesn't respond in test harness (works live)
 2. **Execute rework plan** — SOPEL-native plugin architecture
 3. **Custom prompts discussion** — decide what happens to `.addprompt`/`.rmprompt`
 4. **Admin gating decision** — should `.stats` be admin-only too?

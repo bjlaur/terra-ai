@@ -56,10 +56,11 @@ pytest tests/
 
 ## Architecture
 
-- **Plugin entry point:** `terraai/plugin.py` — SOPEL `@plugin.command()` and `@plugin.rule()` decorators (NOT `@sopel.module`)
-- **Routing:** `TerraAI.dispatch()` in `terraai/bot.py` — single routing entry point for all messages
+- **Plugin entry point:** `terraai/plugin.py` — currently uses deprecated `@sopel.module.rule` (rework planned)
+- **Routing:** `TerraAI.handle_management()` + `handle_ai_message()` in `terraai/bot.py` — if/elif dispatch (rework planned to use SOPEL-native routing)
 - **Core class:** `TerraAI` — holds all logic (DB, providers, context, prompts)
 - **Providers:** `terraai/providers/` — OpenRouter (default), Gemini, OpenAI, Ollama
-- **Database:** `terraai/database.py` — 7 tables, WAL mode, multi-server support
+- **Database:** `terraai/database.py` — 7 tables, WAL mode, `check_same_thread=False` for async
 - **Context:** `terraai/context/` — history assembly, session_id, compactions
-- **Test tool:** `test_tool/chat.py` — calls `TerraAI.dispatch()` directly, no duplicated routing
+- **Test tool:** `test_tool/chat.py` — duplicates routing (rework plan will use single dispatch)
+- **Rework plan:** `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture (drafted, not started)

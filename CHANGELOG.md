@@ -36,6 +36,10 @@
 - Timestamps `[HH:MM]` on all messages
 - Compact gate — `.compact` restricted to admin only
 - Resize fix — terminal resize handled correctly
+- Polling harness for interactive tests (`_run_interactive_poll()`) — polls for expected output instead of fixed delays
+- SQLite threading fix — `check_same_thread=False` for async AI calls
+- New tests: test_async_ai_call (real API), test_interactive_accepts_pm, test_interactive_noisy_notice, test_pm_direct_message, test_pm_setlocation_forwards_to_ai, test_interactive_empty_input, test_interactive_ctrl_d_exits, test_interactive_history_navigation
+- `docs/misc/claude-didn't-listen.md` — report on async testing gap
 
 #### Bug Fixes
 - `.effort` no response — added "effort" to MANAGEMENT_COMMANDS set
@@ -49,9 +53,11 @@
 - 100+ unit tests passing
 - `--real` API tests passing (7/7): effort, unknown command, noisy, setlocation, PM trigger, PM effort, noisy notice
 - Screenshot tests passing (8 SVGs): resize, wrap, PM, noisy
-- 63 manual tests documented in `docs/release-0.0.2/testing-agent2-v2.md`
+- 68 manual tests documented in `docs/release-0.0.2/testing-agent2-v2.md`
+- Polling harness written for interactive tests (1 passing, 1 failing in test env)
 - Rework plan drafted in `docs/release-0.0.2/rework-plan.md`
 - Deferred tests tracked in `docs/release-0.0.2/deferred-testing-agent2.md`
+- Async testing report in `docs/misc/claude-didn't-listen.md`
 
 ---
 

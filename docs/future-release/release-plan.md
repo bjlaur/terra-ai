@@ -95,6 +95,10 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - ergo integration tests (smoke, IRC protocol, SOPEL bot connect/join)
 - SOPEL + TerraAI test config examples committed
 - Missing 0.0.1 commands: .noisy, .setlocation, .help, .effort, .compact, .stats
+- Polling harness for interactive tests (`_run_interactive_poll()`)
+- SQLite threading fix (`check_same_thread=False`)
+- Async AI test with real API (`test_async_ai_call`)
+- `docs/misc/claude-didn't-listen.md` — async testing gap report
 - 83 unit tests + 9 ergo integration tests passing
 
 ## Done (carried from 0.0.2, unblocked by other agent)
