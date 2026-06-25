@@ -67,6 +67,21 @@ class TestTestTool:
         responses = client.send_message("hello")
         assert len(responses) == 0, "Regular message should not produce a response"
 
+    def test_async_ai_call(self, terra):
+        """Test that AI calls work (async, background thread).
+
+        send_message() runs the AI call in a background thread. This
+        verifies the result is collected and returned correctly, and
+        that SQLite works across threads (check_same_thread=False).
+        """
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        # Trigger phrase → async AI call
+        responses = client.send_message("TerraAI: hello")
+        assert len(responses) > 0, "Async AI call produced no response"
+        assert responses[0].strip() != ""
+
     def test_send_as_different_nick(self, terra):
         """Test sending as different users."""
         from test_tool.chat import TerraAITestClient
@@ -188,12 +203,21 @@ class TestInteractiveMode:
             "Help command response not found"
 
     def test_interactive_tab_completes_trigger(self, env_setup):
-        """Test that Tab completes to trigger phrase: 'Ter<Tab>' -> 'TerraAI: '."""
+        """Test that Tab completes to trigger phrase at start of line: 'Ter<Tab>' -> 'TerraAI: '."""
         stdout, stderr = self._run_interactive([b"Ter\t", b"quit\n"])
         assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
-        # After Tab, the input line should contain the full trigger phrase
+        # At start of line, Tab completes to trigger phrase with colon
         assert "TerraAI:" in stdout, \
-            "Tab did not complete 'Ter' to 'TerraAI: ' in the input line"
+            "Tab did not complete 'Ter' to 'TerraAI: ' at start of line"
+
+    def test_interactive_tab_completes_midline(self, env_setup):
+        """Test that Tab mid-line completes to just the bot nick: 'Ter<Tab>' -> 'TerraAI'."""
+        # Type some text, then Tab mid-line
+        stdout, stderr = self._run_interactive([b"hello Ter\t", b"quit\n"])
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+        # Mid-line, Tab completes to just the nick (no colon)
+        assert "TerraAI" in stdout, \
+            "Tab did not complete mid-line 'Ter' to 'TerraAI'"
 
 
 class TestPM:

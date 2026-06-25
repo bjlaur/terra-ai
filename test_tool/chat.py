@@ -408,35 +408,35 @@ def run_interactive():
                         cursor_pos = len(buf)
                         redraw_input("".join(buf))
                 elif key == 9:  # Tab completion
-                    # Find the word at the cursor (split on space, match
-                    # the last partial word). This lets Ter<Tab> work
-                    # even in the middle of a line.
                     current = "".join(buf[:cursor_pos])
+                    line_start = current.lstrip()
+                    at_line_start = len(current) == len(line_start)
+
                     # Get the word being typed (from last space to cursor)
                     word_start = current.rfind(" ") + 1
                     word = current[word_start:]
-                    # Case-insensitive prefix match against completions
-                    matches = [c for c in tab_completions
+
+                    if at_line_start:
+                        # At start of line: complete to trigger phrase
+                        # e.g. "Ter<Tab>" -> "TerraAI: "
+                        completions = ["TerraAI: "]
+                    else:
+                        # Mid-line: complete to just the bot nick
+                        # e.g. "...Ter<Tab>" -> "...TerraAI "
+                        completions = ["TerraAI "]
+
+                    # Case-insensitive prefix match
+                    matches = [c for c in completions
                                if c.lower().startswith(word.lower())]
                     if matches:
                         common = matches[0]
                         for m in matches[1:]:
                             while not m.lower().startswith(common.lower()):
                                 common = common[:-1]
-                        # Replace the partial word with the completion
                         completed = current[:word_start] + common
                         buf = list(completed)
                         cursor_pos = len(buf)
                         redraw_input("".join(buf))
-                        if len(matches) > 1:
-                            clear_hint_line()
-                            try:
-                                chat.addstr(height - 3, 0, "  ".join(matches[:8]),
-                                           curses.color_pair(1))
-                                chat.refresh()
-                                completions_shown = True
-                            except curses.error:
-                                pass
                     else:
                         curses.beep()
                 elif key == curses.KEY_RESIZE:

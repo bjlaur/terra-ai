@@ -88,10 +88,11 @@
 | 52  | Interactive mode launches and exits                           | [x]     | [x]    | skip   | [ ]  | —                |           |             |
 | 53  | Interactive mode accepts input                                | [x]     | [x]    | skip   | [ ]  | —                |           |             |
 | 54  | Tab completes `Ter<Tab>` → `TerraAI: ` in input line          | [x]     | [x]    | skip   | [ ]  | —                |           |             |
-| 55  | Tab mid-line `Ter<Tab>` → completes to `TerraAI: ` (trigger phrase) | [ ] | [ ] | skip | [ ] | Manual test | | |
+| 55  | Tab mid-line `Ter<Tab>` → completes to `TerraAI` (just nick) | [ ]     | [ ]    | skip   | [ ]  | Manual test      |           |             |
 | 56  | `/msg <text>` in interactive mode → sends as PM               | [ ]     | [ ]    | skip   | [ ]  | Manual test      |           |             |
 | 57  | AI calls don't block UI — can type during response             | [ ]     | [ ]    | skip   | [ ]  | Manual test      |           | Background thread |
 | 58  | Results render when ready (even while typing)                  | [ ]     | [ ]    | skip   | [ ]  | Manual test      |           | maybe_finish_call polls |
+| 59  | Async AI call works (background thread, SQLite cross-thread)   | [x]     | [ ]    | **pass** | [ ]  | —                |           | check_same_thread=False |
 
 ## --real API Tests
 
