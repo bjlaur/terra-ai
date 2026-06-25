@@ -179,11 +179,15 @@ class TerraAITestClient:
         return list(self.bot.messages)
 
     def send_pm(self, nick: str, text: str) -> dict:
-        """Send a PM to the bot from a specific nick.
+        """Send a PM (direct message) to the bot.
 
-        Returns {"say": [...], "notice": [...]} with channel messages
-        and notices separately. PMs route identically to channel messages
-        but use the nick as the channel for scoping.
+        Unlike channel messages, PMs don't need a trigger phrase — everything
+        in a PM is already addressed to the bot. Routing:
+        - Management commands (.) handled locally
+        - Unknown .commands forwarded to AI
+        - Everything else → AI with history (it's a direct message)
+
+        Returns {"say": [...], "notice": [...]} with responses and notices.
         """
         self.bot.messages.clear()
         self.bot.notices.clear()
@@ -220,18 +224,6 @@ class TerraAITestClient:
                     self.bot.say(ai_response)
             return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
-        # Trigger phrase — route to AI with history
-        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
-        if text.lower().startswith(trigger_phrase.lower()):
-            ai_text = text[len(trigger_phrase):].strip()
-            notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, nick, nick, ai_text, include_history=True
-            )
-            if response:
-                self.bot.say(response)
-            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
-
         # Unknown .command — forward to AI
         if text.startswith("."):
             full_text = text[1:].strip()
@@ -243,7 +235,13 @@ class TerraAITestClient:
                 self.bot.say(response)
             return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
-        # Regular message — ignore
+        # Direct message (no trigger phrase needed in PMs) — AI with history
+        notify_thinking()
+        response = self.terra.handle_ai_message(
+            self.server, nick, nick, text, include_history=True
+        )
+        if response:
+            self.bot.say(response)
         return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
 
@@ -405,34 +403,37 @@ def run_interactive():
                         cursor_pos = len(buf)
                         redraw_input("".join(buf))
                 elif key == 9:  # Tab completion
+                    # Find the word at the cursor (split on space, match
+                    # the last partial word). This lets Ter<Tab> work
+                    # even in the middle of a line.
                     current = "".join(buf[:cursor_pos])
-                    if " " in current:
-                        curses.beep()
+                    # Get the word being typed (from last space to cursor)
+                    word_start = current.rfind(" ") + 1
+                    word = current[word_start:]
+                    # Case-insensitive prefix match against completions
+                    matches = [c for c in tab_completions
+                               if c.lower().startswith(word.lower())]
+                    if matches:
+                        common = matches[0]
+                        for m in matches[1:]:
+                            while not m.lower().startswith(common.lower()):
+                                common = common[:-1]
+                        # Replace the partial word with the completion
+                        completed = current[:word_start] + common
+                        buf = list(completed)
+                        cursor_pos = len(buf)
+                        redraw_input("".join(buf))
+                        if len(matches) > 1:
+                            clear_hint_line()
+                            try:
+                                chat.addstr(height - 3, 0, "  ".join(matches[:8]),
+                                           curses.color_pair(1))
+                                chat.refresh()
+                                completions_shown = True
+                            except curses.error:
+                                pass
                     else:
-                        # Case-insensitive prefix match against completions
-                        matches = [c for c in tab_completions
-                                   if c.lower().startswith(current.lower())]
-                        if matches:
-                            common = matches[0]
-                            for m in matches[1:]:
-                                while not m.lower().startswith(common.lower()):
-                                    common = common[:-1]
-                            # Preserve case from the completion entry
-                            completed = common if current else common
-                            buf = list(completed)
-                            cursor_pos = len(buf)
-                            redraw_input("".join(buf))
-                            if len(matches) > 1:
-                                clear_hint_line()
-                                try:
-                                    chat.addstr(height - 3, 0, "  ".join(matches[:8]),
-                                               curses.color_pair(1))
-                                    chat.refresh()
-                                    completions_shown = True
-                                except curses.error:
-                                    pass
-                        else:
-                            curses.beep()
+                        curses.beep()
                 elif key == curses.KEY_RESIZE:
                     # Terminal resized — recreate windows and redraw
                     make_windows()
@@ -482,7 +483,7 @@ def run_interactive():
 
             # Display user message immediately (before blocking on AI)
             if is_pm:
-                messages.append(f"{ts()} [PM <{client.nick}> {pm_text}")
+                messages.append(f"{ts()} [PM] <{client.nick}> {pm_text}")
             else:
                 messages.append(f"{ts()} <{client.nick}> {cmd}")
             redraw_chat()

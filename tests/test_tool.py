@@ -317,12 +317,20 @@ class TestNoisy:
 
 HAS_REAL_API = bool(os.environ.get("OPENROUTER_API_KEY"))
 
+if not HAS_REAL_API:
+    import sys
+    sys.stderr.write(
+        "\n❌ GO SOURCE .env YOU DOLT!\n"
+        "   OPENROUTER_API_KEY not set — --real tests skipped.\n"
+        "   Fix: source ~/.terra-ai/.env\n\n"
+    )
 
-@pytest.mark.skipif(not HAS_REAL_API, reason="OPENROUTER_API_KEY not set")
+
+@pytest.mark.skipif(not HAS_REAL_API, reason="OPENROUTER_API_KEY not set — run: source ~/.terra-ai/.env")
 class TestRealAPI:
     """Tests that hit the real AI provider.
 
-    Run with: OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
+    Run with: source ~/.terra-ai/.env && python -m pytest tests/test_tool.py::TestRealAPI -v
     """
 
     @pytest.fixture
