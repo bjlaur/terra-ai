@@ -59,15 +59,40 @@
 
 ---
 
-## Round 2 — Agent 2 (test tool feedback fixes)
+## Round 2 — Agent 2 (continued)
 
-| #   | Test                                                          | Harness | Manual                                                                                       | --real test | Why no harness?                                  | Dev notes               | Agent notes                                                                   |
-| --- | ------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------ | ----------------------- | ----------------------------------------------------------------------------- |
-| 9   | `.setlocation Portland, OR` → goes to AI                      | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: hybrid routing forwards to AI (chat.py, plugin.py)                      |
-| 10  | `.setlocation` (no args) → goes to AI                         | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: handle_setlocation returns None even without args                       |
-| 11  | `.effort` → shows current level                               | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added "effort" to MANAGEMENT_COMMANDS set                               |
-| 16  | `.wea` → responds with custom prompt                        | [x]     | [x]                                                                                          | skip        | —                                                |                         | Fixed: added match_prompt() check to test_tool/chat.py send_message()         |
-| 27  | Resize terminal → layout adapts, input visible               | [x]     | [ ]                                                                                          | skip        | Needs SIGWINCH/KEY_RESIZE harness (pty + resize) |                         | Needs fix: handle KEY_RESIZE, recreate windows, redraw                        |
+### Fixes to verify (from Round 1 failures)
+
+| #   | Test                                                          | Harness | Manual | --real test | Why no harness? | Dev notes | Agent notes                                                                   |
+| --- | ------------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ----------------------------------------------------------------------------- |
+| 9   | `.setlocation Portland, OR` → goes to AI                      | [x]     | [ ]    | skip        | —               |           | Fix: hybrid routing forwards to AI (chat.py, plugin.py)                        |
+| 10  | `.setlocation` (no args) → goes to AI, not "Usage:" error    | [x]     | [ ]    | skip        | —               |           | Fix: handle_setlocation returns None even without args                         |
+| 11  | `.effort` → responds with current level                       | [x]     | [ ]    | skip        | —               |           | Fix: added "effort" to MANAGEMENT_COMMANDS set                                 |
+| 16  | `.wea` → responds with custom prompt text                    | [x]     | [ ]    | skip        | —               |           | Fix: added match_prompt() check to test_tool/chat.py send_message()           |
+| 27  | Resize terminal → layout adapts, input text visible          | [x]     | [ ]    | skip        | Needs SIGWINCH harness |      | Needs fix: KEY_RESIZE handler, recreate curses windows, redraw                |
+
+### Manual testing still needed (unchecked in Round 1)
+
+| #   | Test                                                          | Harness | Manual | --real test | Why no harness?                                  | Dev notes               | Agent notes |
+| --- | ------------------------------------------------------------- | ------- | ------ | ----------- | ------------------------------------------------ | ----------------------- | ----------- |
+| 3a  | Tab completes bot nick: `Ter<Tab>` → `TerraAI`                | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 8   | `.noisy` → toggles ON/OFF                                     | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 12  | `.effort low` → sets level                                    | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 13  | `.effort ultra` → error (invalid level)                       | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 15  | `.addprompt wea sunny` → "Added wea."                         | [x]     | [ ]    | skip        | —                                                | "figure out good test"  |             |
+| 17  | `.listprompts` → lists prompts                                | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 18  | `.rmprompt 1` → removes prompt                                | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 19  | `.addprompt wea sunny` (dup) → error                          | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 20  | `.rmprompt 999` → "No such prompt"                            | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 21  | `.compact` → compacts history                                 | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 24  | AI remembers previous message (TerraAI: trigger + history)    | [x]     | [ ]    | **pass**    | —                                                |                         |             |
+| 25  | AI forgets after `.compact`                                   | [x]     | [ ]    | **pass**    | —                                                |                         |             |
+| 26  | Long message wraps correctly                                  | [x]     | [ ]    | pass        | Screenshot test (`test_tool/screenshot_test.py`) |                         |             |
+| 28  | Empty input (just enter) → no crash                           | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 29  | Special characters `!@#$%^&*()`                               | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 30  | Unicode `héllo wörld 日本語`                                     | [x]     | [ ]    | skip        | —                                                |                         |             |
+| 31  | `.stats` from non-admin nick                                  | [x]     | [ ]    | skip        | —                                                | Potential admin-gate bug |             |
+| 32  | `.compact` from non-admin nick                                | [x]     | [ ]    | skip        | —                                                | Potential admin-gate bug |             |
 
 ---
 
