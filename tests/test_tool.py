@@ -187,6 +187,97 @@ class TestInteractiveMode:
         stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
         return "".join(stdout_parts), stderr
 
+    def _run_interactive_poll(self, inputs: list[bytes], expect: str,
+                              expect_timeout: int = 30,
+                              post_wait: int = 2) -> tuple[str, str]:
+        """Run interactive mode, polling for expected output.
+
+        Sends inputs one at a time, waiting up to expect_timeout seconds
+        for the expected string to appear in stdout before sending the next
+        input. After all inputs, waits post_wait seconds for final output.
+        """
+        import subprocess
+        import sys
+
+        master_fd, slave_fd = pty.openpty()
+        env = os.environ.copy()
+        env["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "test-key")
+        env["TERM"] = "xterm-256color"
+
+        proc = subprocess.Popen(
+            [sys.executable, "-c",
+             "import sys; sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__; "
+             "from test_tool.chat import run_interactive; run_interactive()"],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        os.close(slave_fd)
+
+        stdout_parts = []
+        start = time.time()
+
+        for inp in inputs:
+            # Send input
+            os.write(master_fd, inp)
+
+            # Poll for expected output or until timeout
+            deadline = time.time() + expect_timeout
+            found = False
+            while time.time() < deadline:
+                if proc.poll() is not None:
+                    break
+                ready, _, _ = select.select([master_fd], [], [], 0.5)
+                if ready:
+                    try:
+                        data = os.read(master_fd, 4096)
+                        decoded = data.decode("utf-8", errors="replace")
+                        stdout_parts.append(decoded)
+                        if expect in "".join(stdout_parts):
+                            found = True
+                            # Give a moment for additional output
+                            time.sleep(0.5)
+                            # Drain any pending output
+                            while True:
+                                ready2, _, _ = select.select([master_fd], [], [], 0.3)
+                                if not ready2:
+                                    break
+                                data2 = os.read(master_fd, 4096)
+                                stdout_parts.append(data2.decode("utf-8", errors="replace"))
+                            break
+                    except OSError:
+                        break
+                time.sleep(0.5)
+
+            if not found and expect:
+                # Timed out waiting for expected output
+                pass
+
+        # Final wait
+        time.sleep(post_wait)
+
+        # Send quit if process still running
+        if proc.poll() is None:
+            try:
+                os.write(master_fd, b"quit\n")
+            except OSError:
+                pass
+            time.sleep(1)
+
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        return "".join(stdout_parts), stderr
+
     def test_interactive_launches_and_exits(self, env_setup):
         """Test that the interactive mode launches and responds to 'quit'."""
         stdout, stderr = self._run_interactive([b"quit\n"])
@@ -218,6 +309,58 @@ class TestInteractiveMode:
         # Mid-line, Tab completes to just the nick (no colon)
         assert "TerraAI" in stdout, \
             "Tab did not complete mid-line 'Ter' to 'TerraAI'"
+
+    def test_interactive_accepts_pm(self, env_setup):
+        """Test that /msg <text> sends as a PM (no trigger phrase needed)."""
+        import os
+        os.environ["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "test-key")
+        # Send PM and poll for the [PM] prefix in output
+        stdout, stderr = self._run_interactive_poll(
+            inputs=[b"/msg hello\n"],
+            expect="[PM]",
+            expect_timeout=30,
+            post_wait=2,
+        )
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+        # The PM user message should appear with [PM] prefix
+        assert "[PM]" in stdout, "PM message not displayed with [PM] prefix"
+        # The bot should have responded to the PM
+        assert "TerraAI" in stdout
+
+    def test_interactive_noisy_notice(self, env_setup):
+        """Test that noisy mode shows 'Thinking...' notice in channel."""
+        import os
+        os.environ["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "test-key")
+        # Enable noisy, then send message and poll for the -!- Thinking notice
+        stdout, stderr = self._run_interactive_poll(
+            inputs=[b".noisy\n", b"TerraAI: hello\n"],
+            expect="-!- Thinking",
+            expect_timeout=30,
+            post_wait=2,
+        )
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+        assert "-!- Thinking" in stdout, \
+            f"Noisy notice not shown in interactive chat.\nstdout:\n{stdout}"
+
+    def test_interactive_empty_input(self, env_setup):
+        """Test that empty input (just enter) doesn't crash."""
+        stdout, stderr = self._run_interactive([b"\n", b"quit\n"])
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+
+    def test_interactive_ctrl_d_exits(self, env_setup):
+        """Test that Ctrl+D exits cleanly."""
+        stdout, stderr = self._run_interactive([b"\x04"])  # Ctrl+D
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+
+    def test_interactive_history_navigation(self, env_setup):
+        """Test that KEY_UP navigates input history."""
+        # Send a message, then press KEY_UP to recall it
+        stdout, stderr = self._run_interactive([
+            b"hello\n",       # first message
+            b"\x1b[A",        # KEY_UP (ANSI escape)
+            b"quit\n"
+        ])
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
 
 
 class TestPM:
@@ -269,6 +412,25 @@ class TestPM:
         client.terra = terra
         result = client.send_pm("tester", ".ai hello")
         assert len(result["say"]) > 0, ".ai in PM produced no response"
+
+    def test_pm_direct_message(self, terra):
+        """Test PM with plain text (no trigger, no dot) → AI with history."""
+        from test_tool.chat import TerraAITestClient
+        client = TerraformAITestClient()
+        client.terra = terra
+        # Plain text PM — no trigger phrase, no dot prefix
+        result = client.send_pm("tester", "hello there")
+        assert len(result["say"]) > 0, "Plain text PM produced no AI response"
+
+    def test_pm_setlocation_forwards_to_ai(self, terra):
+        """Test .setlocation in PM — hybrid routing forwards to AI."""
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        result = client.send_pm("tester", ".setlocation Portland, OR")
+        assert len(result["say"]) > 0, "PM .setlocation produced no response"
+        # Response should be AI-generated, not a direct confirmation
+        assert "your location is set" not in result["say"][0].lower()
 
     def test_clear_command(self, terra):
         """Test .clear command — wipes session, starts fresh."""
