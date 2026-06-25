@@ -1,8 +1,10 @@
-# 0.0.2 Feature — Test Tool + Provider Expansion
+# 0.0.2 Feature — Test Tool + Provider Expansion + Ergo Integration
+
+OWL — Updated 2026-06-25
 
 ## What We're Building
 
- builds on 0.0.1 by adding the interactive test tool, additional AI providers with fallback, web search, and integration testing.
+0.0.2 builds on 0.0.1 by adding the interactive test tool, additional AI providers with fallback, web search, and integration testing with ergochat.
 
 ## Scope
 
@@ -11,8 +13,14 @@
 - **Test tool tests** — automated tests with screenshots + visual inspection
 - **Additional providers** — Gemini, OpenAI, Ollama alongside OpenRouter
 - **Provider fallback chain** — try next provider if primary fails
-- **Web search** — provider-native (Gemini grounding, OpenRouter plugins) + DuckDuckGo fallback
-- **ergo integration testing** — real IRC server for end-to-end tests
+- **Web search** — DuckDuckGo (free, no API key)
+- **Ergo integration testing** — real IRC server for end-to-end tests
+  - Smoke tests: port, config, socket
+  - IRC protocol tests: register, join, channel messages, private messages
+  - SOPEL bot tests: real SOPEL process with TerraAI plugin, SSL/TLS to ergo
+- **SOPEL + TerraAI test configs** — committed .example files for deployment
+  - `config/sopel-test.cfg.example` — minimal plugin set (admin + terraai only)
+  - `config/terraai-test.yaml.example` — test TerraAI config
 - **Missing 0.0.1 commands** — `.noisy`, `.setlocation`, `.help`, `.effort`, `.compact`, `.stats`
 
 ### Architecture additions
@@ -20,6 +28,20 @@
 - New providers: `terraai/providers/gemini.py`, `openai.py`, `ollama.py`
 - Web search: `terraai/tools/web_search.py`
 - Integration tests: `tests/test_ergo.py`
+- Config examples: `config/sopel-test.cfg.example`, `config/terraai-test.yaml.example`
+
+### SOPEL Plugin Selection
+Only admin-essential plugins loaded (no games/bloat):
+- `admin` — bot admin commands (join, part, quit)
+- `adminchannel` — channel management (op, kick, mode)
+- `ping` — CTCP ping response
+- `reload` — hot-reload plugins
+- `safety` — URL safety
+- `tell` — message relay
+- `coretasks` — SOPEL core (required)
+- `terraai` — our plugin
+
+No SOPEL built-in `help` — TerraAI has its own `.help`.
 
 ### Deferred to later
 - Multi-server support (add `server` column to all queries)

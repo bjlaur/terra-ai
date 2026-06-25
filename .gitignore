@@ -3,5 +3,6 @@ data/
 __pycache__/
 config/terraai.yaml
 config/terraai-test.yaml
+config/sopel-test.cfg
 *.log
 .env

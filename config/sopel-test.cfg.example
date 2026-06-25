@@ -1,0 +1,42 @@
+# TerraAI SOPEL Bot Configuration (Test/Integration)
+# For use with ergochat on localhost.
+# Copy this to sopel-test.cfg and adjust paths.
+#
+# Note: Uses plaintext 6667 for testing. For production,
+# use port 6697 with use_ssl = true and valid TLS certs.
+
+[core]
+# IRC connection
+nick = TerraAIBot
+host = 127.0.0.1
+port = 6667
+use_ssl = false
+
+# Owner/admin
+owner = agent1
+
+# Channel
+channels = #terra-ai-agent1
+
+# Only load what we need — TerraAI is the main feature
+enable =
+    admin
+    adminchannel
+    ping
+    reload
+    safety
+    tell
+    coretasks
+    terraai
+
+# Extra plugin directory (where terraai/ package lives)
+# Set to the project root when running from a clone
+extra =
+    /home/agent/agentic-repos/terra-ai-agent1
+
+[commands]
+prefix = .
+
+[terraai]
+# Path to TerraAI YAML config
+config_path = config/terraai-test.yaml

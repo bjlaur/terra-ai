@@ -1,0 +1,24 @@
+# TerraAI Test Configuration
+# For integration testing with ergochat on localhost.
+# Copy this to terraai-test.yaml and fill in your values.
+
+bot:
+  trigger_phrase: "TerraAI:"    # What the bot responds to
+  bot_nick: "TerraAIBot"        # Bot's IRC nick for testing
+  max_context_messages: 50      # How many messages to include in AI context
+  irc_char_limit: 400           # IRC message length limit
+
+provider:
+  name: "openrouter"             # Provider: openrouter, gemini, openai, ollama
+  model: "openrouter/owl-alpha"
+  api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable
+  timeout: 30
+
+sqlite_path: "data/test-terraai.db"  # Separate DB for testing
+
+admin_nicks:                      # Nicks treated as admins in test
+  - agent1
+
+rate_limit_enabled: false
+rate_limit_messages: 5
+rate_limit_window_seconds: 60

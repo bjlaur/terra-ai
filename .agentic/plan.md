@@ -619,12 +619,15 @@ docs/
 
 ### Phase 7 — Test Tool + IRC Server
 
-- [ ] `test_tool/irc_client.py` — irssi-like terminal UI for interactive testing
-- [ ] Default channel `#terra-ai`
-- [ ] PM support (message bot nick directly)
-- [ ] `config/terraai-test.yaml.example` — test SOPEL config (ergo server)
-- [ ] Set up ergo IRC server for integration testing (local, chaotic-aur or Docker)
-- [ ] Scripted integration tests: connect to ergo, send messages, assert responses
+- [x] `test_tool/irc_client.py` — irssi-like terminal UI for interactive testing
+- [x] Default channel `#terra-ai`
+- [x] PM support (message bot nick directly)
+- [x] `config/terraai-test.yaml.example` — test TerraAI config (ergo server)
+- [x] `config/sopel-test.cfg.example` — test SOPEL config (minimal plugins, ergo)
+- [x] Set up ergo IRC server for integration testing (local, chaotic-aur)
+- [x] Scripted integration tests: connect to ergo, send messages, assert responses
+- [x] `tests/test_ergo.py` — smoke (3), IRC protocol (4), SOPEL bot (2 passing, 2 blocked on IRCv3)
+- [ ] Fix SOPEL IRCv3 message dispatch (bot doesn't respond to PRIVMSG from other nicks)
 
 ### Phase 8 — Containerfile Polish
 

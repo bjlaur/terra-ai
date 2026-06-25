@@ -22,10 +22,14 @@ def setup(bot: sopel_bot.Sopel):
     """Called by SOPEL when the plugin is loaded."""
     global _terrai
 
-    config_path = bot.config.core.config or "config/terraai.yaml"
+    # Get config path from SOPEL [terraai] section, or fall back
+    config_path = (
+        getattr(getattr(bot.config, "terraai", None), "config_path", None)
+        or "config/terraai.yaml"
+    )
     config = load_config(config_path)
     _terrai = TerraAI(config)
-    logger.info("TerraAI plugin loaded")
+    logger.info("TerraAI plugin loaded from %s", config_path)
 
 
 def shutdown():

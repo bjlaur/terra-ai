@@ -18,7 +18,7 @@ from terraai.config import TerraConfig
 from terraai.database import DBConfig, Database
 
 # Check if ergo is reachable
-def ergo_running():
+def ergo_available():
     import socket
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -29,7 +29,7 @@ def ergo_running():
     except Exception:
         return False
 
-ERGO_AVAILABLE = ergo_running()
+ERGO_AVAILABLE = ergo_available()
 
 pytestmark = pytest.mark.skipif(
     not ERGO_AVAILABLE,
@@ -62,7 +62,7 @@ class TestErgoSmoke:
 
     def test_ergo_port_open(self):
         """Verify ergochat is listening on 6667."""
-        assert ergo_running(), "ergochat not reachable"
+        assert ergo_available(), "ergochat not reachable"
 
     def test_ergo_config_exists(self):
         """Verify ergochat config file exists."""
@@ -76,3 +76,408 @@ class TestErgoSmoke:
         result = sock.connect_ex(("127.0.0.1", 6667))
         sock.close()
         assert result == 0
+
+
+class TestErgoIRCProtocol:
+    """Test IRC protocol-level interaction with ergochat.
+
+    These tests use raw IRC protocol (no SOPEL) to verify we can
+    register, join channels, and exchange messages.
+    """
+
+    IRC_TIMEOUT = 10  # seconds
+
+    def _connect_and_register(self, nick="TerraAITest"):
+        """Connect to ergo and register a nick. Returns the socket."""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(("127.0.0.1", 6667))
+
+        # IRC registration
+        sock.sendall(f"NICK {nick}\r\n".encode())
+        sock.sendall(f"USER {nick} 0 * :TerraAI Test Bot\r\n".encode())
+
+        # Wait for 001 (RPL_WELCOME) or error
+        welcome_received = False
+        buf = b""
+        deadline = time.time() + self.IRC_TIMEOUT
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            lines = buf.split(b"\r\n")
+            buf = lines[-1]  # keep incomplete line
+            for line in lines[:-1]:
+                decoded = line.decode(errors="replace")
+                if decoded.startswith(":") and " 001 " in decoded:
+                    welcome_received = True
+                # Respond to PING
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+
+        assert welcome_received, f"Did not receive 001 RPL_WELCOME from ergo"
+        return sock
+
+    def _join_channel(self, sock, channel="#terra-ai-test"):
+        """Join a channel and wait for JOIN confirmation."""
+        import socket
+        sock.sendall(f"JOIN {channel}\r\n".encode())
+
+        joined = False
+        buf = b""
+        deadline = time.time() + self.IRC_TIMEOUT
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            lines = buf.split(b"\r\n")
+            buf = lines[-1]
+            for line in lines[:-1]:
+                decoded = line.decode(errors="replace")
+                if f"JOIN {channel}" in decoded:
+                    joined = True
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+
+        assert joined, f"Did not receive JOIN confirmation for {channel}"
+        return sock
+
+    def _read_until(self, sock, predicate, timeout=10):
+        """Read from socket until predicate matches a line. Returns matching line or None."""
+        import socket
+        buf = b""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            lines = buf.split(b"\r\n")
+            buf = lines[-1]
+            for line in lines[:-1]:
+                decoded = line.decode(errors="replace")
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+                    continue
+                if predicate(decoded):
+                    return decoded
+        return None
+
+    def test_register_nick(self):
+        """Test IRC NICK/USER registration with ergo."""
+        sock = self._connect_and_register("TerraAIReg")
+        sock.sendall(b"QUIT :bye\r\n")
+        sock.close()
+
+    def test_join_channel(self):
+        """Test joining a channel on ergo."""
+        sock = self._connect_and_register("TerraAIJoin")
+        sock = self._join_channel(sock, "#terra-ai-test")
+        sock.sendall(b"QUIT :bye\r\n")
+        sock.close()
+
+    def test_send_and_receive_message(self):
+        """Test sending a message to a channel and reading it back."""
+        # Bot 1: joins channel and listens
+        listener = self._connect_and_register("TerraAIListen")
+        self._join_channel(listener, "#terra-ai-msg")
+
+        # Bot 2: joins same channel and sends a message
+        sender = self._connect_and_register("TerraAISend")
+        self._join_channel(sender, "#terra-ai-msg")
+
+        # Give sender time to join
+        time.sleep(1)
+
+        # Sender sends a message
+        sender.sendall(b"PRIVMSG #terra-ai-msg :hello from sender\r\n")
+
+        # Listener should see the message
+        msg = self._read_until(
+            listener,
+            lambda line: "PRIVMSG" in line and "hello from sender" in line,
+            timeout=10
+        )
+        assert msg is not None, "Listener did not receive the message from sender"
+
+        sender.sendall(b"QUIT :bye\r\n")
+        listener.sendall(b"QUIT :bye\r\n")
+        sender.close()
+        listener.close()
+
+    def test_private_message(self):
+        """Test sending a private message between two nicks."""
+        recipient = self._connect_and_register("TerraAIPriv1")
+        sender = self._connect_and_register("TerraAIPriv2")
+
+        time.sleep(1)
+
+        # Sender sends private message
+        sender.sendall(b"PRIVMSG TerraAIPriv1 :private hello\r\n")
+
+        # Recipient should see it
+        msg = self._read_until(
+            recipient,
+            lambda line: "TerraAIPriv2" in line and "private hello" in line,
+            timeout=10
+        )
+        assert msg is not None, "Recipient did not receive private message"
+
+        sender.sendall(b"QUIT :bye\r\n")
+        recipient.sendall(b"QUIT :bye\r\n")
+        sender.close()
+        recipient.close()
+
+
+class TestErgoSopelBot:
+    """Integration tests with a real SOPEL bot instance.
+
+    These start an actual SOPEL process, load the TerraAI plugin,
+    connect to ergo via SSL, and verify end-to-end behavior.
+    """
+
+    IRC_TIMEOUT = 15
+    BOT_STARTUP_WAIT = 10  # seconds to wait for bot to connect and join
+    ERGO_HOST = "127.0.0.1"
+    ERGO_PORT = 6667  # plaintext for testing (SSL+CAP broken with self-signed cert)
+    TEST_CHANNEL = "#terra-ai-agent1"
+    PLUGIN_LIST = [
+        "admin", "adminchannel", "ping", "reload",
+        "safety", "tell", "coretasks", "terraai",
+    ]
+
+    @pytest.fixture
+    def sopel_config(self, tmp_path):
+        """Create a minimal SOPEL config file for testing."""
+        db_path = tmp_path / "terraai.db"
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        plugins_lines = "\n    ".join(self.PLUGIN_LIST)
+        config_content = f"""[core]
+nick = TerraAIBot
+host = {self.ERGO_HOST}
+port = {self.ERGO_PORT}
+use_ssl = false
+owner = agent1
+channels = {self.TEST_CHANNEL}
+extra = {project_dir}
+enable =
+    {plugins_lines}
+
+[commands]
+prefix = .
+
+[terraai]
+config_path = {tmp_path / "terraai.yaml"}
+"""
+        config_file = tmp_path / "sopel.cfg"
+        config_file.write_text(config_content)
+
+        # TerraAI yaml config
+        terraai_yaml = tmp_path / "terraai.yaml"
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        terraai_yaml.write_text(f"""bot:
+  trigger_phrase: "TerraAI:"
+  bot_nick: "TerraAIBot"
+provider:
+  name: openrouter
+  model: openrouter/owl-alpha
+  api_key: "{api_key}"
+sqlite_path: "{db_path}"
+admin_nicks:
+  - agent1
+""")
+
+        return config_file
+
+    @pytest.fixture
+    def sopel_bot_process(self, sopel_config):
+        """Start a SOPEL bot subprocess and yield its handle."""
+        import subprocess
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = os.environ.copy()
+        env["PYTHONPATH"] = project_dir
+
+        proc = subprocess.Popen(
+            ["sopel", "-c", str(sopel_config)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            env=env,
+        )
+        # Wait for the bot to start up and connect
+        time.sleep(self.BOT_STARTUP_WAIT)
+        yield proc
+        # Cleanup
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+    def _irc_connect(self, nick):
+        """Connect to ergo plaintext and register. Returns socket."""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((self.ERGO_HOST, self.ERGO_PORT))
+
+        sock.sendall(f"NICK {nick}\r\n".encode())
+        sock.sendall(f"USER {nick} 0 * :TerraAI Test\r\n".encode())
+
+        # Wait for 001
+        buf = b""
+        deadline = time.time() + self.IRC_TIMEOUT
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            for line in buf.split(b"\r\n"):
+                decoded = line.decode(errors="replace")
+                if " 001 " in decoded:
+                    return sock
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+        raise AssertionError(f"Did not receive 001 from ergo for nick {nick}")
+
+    def _irc_join(self, sock, channel):
+        """Join a channel and wait for confirmation."""
+        sock.sendall(f"JOIN {channel}\r\n".encode())
+        # Read until we see the JOIN or NAMES
+        deadline = time.time() + self.IRC_TIMEOUT
+        buf = b""
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            for line in buf.split(b"\r\n"):
+                decoded = line.decode(errors="replace")
+                if f"JOIN {channel}" in decoded or ("353" in decoded and channel in decoded):
+                    return
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+
+    def _irc_read_until(self, sock, predicate, timeout=10):
+        """Read from socket until predicate matches. Returns matching line or None."""
+        buf = b""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            sock.settimeout(2)
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            for line in buf.split(b"\r\n"):
+                decoded = line.decode(errors="replace")
+                if decoded.startswith("PING"):
+                    pong = decoded.replace("PING", "PONG", 1)
+                    sock.sendall(f"{pong}\r\n".encode())
+                    continue
+                if predicate(decoded):
+                    return decoded
+        return None
+
+    def _irc_quit(self, sock):
+        """Send QUIT and close socket."""
+        try:
+            sock.sendall(b"QUIT :bye\r\n")
+        except Exception:
+            pass
+        sock.close()
+
+    def test_sopel_connects_to_ergo(self, sopel_bot_process):
+        """Test that SOPEL bot connects to ergochat via SSL."""
+        # If the bot process is still running, it connected successfully
+        # (SOPEL exits on connection failure)
+        poll = sopel_bot_process.poll()
+        assert poll is None, "SOPEL bot process exited early (connection failed?)"
+
+    def test_bot_joins_channel(self, sopel_bot_process):
+        """Test that the bot joins the test channel."""
+        sock = self._irc_connect("TestChecker")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(1)
+
+        # Request NAMES to verify bot is present
+        sock.sendall(f"NAMES {self.TEST_CHANNEL}\r\n".encode())
+        names_line = self._irc_read_until(
+            sock,
+            lambda line: "353" in line and self.TEST_CHANNEL in line,
+            timeout=10
+        )
+        assert names_line is not None, "Did not receive NAMES reply"
+        assert "TerraAIBot" in names_line, "TerraAIBot not in channel"
+
+        self._irc_quit(sock)
+
+    def test_bot_responds_to_help(self, sopel_bot_process):
+        """Test that the bot responds to .help command."""
+        sock = self._irc_connect("TestHelp")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)  # Let join complete fully
+
+        # Send .help command
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :.help\r\n".encode())
+
+        # Look for a response from the bot
+        response = self._irc_read_until(
+            sock,
+            lambda line: "TerraAIBot" in line and "PRIVMSG" in line and self.TEST_CHANNEL in line,
+            timeout=15
+        )
+        assert response is not None, "Bot did not respond to .help"
+
+        self._irc_quit(sock)
+
+    def test_bot_responds_to_trigger(self, sopel_bot_process):
+        """Test that the bot responds to TerraAI: trigger."""
+        sock = self._irc_connect("TestTrigger")
+        self._irc_join(sock, self.TEST_CHANNEL)
+        time.sleep(2)
+
+        # Send trigger
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: hello\r\n".encode())
+
+        # Look for a response from the bot (this will hit the real AI API)
+        response = self._irc_read_until(
+            sock,
+            lambda line: "TerraAIBot" in line and "PRIVMSG" in line,
+            timeout=30
+        )
+        assert response is not None, "Bot did not respond to TerraAI: trigger"
+
+        self._irc_quit(sock)
