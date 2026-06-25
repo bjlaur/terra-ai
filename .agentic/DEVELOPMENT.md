@@ -24,7 +24,7 @@
 
 - user.email: `owl@terra-ai`
 - user.name: `OWL`
-- agent name: `agent1`
+- agent name: `agent1` (OWL) / `agent2` (this agent)
 
 ## Verification
 
@@ -56,8 +56,10 @@ pytest tests/
 
 ## Architecture
 
-- Plugin entry point: [terraai/bot.py](terraai/bot.py) — SOPEL decorators
-- Core class: `TerraAI` — holds all logic (DB, providers, context, prompts)
-- Providers: [terraai/providers/](terraai/providers/) — OpenRouter (default), Gemini, OpenAI, Ollama
-- Database: [terraai/database.py](terraai/database.py) — 7 tables, WAL mode, multi-server support
-- Context: [terraai/context/](terraai/context/) — history assembly, session_id, compactions
+- **Plugin entry point:** `terraai/plugin.py` — SOPEL `@plugin.command()` and `@plugin.rule()` decorators (NOT `@sopel.module`)
+- **Routing:** `TerraAI.dispatch()` in `terraai/bot.py` — single routing entry point for all messages
+- **Core class:** `TerraAI` — holds all logic (DB, providers, context, prompts)
+- **Providers:** `terraai/providers/` — OpenRouter (default), Gemini, OpenAI, Ollama
+- **Database:** `terraai/database.py` — 7 tables, WAL mode, multi-server support
+- **Context:** `terraai/context/` — history assembly, session_id, compactions
+- **Test tool:** `test_tool/chat.py` — calls `TerraAI.dispatch()` directly, no duplicated routing

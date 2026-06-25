@@ -48,3 +48,11 @@ No SOPEL built-in `help` — TerraAI has its own `.help`.
 - Multi-server support (add `server` column to all queries)
 - Rate limiting
 - Containerfile polish (based on user's run script pattern)
+
+### Rework in progress
+- `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture
+  - Extract `dispatch()` into `bot.py` (single routing entry point)
+  - Slim `plugin.py` to thin `@plugin.command()` / `@plugin.rule()` wrapper
+  - Test tool calls `dispatch()` directly — no duplicated routing
+  - Remove `MANAGEMENT_COMMANDS` set (SOPEL tracks via decorators)
+- Custom prompts (`.addprompt`, `.rmprompt`, `match_prompt()`) — TBD, needs discussion

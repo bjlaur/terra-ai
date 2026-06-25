@@ -3,7 +3,7 @@
 ## Status
 
 **Branch**: `release-0.0.2`
-**Status**: Substantially complete. Ergo smoke/protocol/bot-connect tests passing. SOPEL bot message dispatch blocked on IRCv3 issue. Agent2 completed routing fixes, .clear command, and manual testing rounds 1–3.
+**Status**: Substantially complete. Ergo smoke/protocol/bot-connect tests passing. SOPEL bot message dispatch blocked on IRCv3 issue. Agent2 completed routing fixes, .clear command, PM support, noisy mode, resize fix, async AI, and manual testing rounds 1–7. Rework plan drafted for SOPEL-native plugin architecture.
 
 ---
 
@@ -43,4 +43,7 @@ See `feature.md` for full description.
 - [x] ergo smoke + IRC protocol tests pass (7/7)
 - [ ] ergo SOPEL bot end-to-end tests pass (2/4 — message dispatch blocked on IRCv3)
 - [x] `docs/release-0.0.2/testing-agent1.md` completed
+- [x] `docs/release-0.0.2/testing-agent2.md` completed
+- [x] `docs/release-0.0.2/testing-agent2-v2.md` created (comprehensive checklist)
 - [x] README.md updated with new commands (.clear)
+- [x] Rework plan drafted (`docs/release-0.0.2/rework-plan.md`)

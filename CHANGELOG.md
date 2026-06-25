@@ -21,26 +21,36 @@
 - 2 ergo SOPEL bot tests passing (connects, joins channel)
 - 2 ergo SOPEL bot tests failing (responds to .help, responds to TerraAI: trigger) — IRCv3 message dispatch blocked
 
-### Agent 2 — Routing fixes, new commands, manual testing
+### Agent 2 — Routing fixes, new commands, PM support, manual testing
 
 #### Features
 - `.clear` command — wipe conversation history and start fresh session
 - `.setlocation` hybrid routing — stores prompt locally, forwards to AI for response
 - `.effort [level]` — set reasoning effort (low/medium/high/xhigh/max)
 - Unknown `.command` routing — anything starting with `.` that isn't a management command goes to AI
-- Tab completion — `Ter<Tab>` completes to `TerraAI: ` (with trigger suffix)
+- Tab completion — `Ter<Tab>` completes to `TerraAI: ` (mid-line too)
 - Custom prompt local matching removed — `.wea` and similar now route to AI
+- PM support — `/msg` sends direct-to-bot, no trigger phrase needed
+- Noisy mode — "Thinking..." notice shown in channel with `-!-` prefix
+- Async AI calls — UI no longer freezes during API calls
+- Timestamps `[HH:MM]` on all messages
+- Compact gate — `.compact` restricted to admin only
+- Resize fix — terminal resize handled correctly
 
 #### Bug Fixes
 - `.effort` no response — added "effort" to MANAGEMENT_COMMANDS set
 - `.setlocation` (no args) — now correctly forwards to AI instead of erroring
 - Tab completion — changed from "TerraAI" to "TerraAI: " (trigger phrase)
+- `.wea` / unknown `.command` no response — added `.command` → AI routing
+- Resize cuts off text — KEY_RESIZE handler recreates windows + redraws
+- Test tool duplicated routing — rework plan drafted to use single `dispatch()`
 
 #### Testing
-- 80+ unit tests passing
-- `--real` API tests passing (4/4): effort level, unknown command routing, noisy toggle, setlocation
-- Interactive tests passing (launch, input, tab completion)
-- Manual testing rounds 1–3 documented in `docs/release-0.0.2/testing-agent2.md`
+- 100+ unit tests passing
+- `--real` API tests passing (7/7): effort, unknown command, noisy, setlocation, PM trigger, PM effort, noisy notice
+- Screenshot tests passing (8 SVGs): resize, wrap, PM, noisy
+- 63 manual tests documented in `docs/release-0.0.2/testing-agent2-v2.md`
+- Rework plan drafted in `docs/release-0.0.2/rework-plan.md`
 - Deferred tests tracked in `docs/release-0.0.2/deferred-testing-agent2.md`
 
 ---

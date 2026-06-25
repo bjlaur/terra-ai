@@ -7,6 +7,7 @@
 - Class name: **TerraAI** (Python classes)
 - Default provider: **OpenRouter (OWL)**
 - Trigger character in production: `-` (`.` used in docs)
+- SOPEL plugin API: `@plugin.command()`, `@plugin.rule()` (NOT `@sopel.module`)
 
 ## User and Environment
 
@@ -37,7 +38,7 @@
 
 - user.email: `owl@terra-ai`
 - user.name: `OWL`
-- agent name: `agent1`
+- agent name: `agent1` (OWL) / `agent2` (this agent)
 
 ## Parallel Work
 
