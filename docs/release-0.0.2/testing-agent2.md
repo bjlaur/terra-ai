@@ -153,6 +153,13 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | 57  | Tab: mid-line `Ter<Tab>` → completes to `TerraAI: `       | [ ]     | [ ]    | skip        | Manual test     |           | Fixed: word-at-cursor matching, not just start-of-line             |
 | 58  | `--real tests: missing key → "GO SOURCE .env YOU DOLT!"   | [x]     | [ ]    | skip        | —               |           | sys.stderr message when OPENROUTER_API_KEY not set                  |
 
+## Round 7 — Opt-out gate removal, cleanup
+
+| #   | Test                                                      | Harness | Manual | --real test | Why no harness? | Dev notes | Agent notes                                                         |
+| --- | --------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ------------------------------------------------------------------- |
+| 59  | Test tool does NOT enforce opt-in/out                     | [x]     | [ ]    | skip        | —               |           | Removed should_respond() from send_message — core bot concern      |
+| 60  | test_optout_blocks_response removed                      | [x]     | [ ]    | skip        | —               |           | Test was testing plugin.py, not test tool                          |
+
 ---
 
 ## Defer to later release
@@ -160,11 +167,16 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | #   | Test                                                       | Reason                                    |
 | --- | ---------------------------------------------------------- | ----------------------------------------- |
 | 15  | `.addprompt greet hello` → "Added wea."                      | Needs DB-based test                       |
-| 26  | Long message wraps correctly                               | Needs resize fix first                    |
+| ~~26~~ | Long message wraps correctly                          | **RESOLVED** — unblocked by resize fix (Round 4 #39) |
 | 29  | Special characters `!@#$%^&*()`                            | Low priority                              |
 | 30  | Unicode `héllo wörld 日本語`                                  | Low priority                              |
 | 31  | `.stats` from non-admin nick                               | Needs admin-gate decision                 |
 | ~~32~~ | ~~`.compact` from non-admin nick~~                    | **RESOLVED** — gated to admin only (Round 4 #33) |
+
+## Tracked outside rounds
+
+- [ ] **Rework plan** — `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin restructure
+- [ ] **Custom prompts** — needs separate discussion (`.addprompt`, `.rmprompt`, `match_prompt()`)
 
 ---
 
@@ -180,7 +192,7 @@ my bad I wasn't specific.
 
 ## Summary
 
-**Passed (harness):** 1–32, 3a, 33–38, 41, 46, 53, 54, 55, 56, 58
+**Passed (harness):** 1–32, 3a, 33–38, 41, 46, 53, 54, 55, 56, 58, 59, 60
 
 **Passed (--real):** 5a, 14, 24, 25, 35, 38, 42, 54
 
