@@ -102,23 +102,16 @@ class TerraAITestClient:
         """Send a message as the test user and return bot responses.
 
         Mimics real IRC bot routing:
-        - opted-out users get no response (except management commands)
         - Management commands (.) are handled locally
         - .ai <prompt> sends to AI without history
         - Trigger phrase (TerraAI:) sends to AI with history
         - Everything else is ignored (bot doesn't respond to regular chat)
+
+        NOTE: opt-in/opt-out gating (should_respond) is core bot
+        functionality in plugin.py — NOT tested here. This method
+        just routes messages the same way regardless of opt-in status.
         """
         self.bot.messages.clear()
-
-        # Gate: opted-out users don't get AI responses (matches
-        # plugin.py should_respond check). Management commands still
-        # work so user can .optin to rejoin.
-        if not self.terra.is_opted_in(self.server, self.nick):
-            if self.terra.is_management_command(text):
-                pass  # allow management commands through
-            else:
-                return list(self.bot.messages)
-
         trigger = FakeTrigger(self.nick, self.channel, text)
 
         # Send "Thinking..." notice to noisy users before AI calls
