@@ -136,6 +136,11 @@ def run_interactive():
         stdscr.clear()
         stdscr.refresh()
 
+        # Initialize color pairs
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+
         height, width = stdscr.getmaxyx()
 
         # Create windows
@@ -184,7 +189,7 @@ def run_interactive():
             for i, msg in enumerate(visible):
                 try:
                     if msg.startswith("<TerraAI>"):
-                        chat.addstr(i, 0, msg, curses.A_CYAN)
+                        chat.addstr(i, 0, msg, curses.color_pair(1))
                     else:
                         chat.addstr(i, 0, msg)
                 except curses.error:

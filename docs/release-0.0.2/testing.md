@@ -46,8 +46,8 @@
 | 23 | `.help` → shows command list | [x] | [ ] | skip | — | | |
 | 24 | AI remembers previous message (history) | [x] | [ ] | **pass** | — | | |
 | 25 | AI forgets after `.compact` | [x] | [ ] | **pass** | — | | |
-| 26 | Long message wraps correctly | [ ] | [ ] | skip | Curses rendering — harness can't verify visuals | | |
-| 27 | Resize terminal → layout adapts | [ ] | [ ] | skip | Curses rendering — harness can't verify visuals | | |
+| 26 | Long message wraps correctly | [x] | [ ] | skip | Screenshot test (`test_tool/screenshot_test.py`) | | |
+| 27 | Resize terminal → layout adapts | [x] | [ ] | skip | Screenshot test (`test_tool/screenshot_test.py`) | | |
 | 28 | Empty input (just enter) → no crash | [x] | [ ] | skip | — | | |
 | 29 | Special characters `!@#$%^&*()` | [x] | [ ] | skip | — | | |
 | 30 | Unicode `héllo wörld 日本語` | [x] | [ ] | skip | — | | |
