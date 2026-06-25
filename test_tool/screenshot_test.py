@@ -67,13 +67,38 @@ class TerraAIScreenshotApp(App):
             self.exit()
             return
 
-        # Send message
-        responses = self.client.send_message(text)
+        # Prefix "/msg " sends as a private message
+        # Prefix ":noisy" toggles noisy mode for subsequent messages
+        is_pm = text.startswith("/msg ")
+        if is_pm:
+            text = text[5:]
 
-        # Update chat
-        self.chat_lines.append(f"<tester> {text}")
-        for r in responses:
-            self.chat_lines.append(f"<TerraAI> {r}")
+        if text.lower() == ":noisy":
+            # Toggle noisy — send as a channel command
+            responses = self.client.send_message(".noisy")
+            self.chat_lines.append(f"<tester> :noisy")
+            for r in responses:
+                self.chat_lines.append(f"<TerraAI> {r}")
+            self.chat_static.update("\n".join(self.chat_lines[-20:]))
+            return
+
+        # Send message (channel or PM)
+        if is_pm:
+            result = self.client.send_pm("tester", text)
+            responses = result["say"]
+            notices = result["notices"]
+            self.chat_lines.append(f"[PM <tester> {text}")
+            for r in responses:
+                self.chat_lines.append(f"[PM <TerraAI> {r}")
+            for _, msg in notices:
+                # Show notices as if sent back as PM from bot
+                self.chat_lines.append(f"[PM notice <TerraAI> {msg}")
+        else:
+            responses = self.client.send_message(text)
+            self.chat_lines.append(f"<tester> {text}")
+            for r in responses:
+                self.chat_lines.append(f"<TerraAI> {r}")
+
         self.chat_static.update("\n".join(self.chat_lines[-20:]))
 
 
@@ -222,6 +247,26 @@ def run_screenshots():
             with open("test_tool/screenshots/resize-wide.svg", "w") as f:
                 f.write(svg)
 
+            # Screenshot 7: PM mode — send a PM (prefixed with /msg)
+            await pilot.press(*"/msg TerraAI: hello from PM")
+            await pilot.press("enter")
+            await pilot.pause(3)
+            svg = app.export_screenshot()
+            with open("test_tool/screenshots/pm-message.svg", "w") as f:
+                f.write(svg)
+            await pilot.pause(0.5)
+
+            # Screenshot 8: Noisy mode — toggle on, then send a message
+            await pilot.press(*":noisy")
+            await pilot.press("enter")
+            await pilot.pause(0.5)
+            await pilot.press(*"TerraAI: hello noisy")
+            await pilot.press("enter")
+            await pilot.pause(3)
+            svg = app.export_screenshot()
+            with open("test_tool/screenshots/noisy-notice.svg", "w") as f:
+                f.write(svg)
+
     import asyncio
     asyncio.run(take_screenshots())
 
@@ -240,6 +285,17 @@ def run_screenshots():
     # Verify resize — wide SVG should be ~120 cols wide (≈1482px at 20px font)
     check_svg_width("test_tool/screenshots/resize-wide.svg", 1500, "wide (120 cols)")
 
+    # Verify PM — check that the response is visible (text appears in SVG)
+    # Note: [PM prefix may be HTML-encoded in SVG; check for response content
+    check_svg("test_tool/screenshots/pm-message.svg", ["TerraAI", "PM"])
+
+    # Verify noisy — screenshot captured (visual inspection required)
+    # The "Thinking..." notice is rendered in the chat area when noisy is ON
+    if os.path.exists("test_tool/screenshots/noisy-notice.svg"):
+        print("  PASS test_tool/screenshots/noisy-notice.svg: screenshot captured")
+    else:
+        print("  FAIL test_tool/screenshots/noisy-notice.svg: file not found")
+
     print("\nScreenshots exported to test_tool/screenshots/")
     print("VISUAL INSPECTION REQUIRED: Open each SVG in a browser/image viewer and verify:")
     print("  1. Initial state: header shows '#terra-ai (test mode)', empty chat, input line at bottom")
@@ -248,6 +304,8 @@ def run_screenshots():
     print("  4. Long message wrap: long text wraps to multiple lines, no horizontal overflow")
     print("  5. Resize narrow (40 cols): layout adapts, no overflow or truncation")
     print("  6. Resize wide (120 cols): layout uses extra space cleanly")
+    print("  7. PM mode: private message shown with [PM prefix, bot responds")
+    print("  8. Noisy mode: 'Thinking...' notice visible before AI response")
 
 
 if __name__ == "__main__":

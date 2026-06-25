@@ -466,13 +466,20 @@ def run_interactive():
             if not cmd.strip():
                 continue
 
+            # Parse "/msg <text>" as a PM
+            is_pm = cmd.lower().startswith("/msg ")
+            pm_text = cmd[5:] if is_pm else cmd
+
             # Add to history
             if cmd not in input_history:
                 input_history.append(cmd)
             history_idx = -1
 
             # Display user message immediately (before blocking on AI)
-            messages.append(f"<{client.nick}> {cmd}")
+            if is_pm:
+                messages.append(f"[PM <{client.nick}> {pm_text}")
+            else:
+                messages.append(f"<{client.nick}> {cmd}")
             redraw_chat()
 
             # Show "thinking" indicator — also send notice to noisy users
@@ -487,12 +494,21 @@ def run_interactive():
             if client.terra.user.is_noisy(client.server, client.nick):
                 client.bot.notice(client.nick, "Thinking...")
 
-            # Send message (blocks on API call)
-            responses = client.send_message(cmd)
+            # Send message (blocks on API call) — route PMs differently
+            if is_pm:
+                result = client.send_pm(client.nick, pm_text)
+                responses = result["say"]
+                for _, msg in result["notices"]:
+                    messages.append(f"[PM notice <TerraAI> {msg}")
+            else:
+                responses = client.send_message(cmd)
 
             # Replace "thinking" with actual response
             for r in responses:
-                messages.append(f"<TerraAI> {r}")
+                if is_pm:
+                    messages.append(f"[PM <TerraAI> {r}")
+                else:
+                    messages.append(f"<TerraAI> {r}")
 
             redraw_chat()
 
