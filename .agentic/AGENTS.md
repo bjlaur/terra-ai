@@ -20,6 +20,11 @@
 - **Prefer Arch-style package commands when mentioning system packages.**
 - **Do not `pip install` into system Python.** Dependencies in `requirements.txt` / Containerfile.
 
+## Doc Update Rules
+
+- **Update every commit or every few commits:** `TODO.md`, `CHANGELOG.md`, `docs/release-X.Y.Z/`
+- **Only update when the plan itself changes:** `.agentic/plan.md` (long-term plan, not per-commit)
+
 ## Runtime Files
 
 - Real config: `config/terraai.yaml` (gitignored)
