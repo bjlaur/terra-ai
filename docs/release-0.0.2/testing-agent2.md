@@ -118,7 +118,7 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | --- | --------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ------------------------------------------------------------------- |
 | 33  | `.compact` from non-admin → "Permission denied"           | [x]     | [ ]    | skip        | —               |           | Fixed: gated in bot.py handle_management() via is_admin()          |
 | 34  | `.compact` (admin) → works                               | [x]     | [ ]    | skip        | —               |           | requires setting admin_nicks in config to test manually             |
-| 35  | PM: `TerraAI: hello` → AI responds                        | [x]     | [ ]    | **pass**    | —               |           | New: send_pm() with is_pm=True, nick as channel                   |
+| 35  | PM: `TerraAI: hello` → AI responds                        | [x]     | [ ]    | **pass**    | —               |           | PMs are direct-to-bot — no trigger phrase needed                  |
 | 36  | PM: `.optin` → "opted in"                                 | [x]     | [ ]    | skip        | —               |           | PM management commands work identically to channel                 |
 | 37  | PM: `.what's 2+2` → routes to AI                          | [x]     | [ ]    | skip        | —               |           | Unknown .commands route to AI in PM too                            |
 | 38  | PM: `.effort low` → confirms                              | [x]     | [ ]    | **pass**    | —               |           |                                                                     |
@@ -139,6 +139,19 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | 48  | Screenshot: PM mode (/msg)                                | [x]     | [ ]    | skip        | Screenshot test |           | Screenshot 7: pm-message.svg                                       |
 | 49  | Screenshot: Noisy mode (:noisy)                           | [x]     | [ ]    | skip        | Screenshot test |           | Screenshot 8: noisy-notice.svg                                     |
 | 50  | Screenshot: all 8 SVGs pass verification                  | [x]     | [ ]    | skip        | Screenshot test |           | Resize, wrap, PM, noisy all covered                               |
+
+## Round 6 — Async AI, PM routing, tab complete, .env yelling
+
+| #   | Test                                                      | Harness | Manual | --real test | Why no harness? | Dev notes | Agent notes                                                         |
+| --- | --------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ------------------------------------------------------------------- |
+| 51  | AI calls don't block UI — can type during response         | [ ]     | [ ]    | skip        | Manual test     |           | New: background thread for AI calls, input stays responsive        |
+| 52  | Results render when ready (even while typing)              | [ ]     | [ ]    | skip        | Manual test     |           | maybe_finish_call polls between messages                           |
+| 53  | PM: `.help` works (no trigger phrase needed)              | [x]     | [ ]    | skip        | —               |           | PMs treated as direct-to-bot — management commands routed locally  |
+| 54  | PM: `hello` → AI responds directly                        | [x     | [ ]    | **pass**    | —               |           | Regular PM text routes to AI (no trigger phrase)                   |
+| 55  | PM: `.what's 2+2` → AI answers                            | [x]     | [ ]    | skip        | —               |           | Unknown .commands route to AI in PM                                |
+| 56  | Tab: `Ter<Tab>` at start → `TerraAI: `                    | [x]     | [ ]    | skip        | —               |           | Existing test, still works                                         |
+| 57  | Tab: mid-line `Ter<Tab>` → completes to `TerraAI: `       | [ ]     | [ ]    | skip        | Manual test     |           | Fixed: word-at-cursor matching, not just start-of-line             |
+| 58  | `--real tests: missing key → "GO SOURCE .env YOU DOLT!"   | [x]     | [ ]    | skip        | —               |           | sys.stderr message when OPENROUTER_API_KEY not set                  |
 
 ---
 
@@ -167,9 +180,9 @@ my bad I wasn't specific.
 
 ## Summary
 
-**Passed (harness):** 1–32, 3a, 33–38, 41, 46
+**Passed (harness):** 1–32, 3a, 33–38, 41, 46, 53, 54, 55, 56, 58
 
-**Passed (--real):** 5a, 14, 24, 25, 35, 38, 42
+**Passed (--real):** 5a, 14, 24, 25, 35, 38, 42, 54
 
 **Passed (--real):** R1–R7
 
@@ -182,6 +195,8 @@ my bad I wasn't specific.
 - 44: timestamps visible on all message types
 - 45: `-!-` notice prefix distinguishable from chat
 - 47: `/msg` interactive mode (type `/msg TerraAI: hello` in test tool)
+- 51: type a message while AI is responding (UI shouldn't freeze)
+- 57: mid-line `Ter<Tab>` completes correctly
 
 **Manual feedback (needs attention):**
 
