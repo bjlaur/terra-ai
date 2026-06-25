@@ -1,7 +1,7 @@
 # TerraAI — Implementation Plan
 
-> **Status:** Not started  
-> **Agent:** OWL  
+> **Status:** 0.0.1 released, 0.0.2 substantially complete (bot e2e blocked on IRCv3)
+> **Agent:** OWL
 > **Last updated:** 2026-06-25
 
 ---
@@ -25,7 +25,7 @@ Class / module name: **TerraAI**
 - **Python:** 3.14.6 system-wide. **Do not `pip install` into system Python.** Dependencies managed via `Containerfile` for deployment. If a dep is missing locally, tell the user — do not install.
 - **SOPEL:** Only available in AUR (chaotic-aur). Will be built from `yay` as the first container build step.
 - **AUR:** chaotic-aur is configured and available.
-- **Git:** Repo at `/home/agent/git/terra-ai` initialized but zero commits. Default branch: `master`.
+- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current).
 - **Agent name:** OWL
 - **Container user:** `terra-ai` (UID 1000, non-root, with NOPASSWD sudo for initial yay build, then NOPASSWD removed)
 
@@ -88,7 +88,7 @@ terra-ai/
 │   ├── release-0.0.1/                        # First release
 │   │   ├── release-plan.md
 │   │   ├── feature.md
-│   │   └── manual-testing-results.md
+│   │   └── testing-results.md
 │   ├── future-release/                       # Deferred features
 │   │   └── release-plan.md
 │   └── misc/
@@ -535,7 +535,7 @@ Following the pattern from `/mnt/jbrowse/docs/`:
 docs/
 ├── release-0.0.1/
 │   ├── release-plan.md              # What we're trying to ship
-│   ├── manual-testing-results.md    # Test results (rounds)
+│   ├── testing-results.md    # Test results (rounds)
 └── misc/
     └── claude-didn't-listen.md     # Lessons learned
 ```
@@ -569,7 +569,7 @@ docs/
 
 1. Create `release-X.Y.Z/release-plan.md` with goals
 2. Implement features
-3. Create `manual-testing-results.md` with test cases
+3. Create `testing-results.md` with test cases
 4. Agent runs tests, marks harness/manual columns
 5. Failed items get fixed, new round added
 6. When all items pass → release
@@ -580,7 +580,7 @@ docs/
 
 ### Phase 1 — Scaffold
 
-- [ ] `requirements.txt` — pin `sopel>=8.0`, `pyyaml`, `openai>=1.0`, `aiohttp`
+- [ ] `PACKAGES.md` — pin `sopel>=8.0`, `pyyaml`, `openai>=1.0`, `aiohttp`
 - [ ] `config/terraai.yaml.example` — defaults-only config with descriptive comments
 - [ ] `Containerfile` — Arch Linux base + chaotic-aur + yay + sopel + requirements
 - [ ] `terraai/__init__.py` — `__version__ = "0.0.1"`
@@ -639,7 +639,7 @@ docs/
 
 - [ ] `README.md`
 - [ ] `CHANGELOG.md` — initial 0.0.1 entry (already created, update with actual content)
-- [ ] `docs/release-0.0.1/` — release-plan.md, manual-testing-results.md
+- [ ] `docs/release-0.0.1/` — release-plan.md, testing-results.md
 
 ---
 
@@ -669,10 +669,6 @@ RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
 USER root
 RUN rm /etc/sudoers.d/terra-ai
 USER terra-ai
-
-# Copy requirements and install Python deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy plugin
 COPY . .
@@ -800,11 +796,7 @@ These tests are **MUST PASS** — they are not optional:
 
 ---
 
-## 23. Development Tools
-
-- **`/compact`** — Claude Code built-in. Use it when this session's context gets long. The AI summarizes what's happened so far and we continue from there. Not a TerraAI feature, just a dev tool for us. --remove this section. we don't need it.
-
-## 24. Lessons Learned (from /mnt/jbrowse/docs/misc/claude-didn't-listen.md)
+## 23. Lessons Learned (from /mnt/jbrowse/docs/misc/claude-didn't-listen.md)
 
 1. When the user says "add this test" — actually do it, don't just note it
 2. When manual testing reveals a FAIL — fix the code, don't just document it

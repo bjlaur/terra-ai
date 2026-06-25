@@ -18,7 +18,8 @@ Test tool, provider expansion, web search, ergo integration testing.
 - 83 unit tests passing (database, providers, prompts, context, bot, providers_extended, test_tool)
 - 3 ergo smoke tests (port open, config exists, socket connect)
 - 4 ergo IRC protocol tests (register, join, channel message, private message)
-- 4 ergo SOPEL bot tests (connects, joins channel, responds to .help, responds to TerraAI: trigger)
+- 2 ergo SOPEL bot tests passing (connects, joins channel)
+- 2 ergo SOPEL bot tests failing (responds to .help, responds to TerraAI: trigger) — IRCv3 message dispatch blocked
 
 ---
 

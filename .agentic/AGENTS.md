@@ -18,7 +18,7 @@
 - **Agent name:** OWL
 - **Prefer practical changes and concise explanations.**
 - **Prefer Arch-style package commands when mentioning system packages.**
-- **Do not `pip install` into system Python.** Dependencies in `requirements.txt` / Containerfile.
+- **Do not `pip install` into system Python.** Dependencies in `Containerfile` + `PACKAGES.md`.
 
 ## Doc Update Rules
 
@@ -35,11 +35,9 @@
 
 ## Git Identity
 
-Not yet configured. Set before first commit:
-```
-git config user.email "you@example.com"
-git config user.name "Your Name"
-```
+- user.email: `owl@terra-ai`
+- user.name: `OWL`
+- agent name: `agent1`
 
 ## Parallel Work
 

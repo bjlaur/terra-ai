@@ -1,139 +1,97 @@
-# Next Release Plan — Post-0.0.1
+# Next Release Plan — Post-0.0.2
 
 ## Context
 
-0.0.1 is a minimal viable SOPEL plugin with one provider and basic commands. This plan covers features deferred from 0.0.1 and new capabilities for subsequent releases.
+0.0.1 was a minimal viable SOPEL plugin with one provider and basic commands. 0.0.2 added test tool, additional providers, web search, and ergo integration testing. This plan covers features deferred from 0.0.2 and new capabilities for subsequent releases.
 
 ---
 
 ## Release Candidates (Prioritized)
 
-### 1. Additional Providers + Fallback Chain
-**Priority**: HIGH
-**Effort**: Small
-
-Add Gemini, OpenAI, and Ollama providers. Implement fallback chain in ProviderRegistry.
-
-**Files**: `terraai/providers/gemini.py`, `terraai/providers/openai.py`, `terraai/providers/ollama.py`, `terraai/providers/registry.py`
-
----
-
-### 2. Web Search
-**Priority**: HIGH
-**Effort**: Medium
-
-Two-tier approach:
-- Provider-native: Gemini grounding, OpenRouter plugins
-- Fallback: DuckDuckGo API + web scrape
-
-**Files**: `terraai/providers/base.py` (add search tool), new `terraai/tools/web_search.py`
-
----
-
-### 3. Test Tool (Textual)
-**Priority**: MEDIUM (right after 0.0.1)
-**Effort**: Medium
-
-irssi-like terminal UI using Textual for interactive testing. Single channel view, scrollable history, input line.
-
-Inspiration: `/mnt/jbrowse/tools/svg_screenshot_poc.py` — uses `app.run_test()` + `pilot.press()` + `settle()` pattern. We can use a similar approach without SVG export — just verify bot responses.
-
-**Test the test tool**: The test tool itself needs automated tests. Use Textual's `run_test()` + `pilot` to simulate user input and verify bot responses. **Screenshots + visual inspection** — export SVGs and look at them to verify the UI looks right. This is how jbrowse does it (`/mnt/jbrowse/tools/svg_screenshot_poc.py`).
-
-**Files**: `test_tool/irc_client.py`, `tests/test_tool.py`
-
----
-
-### 4. ergo Integration Testing
+### 1. Context Compaction
 **Priority**: MEDIUM
 **Effort**: Medium
 
-Set up ergo IRC server for real-world integration testing. Each agent gets its own test channel.
-
-**Files**: `tests/test_ergo_integration.py`, `config/terraai-test.yaml.example`
-
----
-
-### 5. Context Compaction
-**Priority**: MEDIUM
-**Effort**: Medium
-
-`.compact` command with AI-driven pruning, session_id rotation, revert support. Add `sessions` and `compactions` tables.
+`.compact` command with AI-driven pruning, session_id rotation, revert support. Already partially implemented in 0.0.2 (sessions/compactions tables exist).
 
 **Files**: `terraai/database.py`, `terraai/commands/admin.py`
 
 ---
 
-### 6. User Experience Commands
-**Priority**: MEDIUM
-**Effort**: Small
-
-- `.noisy` — toggle status notices
-- `.setlocation` — hybrid: store prompt + forward to AI
-- `.help` — show available commands
-
-**Files**: `terraai/commands/user.py`
-
----
-
-### 7. Performance Stats
+### 2. Multi-Server Support
 **Priority**: LOW
 **Effort**: Small
 
-`performance_stats` table + `.stats` command. Track token counts, latency, response sizes.
-
-**Files**: `terraai/database.py`, `terraai/commands/admin.py`
-
----
-
-### 8. Multi-Server Support
-**Priority**: LOW
-**Effort**: Small
-
-Add `server` column to all tables. Scope all queries by server.
+Add `server` column to all tables. Scope all queries by server. Schema already includes `server` columns — queries need updating.
 
 **Files**: `terraai/database.py`, all managers
 
 ---
 
-### 9. Rate Limiting
+### 3. Rate Limiting
 **Priority**: LOW
 **Effort**: Small
 
-Configurable per-nick sliding window. Default off.
+Configurable per-nick sliding window. Default off. Already in config schema (`rate_limit_enabled`, etc.) — needs enforcement in `bot.py`.
 
 **Files**: `terraai/bot.py`
 
 ---
 
-### 10. Containerfile Polish
+### 4. Containerfile Polish
 **Priority**: LOW
 **Effort**: Small
 
-Based on user's run script pattern. NOPASSWD yay build, then remove NOPASSWD.
+Multi-stage if size matters. `VOLUME ["/app/data"]`. Healthcheck.
 
 **Files**: `Containerfile`
 
 ---
 
+### 5. SOPEL Bot Message Dispatch Fix
+**Priority**: HIGH
+**Effort**: Medium
+
+Bot connects + joins but doesn't dispatch PRIVMSG to plugins. Likely IRCv3 `echo-message`/`server-time` CAP issue. Blocks end-to-end bot testing.
+
+**Files**: `config/sopel-test.cfg.example`, investigation
+
+---
+
+### 6. SSL/TLS for ergo
+**Priority**: MEDIUM
+**Effort**: Small
+
+Plaintext 6667 works. SSL 6697 hangs on CAP negotiation with self-signed cert. Need proper cert or CAP workaround.
+
+**Files**: ergo config, SOPEL config
+
+---
+
 ## Recommended Execution Order
 
-1. Additional providers + fallback chain (unblocks real-world use)
-2. Web search (critical for weather etc.)
-3. Test tool (enables better testing)
-4. ergo integration testing
-5. Context compaction (needed for long-running bots)
-6. UX commands (.noisy, .setlocation, .help)
-7. Performance stats
-8. Multi-server support
-9. Rate limiting
-10. Containerfile polish
+1. Fix SOPEL bot message dispatch (unblocks e2e tests)
+2. SSL/TLS for ergo
+3. Context compaction (finish remaining work)
+4. Multi-server support
+5. Rate limiting
+6. Containerfile polish
 
 ## Done (moved to 0.0.1)
 
 - SOPEL plugin entry point
 - OpenRouter provider
-- SQLite persistence (3 tables)
+- SQLite persistence (7 tables)
 - Fake conversation injection
 - Commands: .optin, .optout, .ai, .addprompt, .rmprompt, .listprompts
-- pytest suite
+- pytest suite (60 tests)
+
+## Done (moved to 0.0.2)
+
+- Additional providers: Gemini, OpenAI, Ollama + fallback chain
+- Web search via DuckDuckGo
+- Test tool (Textual IRC client) + screenshot tests
+- ergo integration tests (smoke, IRC protocol, SOPEL bot connect/join)
+- SOPEL + TerraAI test config examples committed
+- Missing 0.0.1 commands: .noisy, .setlocation, .help, .effort, .compact, .stats
+- 83 unit tests + 9 ergo integration tests passing

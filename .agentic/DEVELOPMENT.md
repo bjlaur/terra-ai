@@ -18,15 +18,13 @@
 10. **Runtime files in `data/`**, configs committed only as `.example`.
 11. **Test for everything.** Don't ask the user to manually verify something that hasn't already passed its own test. Write a test first, then implement. Only skip tests with a very good reason.
 12. **All tests that hit AI MUST use real APIs.** No mocking of AI provider calls. If the test needs AI, it calls the real API. Set the required API key in `.env` (gitignored). If the API key is not set, the test fails (no skip).
-12. **Write a report if you make a mistake.** If you make an avoidable mistake (didn't read docs, didn't follow instructions, used the wrong repo, etc.), write a report in `docs/misc/claude-didn't-listen.md` immediately. See that file for the format.
+13. **Write a report if you make a mistake.** If you make an avoidable mistake (didn't read docs, didn't follow instructions, used the wrong repo, etc.), write a report in `docs/misc/claude-didn't-listen.md` immediately. See that file for the format.
 
 ## Git Identity
 
-Not yet configured. Set before committing:
-```
-git config user.email "you@example.com"
-git config user.name "Your Name"
-```
+- user.email: `owl@terra-ai`
+- user.name: `OWL`
+- agent name: `agent1`
 
 ## Verification
 

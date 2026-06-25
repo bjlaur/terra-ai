@@ -2,7 +2,7 @@
 
 ## Current State
 
-Working on `agent1/finish-0.0.2-ergo-docs` branch in `~/agentic-repos/terra-ai-agent1/`.
+Work merged to `release-0.0.2` on origin. Workspace: `~/agentic-repos/terra-ai-agent1/`.
 Ergo integration tests and 0.0.2 docs done. SOPEL message dispatch blocked on IRCv3 issue.
 
 ## What's Done (0.0.1 + 0.0.2)
@@ -77,5 +77,5 @@ ERGO_TEST=1 pytest tests/test_ergo.py -v
 ## Branches
 
 - `release-0.0.1` — merged, tagged
-- `release-0.0.2` — merged, needs ergo bot e2e fix
-- `agent1/finish-0.0.2-ergo-docs` — current work branch
+- `release-0.0.2` — current, needs ergo bot e2e fix
+- `agent1/ergo-sopel-docs` — merged and deleted

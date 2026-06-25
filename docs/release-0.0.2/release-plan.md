@@ -2,8 +2,8 @@
 
 ## Status
 
-**Branch**: `master`
-**Status**: Not started. 0.0.1 complete.
+**Branch**: `release-0.0.2`
+**Status**: Substantially complete. Ergo smoke/protocol/bot-connect tests passing. SOPEL bot message dispatch blocked on IRCv3 issue.
 
 ---
 
@@ -16,9 +16,10 @@ See `feature.md` for full description.
 2. Test tool tests — screenshots + visual inspection
 3. Additional providers — Gemini, OpenAI, Ollama
 4. Provider fallback chain
-5. Web search — provider-native + DuckDuckGo fallback
-6. ergo integration testing
+5. Web search — DuckDuckGo fallback
+6. ergo integration testing — smoke (3), IRC protocol (4), SOPEL bot (2 passing, 2 blocked)
 7. Missing 0.0.1 commands (.noisy, .setlocation, .help, .effort, .compact, .stats)
+8. SOPEL + TerraAI test config examples committed
 
 ### Out of Scope (deferred)
 - Multi-server support
@@ -30,15 +31,15 @@ See `feature.md` for full description.
 ## Release Checklist
 
 ### Every Few Commits
-- [ ] `.agentic/TODO.md` updated
-- [ ] `CHANGELOG.md` updated
-- [ ] `docs/release-0.0.2/` updated
+- [x] `.agentic/TODO.md` updated
+- [x] `CHANGELOG.md` updated
+- [x] `docs/release-0.0.2/` updated
 
 ### Pre-Release
-- [ ] All phases complete
-- [ ] Test tool works interactively
-- [ ] All providers tested
-- [ ] Web search working
-- [ ] ergo integration tests pass
-- [ ] `docs/release-0.0.2/manual-testing-results.md` completed
+- [x] Test tool works interactively
+- [x] All providers tested
+- [x] Web search working
+- [x] ergo smoke + IRC protocol tests pass (7/7)
+- [ ] ergo SOPEL bot end-to-end tests pass (2/4 — message dispatch blocked on IRCv3)
+- [x] `docs/release-0.0.2/testing-results.md` completed
 - [ ] README.md updated with new commands

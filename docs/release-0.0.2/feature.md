@@ -19,8 +19,9 @@ OWL — Updated 2026-06-25
   - IRC protocol tests: register, join, channel messages, private messages
   - SOPEL bot tests: real SOPEL process with TerraAI plugin, SSL/TLS to ergo
 - **SOPEL + TerraAI test configs** — committed .example files for deployment
-  - `config/sopel-test.cfg.example` — minimal plugin set (admin + terraai only)
-  - `config/terraai-test.yaml.example` — test TerraAI config
+  - `config/sopel-test.cfg.example` — minimal plugin set (admin, adminchannel, ping, reload, safety, tell, coretasks, terraai)
+  - `config/terraai-test.yaml.example` — test TerraAI config (separate DB path)
+  - `.agentic/ircd.yaml.example` — ergo IRC server config example
 - **Missing 0.0.1 commands** — `.noisy`, `.setlocation`, `.help`, `.effort`, `.compact`, `.stats`
 
 ### Architecture additions
