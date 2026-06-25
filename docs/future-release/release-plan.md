@@ -1,24 +1,14 @@
-# Next Release Plan — Post-0.0.2
+# Next Release Plan — Post-0.0.3
 
 ## Context
 
-0.0.1 was a minimal viable SOPEL plugin with one provider and basic commands. 0.0.2 added test tool, additional providers, web search, and ergo integration testing. This plan covers features deferred from 0.0.2 and new capabilities for subsequent releases.
+0.0.1 was a minimal viable SOPEL plugin with one provider and basic commands. 0.0.2 added test tool, additional providers, web search, and ergo integration testing. 0.0.3 focuses on reliability: conversation TTL, opt-in defaults, provider error handling, and automated dogfooding. This plan covers features deferred from 0.0.2 and 0.0.3, plus new capabilities for subsequent releases.
 
 ---
 
 ## Release Candidates (Prioritized)
 
-### 1. Context Compaction
-**Priority**: MEDIUM
-**Effort**: Medium
-
-`.compact` command with AI-driven pruning, session_id rotation, revert support. Already partially implemented in 0.0.2 (sessions/compactions tables exist).
-
-**Files**: `terraai/database.py`, `terraai/commands/admin.py`
-
----
-
-### 2. Multi-Server Support
+### 1. Multi-Server Support
 **Priority**: LOW
 **Effort**: Small
 
@@ -28,7 +18,7 @@ Add `server` column to all tables. Scope all queries by server. Schema already i
 
 ---
 
-### 3. Rate Limiting
+### 2. Rate Limiting
 **Priority**: LOW
 **Effort**: Small
 
@@ -38,44 +28,43 @@ Configurable per-nick sliding window. Default off. Already in config schema (`ra
 
 ---
 
-### 4. Containerfile Polish
+### 3. Model-Per-Channel Routing
 **Priority**: LOW
 **Effort**: Small
 
-Multi-stage if size matters. `VOLUME ["/app/data"]`. Healthcheck.
+Different channels use different providers. Useful for testing vs. prod channels.
 
-**Files**: `Containerfile`
+**Files**: `terraai/config.py`, `terraai/providers/registry.py`
 
 ---
 
-### 5. SOPEL Bot Message Dispatch Fix
-**Priority**: HIGH
+### 4. Web Dashboard
+**Priority**: LOW
 **Effort**: Medium
 
-Bot connects + joins but doesn't dispatch PRIVMSG to plugins. Likely IRCv3 `echo-message`/`server-time` CAP issue. Blocks end-to-end bot testing.
+Read-only SQLite viewer for stats. Defer until actually needed.
 
-**Files**: `config/sopel-test.cfg.example`, investigation
+**Files**: new module
 
 ---
 
-### 6. SSL/TLS for ergo
-**Priority**: MEDIUM
+### 5. Conversation Export
+**Priority**: LOW
 **Effort**: Small
 
-Plaintext 6667 works. SSL 6697 hangs on CAP negotiation with self-signed cert. Need proper cert or CAP workaround.
+Dump history as JSON/text for debugging or archiving. Implement when needed.
 
-**Files**: ergo config, SOPEL config
+**Files**: `terraai/database.py`, new command or script
 
 ---
 
 ## Recommended Execution Order
 
-1. Fix SOPEL bot message dispatch (unblocks e2e tests)
-2. SSL/TLS for ergo
-3. Context compaction (finish remaining work)
-4. Multi-server support
-5. Rate limiting
-6. Containerfile polish
+1. Multi-server support
+2. Rate limiting
+3. Model-per-channel routing
+4. Conversation export
+5. Web dashboard
 
 ## Done (moved to 0.0.1)
 
@@ -91,7 +80,21 @@ Plaintext 6667 works. SSL 6697 hangs on CAP negotiation with self-signed cert. N
 - Additional providers: Gemini, OpenAI, Ollama + fallback chain
 - Web search via DuckDuckGo
 - Test tool (Textual IRC client) + screenshot tests
+- Test tool screenshot capture for docs/debugging
 - ergo integration tests (smoke, IRC protocol, SOPEL bot connect/join)
 - SOPEL + TerraAI test config examples committed
 - Missing 0.0.1 commands: .noisy, .setlocation, .help, .effort, .compact, .stats
 - 83 unit tests + 9 ergo integration tests passing
+
+## Done (carried from 0.0.2, unblocked by other agent)
+
+- SOPEL bot message dispatch fix (IRCv3)
+- SSL/TLS for ergo
+- Context compaction (.compact command)
+
+## Done (moved to 0.0.3)
+
+- Conversation TTL (auto-prune history older than N days)
+- Opt-in default config flag
+- Better provider error handling (retries, clearer messages)
+- Automated dogfooding (e2e test sequences)

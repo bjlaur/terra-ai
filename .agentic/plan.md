@@ -1,6 +1,6 @@
 # TerraAI — Implementation Plan
 
-> **Status:** 0.0.1 released, 0.0.2 substantially complete (bot e2e blocked on IRCv3)
+> **Status:** 0.0.1 released, 0.0.2 substantially complete (bot e2e blocked on IRCv3), 0.0.3 planned
 > **Agent:** OWL
 > **Last updated:** 2026-06-25
 
@@ -758,12 +758,13 @@ docker run --rm terra-ai:0.0.1 sopel --version
 
 ## 19. Near-Term Roadmap
 
-1. **Conversation TTL** — auto-prune history older than N days
-2. **Model-per-channel routing** — different channels use different providers
-3. **Built-in weather/.wea tool** — since the system prompt references it
-4. **Opt-in default config flag** — choose default state for unseen nicks
-5. **Web dashboard** — read-only SQLite viewer for stats
-6. **Test tool screenshots** (think about) — auto-capture screenshots during test tool sessions for docs/debugging
+1. **Conversation TTL** — auto-prune history older than N days → **0.0.3**
+2. **Model-per-channel routing** — different channels use different providers → deferred
+3. **Opt-in default config flag** — choose default state for unseen nicks → **0.0.3**
+4. **Better provider error handling** — retries, clearer failure messages → **0.0.3**
+5. **Automated dogfooding** — e2e test sequences through test tool → **0.0.3**
+6. **Web dashboard** — read-only SQLite viewer for stats → deferred
+7. **Test tool screenshots** (think about) — auto-capture screenshots during test tool sessions for docs/debugging → deferred
 
 ---
 

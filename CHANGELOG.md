@@ -1,6 +1,6 @@
 # CHANGELOG.md
 
-## 0.0.2 — TBD
+## 0.0.2
 
 Test tool, provider expansion, web search, ergo integration testing.
 
@@ -23,7 +23,7 @@ Test tool, provider expansion, web search, ergo integration testing.
 
 ---
 
-## 0.0.1 — TBD
+## 0.0.1
 
 Initial release. Minimal SOPEL plugin with one provider and basic commands.
 
