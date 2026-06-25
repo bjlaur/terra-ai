@@ -25,7 +25,8 @@
 | 2 | Empty chat on launch, input line at bottom | [x] | [ ] | skip | — | | |
 | 3 | `quit` / `/quit` / `exit` exits cleanly | [x] | [ ] | skip | — | | |
 | 4 | `.optin` → "You are now opted in" | [x] | [ ] | skip | — | | |
-| 5 | Send `hello` (regular message) → ignored (no trigger) | [x] | [ ] | skip | — | | |
+| 5 | Send `hello` (regular message) — ignored, no response | [x] | [ ] | skip | — | | |
+| 5a | `TerraAI: hello` → AI responds (trigger phrase) | [x] | [ ] | **pass** | — | | |
 | 6 | `.optout` → "You are opted out" | [x] | [ ] | skip | — | | |
 | 7 | Send `hello` (after opt-out) → no response | [x] | [ ] | skip | — | | |
 | 8 | `.noisy` → toggles ON/OFF | [x] | [ ] | skip | — | | |
@@ -35,9 +36,8 @@
 | 12 | `.effort low` → sets level | [x] | [ ] | skip | — | | |
 | 13 | `.effort ultra` → error (invalid) | [x] | [ ] | skip | — | | |
 | 14 | `.ai What is 2+2?` → AI responds (no history) | [x] | [ ] | **pass** | — | | |
-| 14a | `.ai hello` → AI responds (screenshot verified) | [x] | [ ] | **pass** | Screenshot test | | |
 | 15 | `.addprompt wea sunny` → "Added wea." | [x] | [ ] | skip | — | | |
-| 16 | `.wea` → "sunny" (custom prompt) | [x] | [ ] | skip | — | | |
+| 16 | `.wea` → goes to AI (not a local custom prompt) | [x] | [ ] | skip | — | | |
 | 17 | `.listprompts` → lists prompts | [x] | [ ] | skip | — | | |
 | 18 | `.rmprompt 1` → removes prompt | [x] | [ ] | skip | — | | |
 | 19 | `.addprompt wea sunny` (dup) → error | [x] | [ ] | skip | — | | |
@@ -45,7 +45,7 @@
 | 21 | `.compact` → compacts history | [x] | [ ] | skip | — | | |
 | 22 | `.stats` → shows stats | [x] | [ ] | skip | — | | |
 | 23 | `.help` → shows command list | [x] | [ ] | skip | — | | |
-| 24 | AI remembers previous message (history) | [x] | [ ] | **pass** | — | | |
+| 24 | AI remembers previous message (history, via TerraAI: trigger) | [x] | [ ] | **pass** | — | | |
 | 25 | AI forgets after `.compact` | [x] | [ ] | **pass** | — | | |
 | 26 | Long message wraps correctly | [x] | [ ] | skip | Screenshot test (`test_tool/screenshot_test.py`) | | |
 | 27 | Resize terminal → layout adapts | [x] | [ ] | skip | Screenshot test (`test_tool/screenshot_test.py`) | | |

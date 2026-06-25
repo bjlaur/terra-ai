@@ -91,10 +91,11 @@ class TerraAITestClient:
     def send_message(self, text: str) -> list[str]:
         """Send a message as the test user and return bot responses.
 
-        Test tool routing:
-        - Management commands (.) are handled locally (optin, optout, etc.)
-        - Everything else goes to AI (.ai for context-free, all other
-          messages go through AI with history)
+        Mimics real IRC bot routing:
+        - Management commands (.) are handled locally
+        - .ai <prompt> sends to AI without history
+        - Trigger phrase (TerraAI:) sends to AI with history
+        - Everything else is ignored (bot doesn't respond to regular chat)
         """
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
@@ -116,10 +117,18 @@ class TerraAITestClient:
                 self.bot.say(response)
             return list(self.bot.messages)
 
-        # Everything else — route to AI with history
-        response = self.terra.handle_ai_message(self.server, self.channel, self.nick, text)
-        if response:
-            self.bot.say(response)
+        # Trigger phrase — route to AI with history
+        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
+        if text.lower().startswith(trigger_phrase.lower()):
+            ai_text = text[len(trigger_phrase):].strip()
+            response = self.terra.handle_ai_message(
+                self.server, self.channel, self.nick, ai_text, include_history=True
+            )
+            if response:
+                self.bot.say(response)
+            return list(self.bot.messages)
+
+        # Regular message — ignore (real bot only responds to trigger phrase)
         return list(self.bot.messages)
 
     def send_as(self, nick: str, text: str) -> list[str]:

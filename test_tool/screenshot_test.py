@@ -164,7 +164,7 @@ def run_screenshots():
     # Pre-populate some messages
     client.send_message(".optin")
     client.send_message(".addprompt wea sunny")
-    client.send_message(".ai hello")
+    client.send_message("TerraAI: hello")
 
     app = TerraAIScreenshotApp(client)
 
@@ -176,8 +176,8 @@ def run_screenshots():
                 f.write(svg)
             await pilot.pause(0.5)
 
-            # Screenshot 2: After typing a message (.ai to trigger AI response)
-            await pilot.press(*".ai hello world")
+            # Screenshot 2: After typing a message (TerraAI: triggers AI)
+            await pilot.press(*"TerraAI: hello world")
             await pilot.press("enter")
             await pilot.pause(3)  # AI response can take a few seconds
             svg = app.export_screenshot()
