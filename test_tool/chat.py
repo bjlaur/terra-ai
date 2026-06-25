@@ -279,6 +279,7 @@ def run_interactive():
         chat = None
         input_win = None
         make_windows()
+        input_win.timeout(100)  # 100ms timeout so we can poll for async AI results
 
         def redraw_header():
             try:
@@ -458,7 +459,60 @@ def run_interactive():
             """Irssi-style timestamp [HH:MM]."""
             return time.strftime("[%H:%M]")
 
+        # Async AI call state
+        import threading
+        pending_call = {"thread": None, "result": None, "done": False}
+        notices_snapshot = [len(client.bot.notices)]
+
+        def do_ai_call(text, is_pm):
+            """Run the AI call in a thread. Stores result when done."""
+            try:
+                if is_pm:
+                    result = client.send_pm(client.nick, text)
+                else:
+                    result = client.send_message(text)
+                pending_call["result"] = result
+            except Exception as e:
+                pending_call["result"] = [f"Error: {e}"]
+            finally:
+                pending_call["done"] = True
+
+        def maybe_finish_call():
+            """If a background AI call finished, render its result."""
+            if not pending_call["done"]:
+                return
+            pending_call["done"] = False
+            result = pending_call["result"]
+            is_pm = pending_call.get("is_pm", False)
+
+            # send_pm returns a dict, send_message returns a list
+            if isinstance(result, dict):
+                responses = result["say"]
+            else:
+                responses = result
+
+            # Collect any new notices appended during the call
+            total_notices = len(client.bot.notices)
+            new_notices = client.bot.notices[notices_snapshot[0]:total_notices]
+            notices_snapshot[0] = total_notices
+
+            # Replace "thinking" with actual response
+            for r in responses:
+                if is_pm:
+                    messages.append(f"{ts()} [PM <TerraAI> {r}")
+                else:
+                    messages.append(f"{ts()} <TerraAI> {r}")
+
+            # Show notices in channel with -!- prefix (irssi-style)
+            for _, msg in new_notices:
+                messages.append(f"{ts()} -!- {msg}")
+
+            redraw_chat()
+
         while True:
+            # Check if a background call finished
+            maybe_finish_call()
+
             redraw_input("")
             cmd = read_line()
 
@@ -500,31 +554,13 @@ def run_interactive():
             if client.terra.user.is_noisy(client.server, client.nick):
                 client.bot.notice(client.nick, "Thinking...")
 
-            # Capture notices before/after the call
-            notices_before = len(client.bot.notices)
-
-            # Send message (blocks on API call) — route PMs differently
-            if is_pm:
-                result = client.send_pm(client.nick, pm_text)
-                responses = result["say"]
-            else:
-                responses = client.send_message(cmd)
-
-            # Collect any new notices from this call
-            new_notices = client.bot.notices[notices_before:]
-
-            # Replace "thinking" with actual response
-            for r in responses:
-                if is_pm:
-                    messages.append(f"{ts()} [PM <TerraAI> {r}")
-                else:
-                    messages.append(f"{ts()} <TerraAI> {r}")
-
-            # Show notices in channel with -!- prefix (irssi-style)
-            for _, msg in new_notices:
-                messages.append(f"{ts()} -!- {msg}")
-
-            redraw_chat()
+            # Kick off AI call in background thread (non-blocking)
+            pending_call["done"] = False
+            pending_call["is_pm"] = is_pm
+            t = threading.Thread(target=do_ai_call, args=(pm_text if is_pm else cmd, is_pm))
+            t.daemon = True
+            t.start()
+            pending_call["thread"] = t
 
     curses.wrapper(main)
 
