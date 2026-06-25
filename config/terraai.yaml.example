@@ -1,0 +1,22 @@
+# TerraAI Configuration
+# Copy this to terraai.yaml and fill in your values.
+
+bot:
+  trigger_phrase: "TerraAI:"    # What the bot responds to (without the colon)
+  bot_nick: "TerraAI"           # Your bot's IRC nick
+  max_context_messages: 50      # How many messages to include in AI context
+  irc_char_limit: 400            # IRC message length limit
+
+provider:
+  name: "openrouter"             # Provider: openrouter, gemini, openai, ollama
+  model: "google/gemini-2.0-flash-001"
+  api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable
+  timeout: 30
+
+sqlite_path: "data/terraai.db"
+
+admin_nicks: []                  # List of nicks treated as admins
+
+rate_limit_enabled: false
+rate_limit_messages: 5
+rate_limit_window_seconds: 60
