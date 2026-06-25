@@ -112,6 +112,24 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 
 ---
 
+## Round 4 — Fixes (compact gate, PM, noisy)
+
+| #   | Test                                                      | Harness | Manual | --real test | Why no harness? | Dev notes | Agent notes                                                         |
+| --- | --------------------------------------------------------- | ------- | ------ | ----------- | --------------- | --------- | ------------------------------------------------------------------- |
+| 33  | `.compact` from non-admin → "Permission denied"           | [x]     | [ ]    | skip        | —               |           | Fixed: gated in bot.py handle_management() via is_admin()          |
+| 34  | `.compact` (admin) → works                               | [x]     | [ ]    | skip        | —               |           | requires setting admin_nicks in config to test manually             |
+| 35  | PM: `TerraAI: hello` → AI responds                        | [x]     | [ ]    | **pass**    | —               |           | New: send_pm() with is_pm=True, nick as channel                   |
+| 36  | PM: `.optin` → "opted in"                                 | [x]     | [ ]    | skip        | —               |           | PM management commands work identically to channel                 |
+| 37  | PM: `.what's 2+2` → routes to AI                          | [x]     | [ ]    | skip        | —               |           | Unknown .commands route to AI in PM too                            |
+| 38  | PM: `.effort low` → confirms                              | [x]     | [ ]    | **pass**    | —               |           |                                                                     |
+| 39  | Resize: narrow (40 cols) → layout adapts                  | [x]     | [ ]    | skip        | Screenshot test |           | Fixed: KEY_RESIZE handler recreates windows + redraws             |
+| 40  | Resize: wide (120 cols) → layout uses space              | [x]     | [ ]    | skip        | Screenshot test |           | Same fix                                                             |
+| 41  | Noisy OFF → no notices sent                               | [x]     | [ ]    | skip        | —               |           | notices stored in bot.notices (separate from bot.messages)         |
+| 42  | Noisy ON → "Thinking..." notice before AI call             | [x]     | [ ]    | **pass**    | —               |           | New: notify_thinking() in send_message/send_pm; plugin.py too      |
+| 43  | Long message wraps correctly (after resize fix)           | [x]     | [ ]    | pass        | Screenshot test |           | Unblocked by #39/#40                                                |
+
+---
+
 ## Defer to later release
 
 | #   | Test                                                       | Reason                                    |
@@ -121,7 +139,7 @@ OPENROUTER_API_KEY=... python -m pytest tests/test_tool.py::TestRealAPI -v
 | 29  | Special characters `!@#$%^&*()`                            | Low priority                              |
 | 30  | Unicode `héllo wörld 日本語`                                  | Low priority                              |
 | 31  | `.stats` from non-admin nick                               | Needs admin-gate decision                 |
-| 32  | `.compact` from non-admin nick                             | Needs admin-gate decision                 |
+| ~~32~~ | ~~`.compact` from non-admin nick~~                    | **RESOLVED** — gated to admin only (Round 4 #33) |
 
 ---
 
@@ -137,11 +155,13 @@ my bad I wasn't specific.
 
 ## Summary
 
-**Passed (harness):** 1–32, 3a
+**Passed (harness):** 1–32, 3a, 33–38, 41
 
-**Passed (--real):** 5a, 14, 24, 25
+**Passed (--real):** 5a, 14, 24, 25, 35, 38, 42
 
 **Passed (--real):** R1–R5
+
+**Passed (screenshot):** 39, 40, 43
 
 **Manual feedback (needs attention):**
 
@@ -149,6 +169,6 @@ my bad I wasn't specific.
 - ~~10: `.setlocation` (no args) should go to AI~~ → **FIXED** (handle_setlocation returns None)
 - ~~11: `.effort` no response~~ → **FIXED** (added "effort" to MANAGEMENT_COMMANDS)
 - ~~16: `.wea` / unknown `.command` no response~~ → **FIXED** (added .command → AI routing in chat.py)
-- 27: resize cuts off text, input box text invisible
+- ~~27: resize cuts off text~~ → **FIXED** (KEY_RESIZE handler recreates windows + redraws)
 
 **Skip (--real not needed):** 1–4, 6–13, 15–23, 26–32 (pure UI/local logic)

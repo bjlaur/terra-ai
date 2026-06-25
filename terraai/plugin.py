@@ -73,6 +73,10 @@ def handle_trigger(bot, trigger):
     if not terra.should_respond(server, nick, text):
         return
 
+    # Send "thinking" notice to noisy users before the AI call
+    if terra.user.is_noisy(server, nick):
+        bot.notice(nick, "Thinking...")
+
     # Check management commands first
     if terra.is_management_command(text):
         response = terra.handle_management(server, channel, nick, f".{text}")
@@ -93,6 +97,10 @@ def handle_shorthand(bot, trigger):
 
     if not terra.should_respond(server, nick, None):
         return
+
+    # Send "thinking" notice to noisy users before the AI call
+    if terra.user.is_noisy(server, nick):
+        bot.notice(nick, "Thinking...")
 
     text = trigger.group(0)
     command = trigger.group(1)

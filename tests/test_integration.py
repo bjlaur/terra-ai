@@ -82,8 +82,10 @@ class TestTerraAI:
         assert "opted out" in result
 
     def test_handle_management_setlocation(self, terra):
+        # .setlocation is a hybrid command — handle_management returns None
+        # as a signal that the caller should forward to AI
         result = terra.handle_management("irc.example.com", "#chan", "nick", ".setlocation chicago, il")
-        assert "chicago, il" in result
+        assert result is None
 
 
 class TestAdminCommands:

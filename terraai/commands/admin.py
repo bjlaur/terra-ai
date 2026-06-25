@@ -48,7 +48,7 @@ class AdminCommands:
         return "Trigger already exists."
 
     def handle_compact(self, server: str, channel: str, nick: str) -> str:
-        """Handle .compact command."""
+        """Handle .compact command. Admin-only — gate is enforced by caller."""
         from terraai.context.manager import ContextManager
         context = ContextManager(self.db, self.prompts)
         new_session = context.compact(server, channel)

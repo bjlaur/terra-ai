@@ -87,6 +87,8 @@ class TerraAI:
         elif command == ".addprompt":
             return self.admin.handle_addprompt(server, nick, args)
         elif command == ".compact":
+            if not self.is_admin(nick):
+                return "Permission denied. .compact is admin-only."
             return self.admin.handle_compact(server, channel, nick)
         elif command == ".clear":
             return self.admin.handle_clear(server, channel)

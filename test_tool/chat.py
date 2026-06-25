@@ -21,19 +21,27 @@ from terraai.database import Database, DBConfig
 class FakeTrigger:
     """Mimics a SOPEL trigger object."""
 
-    def __init__(self, nick, channel, text):
+    def __init__(self, nick, channel, text, is_pm=False):
         self.nick = nick
-        self.sender = channel
+        # For PMs, sender is the nick; for channel messages, sender is the channel
+        self.sender = nick if is_pm else channel
         self.group = lambda x: None
         self.match = None
         self.text = text
+        self.is_pm = is_pm
 
 
 class FakeBot:
-    """Mimics a SOPEL bot object."""
+    """Mimics a SOPEL bot object.
+
+    Tracks say() (channel messages) and notice() (PMs) separately.
+    In SOPEL, bot.say() sends to the channel, bot.notice() sends a
+    private notice back to the user.
+    """
 
     def __init__(self):
-        self.messages = []
+        self.messages = []  # say() calls — channel messages
+        self.notices = []   # notice() calls — PM responses
 
     def say(self, msg):
         self.messages.append(msg)
@@ -43,8 +51,9 @@ class FakeBot:
         self.messages.append(msg)
         return msg
 
-    def notice(self, msg):
-        self.messages.append(msg)
+    def notice(self, nick, msg):
+        # Matches SOPEL bot.notice(nick, msg) signature
+        self.notices.append((nick, msg))
         return msg
 
 
@@ -100,10 +109,17 @@ class TerraAITestClient:
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
 
+        # Send "Thinking..." notice to noisy users before AI calls
+        # (matches plugin.py behavior: bot.notice(nick, "Thinking..."))
+        def notify_thinking():
+            if self.terra.user.is_noisy(self.server, self.nick):
+                self.bot.notice(self.nick, "Thinking...")
+
         # .ai command — context-free (checked first because .ai is in the
         # management command list but handle_management returns None for it)
         if text.startswith(".ai "):
             ai_text = text[4:]
+            notify_thinking()
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, ai_text, include_history=False
             )
@@ -129,6 +145,7 @@ class TerraAITestClient:
         trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
         if text.lower().startswith(trigger_phrase.lower()):
             ai_text = text[len(trigger_phrase):].strip()
+            notify_thinking()
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, ai_text, include_history=True
             )
@@ -140,6 +157,7 @@ class TerraAITestClient:
         # anything starting with . that isn't a management command goes to AI)
         if text.startswith("."):
             full_text = text[1:].strip()
+            notify_thinking()
             response = self.terra.handle_ai_message(
                 self.server, self.channel, self.nick, full_text, include_history=True
             )
@@ -158,6 +176,74 @@ class TerraAITestClient:
         if response:
             self.bot.say(response)
         return list(self.bot.messages)
+
+    def send_pm(self, nick: str, text: str) -> dict:
+        """Send a PM to the bot from a specific nick.
+
+        Returns {"say": [...], "notice": [...]} with channel messages
+        and notices separately. PMs route identically to channel messages
+        but use the nick as the channel for scoping.
+        """
+        self.bot.messages.clear()
+        self.bot.notices.clear()
+        trigger = FakeTrigger(nick, self.channel, text, is_pm=True)
+
+        # Send "Thinking..." notice to noisy users before AI calls
+        def notify_thinking():
+            if self.terra.user.is_noisy(self.server, nick):
+                self.bot.notice(nick, "Thinking...")
+
+        # .ai command — context-free (checked first)
+        if text.startswith(".ai "):
+            ai_text = text[4:]
+            notify_thinking()
+            response = self.terra.handle_ai_message(
+                self.server, nick, nick, ai_text, include_history=False
+            )
+            if response:
+                self.bot.say(response)
+            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+
+        # Check management commands
+        if self.terra.is_management_command(text):
+            response = self.terra.handle_management(self.server, nick, nick, text)
+            if response:
+                self.bot.say(response)
+            elif text.lower().startswith(".setlocation"):
+                ai_text = f"{nick} {text}"
+                notify_thinking()
+                ai_response = self.terra.handle_ai_message(
+                    self.server, nick, nick, ai_text, include_history=True
+                )
+                if ai_response:
+                    self.bot.say(ai_response)
+            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+
+        # Trigger phrase — route to AI with history
+        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "TerraAI:")
+        if text.lower().startswith(trigger_phrase.lower()):
+            ai_text = text[len(trigger_phrase):].strip()
+            notify_thinking()
+            response = self.terra.handle_ai_message(
+                self.server, nick, nick, ai_text, include_history=True
+            )
+            if response:
+                self.bot.say(response)
+            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+
+        # Unknown .command — forward to AI
+        if text.startswith("."):
+            full_text = text[1:].strip()
+            notify_thinking()
+            response = self.terra.handle_ai_message(
+                self.server, nick, nick, full_text, include_history=True
+            )
+            if response:
+                self.bot.say(response)
+            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+
+        # Regular message — ignore
+        return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
 
 def run_interactive():
@@ -180,23 +266,50 @@ def run_interactive():
 
         height, width = stdscr.getmaxyx()
 
-        # Create windows
-        header = curses.newwin(1, width, 0, 0)
-        chat = curses.newwin(height - 2, width, 1, 0)
-        input_win = curses.newwin(1, width, height - 1, 0)
-        input_win.keypad(True)  # Enable KEY_UP etc. on input window
+        # Create windows — recreated on resize
+        def make_windows():
+            nonlocal header, chat, input_win, height, width
+            height, width = stdscr.getmaxyx()
+            header = curses.newwin(1, width, 0, 0)
+            chat = curses.newwin(height - 2, width, 1, 0)
+            input_win = curses.newwin(1, width, height - 1, 0)
+            input_win.keypad(True)
+            chat.scrollok(True)
 
-        header.addstr(0, 0, " #terra-ai (test mode) — type 'quit' to exit ", curses.A_BOLD)
-        header.refresh()
+        header = None
+        chat = None
+        input_win = None
+        make_windows()
 
-        chat.scrollok(True)
-        chat.refresh()
+        def redraw_header():
+            try:
+                header.addstr(0, 0, " #terra-ai (test mode) — type 'quit' to exit ", curses.A_BOLD)
+                header.refresh()
+            except curses.error:
+                pass
+
+        def redraw_chat():
+            try:
+                max_lines = max(height - 3, 1)
+                visible = messages[-max_lines:]
+                chat.clear()
+                for i, msg in enumerate(visible):
+                    if msg.startswith("<TerraAI>"):
+                        chat.addstr(i, 0, msg, curses.color_pair(1))
+                    else:
+                        chat.addstr(i, 0, msg)
+                chat.refresh()
+            except curses.error:
+                pass
 
         messages: list[str] = []
         input_history: list[str] = []
         history_idx = -1  # -1 = new input
         cursor_pos = 0
         completions_shown = False  # True when completion hints are on the hint line
+
+        redraw_header()
+        redraw_chat()
 
         # Completions for Tab. In a real IRC client this completes nicks
         # from the channel member list; here the only other entity is the
@@ -319,6 +432,12 @@ def run_interactive():
                                     pass
                         else:
                             curses.beep()
+                elif key == curses.KEY_RESIZE:
+                    # Terminal resized — recreate windows and redraw
+                    make_windows()
+                    redraw_header()
+                    redraw_chat()
+                    redraw_input("".join(buf))
                 elif key == curses.KEY_HOME:
                     cursor_pos = 0
                     redraw_input("".join(buf))
@@ -354,25 +473,19 @@ def run_interactive():
 
             # Display user message immediately (before blocking on AI)
             messages.append(f"<{client.nick}> {cmd}")
-            chat.clear()
-            max_lines = height - 3
-            visible = messages[-max_lines:]
-            for i, msg in enumerate(visible):
-                try:
-                    if msg.startswith("<TerraAI>"):
-                        chat.addstr(i, 0, msg, curses.color_pair(1))
-                    else:
-                        chat.addstr(i, 0, msg)
-                except curses.error:
-                    pass
-            chat.refresh()
+            redraw_chat()
 
-            # Show "thinking" indicator
+            # Show "thinking" indicator — also send notice to noisy users
+            # (matches plugin.py behavior: bot.notice(nick, "Thinking..."))
             try:
+                max_lines = max(height - 3, 1)
+                visible = messages[-max_lines:]
                 chat.addstr(len(visible), 0, "<TerraAI> ...", curses.color_pair(1))
+                chat.refresh()
             except curses.error:
                 pass
-            chat.refresh()
+            if client.terra.user.is_noisy(client.server, client.nick):
+                client.bot.notice(client.nick, "Thinking...")
 
             # Send message (blocks on API call)
             responses = client.send_message(cmd)
@@ -381,18 +494,7 @@ def run_interactive():
             for r in responses:
                 messages.append(f"<TerraAI> {r}")
 
-            # Redraw chat with response
-            chat.clear()
-            visible = messages[-max_lines:]
-            for i, msg in enumerate(visible):
-                try:
-                    if msg.startswith("<TerraAI>"):
-                        chat.addstr(i, 0, msg, curses.color_pair(1))
-                    else:
-                        chat.addstr(i, 0, msg)
-                except curses.error:
-                    pass
-            chat.refresh()
+            redraw_chat()
 
     curses.wrapper(main)
 
