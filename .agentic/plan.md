@@ -45,6 +45,8 @@ Class / module name: **TerraAI**
 
 ## 2. Project Structure
 
+--doesn't have where we moved stuff to .agentic
+
 ```
 terra-ai/
 ├── plan.md                                   # This file
@@ -126,8 +128,8 @@ IRC has a character limit. You will follow that limit. Give concise and truthful
 This conversation is fake. In real conversations, give actual answers. Do not respond with just "ok".
 ```
 
-| Variable | Source |
-|---|---|
+| Variable         | Source                                                                  |
+| ---------------- | ----------------------------------------------------------------------- |
 | `${triggerchar}` | First char of `trigger_phrase` from config (default `T` for `TerraAI:`) |
 
 **Note on trigger character:** In documentation and examples, `.` is used as the trigger character for clarity. In production, `-` is used because `.` is already taken by other bots. The trigger character is configurable in `config/terraai.yaml`.
@@ -159,6 +161,7 @@ This conversation is fake. In real conversations, give actual answers. Do not re
 ```
 
 **Things to iterate on during development:**
+
 - The "noisy" prompt additions (narrating internal thoughts when verbose mode is on)
 - Whether `.setlocation` should be mentioned (we have the command now)
 - Whether the impersonation warning needs more detail
@@ -260,8 +263,8 @@ CREATE INDEX IF NOT EXISTS idx_prompts_server_trigger
     ON prompts (server, trigger);
 CREATE INDEX IF NOT EXISTS idx_stats_server_command
     ON command_stats (server, command, timestamp);
-```
 
+```
 ---
 
 ## 5. Command Definitions
@@ -352,12 +355,12 @@ class AIProvider(ABC):
 
 ### 6.2 Implementations
 
-| Provider | File | Base URL | Notes |
-|---|---|---|---|
-| OpenRouter | `openrouter.py` | `https://openrouter.ai/api/v1` | Standard OpenAI SDK pointed at OpenRouter |
-| OpenAI | `openai.py` | `https://api.openai.com/v1` | Standard OpenAI SDK |
-| Gemini | `gemini.py` | `https://generativelanguage.googleapis.com/v1beta` | Translate messages to Gemini `contents` format; fall back to raw HTTP if needed |
-| Ollama | `ollama.py` | `http://localhost:11434/v1` | Default model set in config |
+| Provider   | File            | Base URL                                           | Notes                                                                           |
+| ---------- | --------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| OpenRouter | `openrouter.py` | `https://openrouter.ai/api/v1`                     | Standard OpenAI SDK pointed at OpenRouter                                       |
+| OpenAI     | `openai.py`     | `https://api.openai.com/v1`                        | Standard OpenAI SDK                                                             |
+| Gemini     | `gemini.py`     | `https://generativelanguage.googleapis.com/v1beta` | Translate messages to Gemini `contents` format; fall back to raw HTTP if needed |
+| Ollama     | `ollama.py`     | `http://localhost:11434/v1`                        | Default model set in config                                                     |
 
 All providers use `stream=True` internally. `chat()` assembles the stream and returns full string. `chat_stream()` yields chunks.
 
@@ -366,11 +369,13 @@ All providers use `stream=True` internally. `chat()` assembles the stream and re
 Two-tier approach:
 
 **Tier 1 — Provider-native search:**
+
 - Gemini: built-in Google Search grounding via `webSearch` tool
 - OpenRouter: web search plugins enabled per-model (e.g., `google/gemini-2.0-flash` with web search)
 - We pass through tool configurations when the provider supports it
 
 **Tier 2 — Built-in fallback search:**
+
 - For providers without native search (Ollama, OpenAI chat completions)
 - Implement a `web_search(query)` tool that the model can invoke
 - Backend: DuckDuckGo instant answer API (no key required) + web scrape fallback
@@ -380,9 +385,9 @@ Two-tier approach:
 
 ### 6.4 Registry (`providers/registry.py`)
 
-`ProviderRegistry` built from config. `get(name=None)` returns primary; on failure, walks fallback chain. If all fail, returns `None` and bot emits "All AI backends are currently unavailable. Try again later."
+`ProviderRegistry` built from config. `get()` returns the configured provider. If unavailable, returns `None` and bot emits "AI backend is currently unavailable. Try again later."
 
-Fallback default order (overridable in config): `openrouter` → `gemini` → `openai` → `ollama`.
+For 0.0.1, only OpenRouter is configured. Additional providers and fallback chain are deferred.
 
 ---
 
@@ -427,12 +432,12 @@ The test tool should **feel like irssi** — familiar to IRC users, but we don't
 
 ### 7.3 Controls
 
-| Key | Action |
-|---|---|
-| `↑` / `↓` or mouse wheel | Scroll message history |
-| `PgUp` / `PgDn` | Scroll faster |
-| `Ctrl+Q` or `/quit` | Quit |
-| Anything else | Send as message to current target |
+| Key                      | Action                            |
+| ------------------------ | --------------------------------- |
+| `↑` / `↓` or mouse wheel | Scroll message history            |
+| `PgUp` / `PgDn`          | Scroll faster                     |
+| `Ctrl+Q` or `/quit`      | Quit                              |
+| Anything else            | Send as message to current target |
 
 ### 7.3 Implementation
 
@@ -450,15 +455,15 @@ For v0.0.1, **keep the full conversation context** — no trimming. Let the prov
 
 ## 9. Trigger Behavior
 
-| User input | Routed as |
-|---|---|
-| `TerraAI: what's the weather?` | `<nick> TerraAI: what's the weather?` → AI |
-| `.wea` | `<nick>.wea` → AI (decides if it's a known prompt or a question) |
-| `-wea` | `<nick>.wea` → AI (shorthand, same as above) |
-| `.what's the weather?` | `<nick>.what's the weather?` → AI |
-| `.setlocation chicago, il` | **Hybrid:** sent to AI as `<nick> .setlocation chicago, il` AND processed locally (creates custom prompt) |
-| `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.stats` | Management commands — handled directly, never sent to AI, never stored in history |
-| `.ai tell me a joke` | Send `tell me a joke` to AI with fake conversation only (no stored history) |
+| User input                                                                                     | Routed as                                                                                                 |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `TerraAI: what's the weather?`                                                                 | `<nick> TerraAI: what's the weather?` → AI                                                                |
+| `.wea`                                                                                         | `<nick>.wea` → AI (decides if it's a known prompt or a question)                                          |
+| `-wea`                                                                                         | `<nick>.wea` → AI (shorthand, same as above)                                                              |
+| `.what's the weather?`                                                                         | `<nick>.what's the weather?` → AI                                                                         |
+| `.setlocation chicago, il`                                                                     | **Hybrid:** sent to AI as `<nick> .setlocation chicago, il` AND processed locally (creates custom prompt) |
+| `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.stats` | Management commands — handled directly, never sent to AI, never stored in history                         |
+| `.ai tell me a joke`                                                                           | Send `tell me a joke` to AI with fake conversation only (no stored history)                               |
 
 Management commands are intercepted first. Everything else goes to the AI. The AI decides how to respond.
 
@@ -475,6 +480,7 @@ Management commands are intercepted first. Everything else goes to the AI. The A
 Two testing modes:
 
 **Mode 1 — In-process (automated + interactive):**
+
 - Construct a fake SOPEL trigger object, pass directly to plugin handler functions
 - No real SOPEL instance, no network sockets
 - Used by pytest and the interactive test tool (`test_tool/irc_client.py`)
@@ -483,6 +489,7 @@ Two testing modes:
 - The test tool mocks these minimal bot methods
 
 **Mode 2 — IRC server (integration):**
+
 - Real SOPEL instance connects to a local IRC server
 - We log in as a normal IRC user and interact with the bot
 - IRC server: **ergo** (formerly Oragono) — lightweight, self-hosted, Go-based, available in chaotic-aur
@@ -498,12 +505,14 @@ Two testing modes:
 ## 12. Logging and Data Directory
 
 **`data/` contents:**
+
 - `terraai.db` — SQLite database (auto-created on first run)
 - `terraai.log` — rotating log file (10 MB max, keep 3 backups)
 - Log level: `DEBUG` to file, `WARNING+` to stderr/stdout
 - Standard Python `logging` module
 
 **What gets logged:**
+
 - Timestamp + nick + channel for every AI call
 - Provider used, model used, response time
 - Errors (provider failures, rate limit hits, DB errors)
@@ -578,13 +587,13 @@ docs/
 - [ ] `terraai/database.py` — schema, `UserStore`, `HistoryStore`, `PromptStore`, `CommandStats`
 - [ ] `tests/test_database.py` — in-memory SQLite tests for every store method
 
-### Phase 3 — Providers
+### Phase 3 — Provider
 
-- [ ] `terraai/providers/base.py` — ABC
-- [ ] `terraai/providers/openai.py`, `openrouter.py`, `gemini.py`, `ollama.py`
-- [ ] `terraai/providers/registry.py` — registry + fallback chain
+- [ ] `terraai/providers/base.py` — AIProvider ABC
+- [ ] `terraai/providers/openrouter.py` — OpenRouter implementation
+- [ ] `terraai/providers/registry.py` — Provider registry
 - [ ] `terraai/providers/__init__.py` — re-exports + configured loader
-- [ ] `tests/test_providers.py` — mock SDK calls for every provider
+- [ ] `tests/test_providers.py` — mock SDK calls
 
 ### Phase 4 — Prompts
 
@@ -687,17 +696,17 @@ ENTRYPOINT ["sopel", "-c", "config/terraai.yaml"]
 
 ## 17. Runtime File Map
 
-| Path | Purpose | Gitignored? |
-|---|---|---|
-| `data/terraai.db` | SQLite database | Yes |
-| `config/terraai.yaml` | Real runtime config | Yes |
-| `config/terraai.yaml.example` | Safe example | No |
-| `__pycache__/` | Python bytecode | Yes |
-| `*.pyc` | Compiled files | Yes |
-| `tests/*` | Test suite | No |
-| `test_tool/*` | Test harness | No |
-| `Containerfile` | Docker build | No |
-| `data/*.log` | Logs | Yes |
+| Path                          | Purpose             | Gitignored? |
+| ----------------------------- | ------------------- | ----------- |
+| `data/terraai.db`             | SQLite database     | Yes         |
+| `config/terraai.yaml`         | Real runtime config | Yes         |
+| `config/terraai.yaml.example` | Safe example        | No          |
+| `__pycache__/`                | Python bytecode     | Yes         |
+| `*.pyc`                       | Compiled files      | Yes         |
+| `tests/*`                     | Test suite          | No          |
+| `test_tool/*`                 | Test harness        | No          |
+| `Containerfile`               | Docker build        | No          |
+| `data/*.log`                  | Logs                | Yes         |
 
 ---
 
@@ -760,13 +769,12 @@ These tests are **MUST PASS** — they are not optional:
 
 1. **Messages without trigger are ignored**: A message without `TerraAI:` prefix and without `.` shorthand must NOT be sent to the AI and must NOT be stored in conversation history. Test by sending random chatter and verifying DB is unchanged and no API call is made.
 
-2. **Management commands never reach AI**: `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.ai`, `.stats` must NEVER be forwarded to the AI provider and NEVER stored in conversation_history. Test by sending each command and verifying no API call and no DB entry.
+2. **Management commands never reach AI**: `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.ai`, `.stats`, `.help` must NEVER be forwarded to the AI provider and NEVER stored in conversation_history. Test by sending each command and verifying no API call and no DB entry.
 
 3. **`.ai` bypasses history**: `.ai <prompt>` sends the prompt to the AI with system prompt only, no conversation history. Verify the AI receives only the system prompt + the user's message.
 
 4. **Custom prompts bypass AI**: `.addprompt wea sunny` then `.wea` returns "sunny" without any AI call.
 
-5. **Provider fallback**: If primary provider fails, the bot tries the next provider in the chain. If all fail, bot replies with a friendly error.
 
 ## 21. Acceptance Criteria
 
@@ -776,7 +784,6 @@ These tests are **MUST PASS** — they are not optional:
 - [ ] Containerfile builds and `sopel --version` runs in container
 - [ ] `.optin`, `.optout` DB round-trip works in tests
 - [ ] `.addprompt` stores a prompt served without calling a provider
-- [ ] Provider fallback chain returns the first available provider
 - [ ] The fake conversation is injected into context as pre-existing messages
 - [ ] `.noisy` toggles status notices to the user
 - [ ] `.ai` sends prompt without conversation context
@@ -787,7 +794,7 @@ These tests are **MUST PASS** — they are not optional:
 
 ## 23. Development Tools
 
-- **`/compact`** — Claude Code built-in. Use it when this session's context gets long. The AI summarizes what's happened so far and we continue from there. Not a TerraAI feature, just a dev tool for us.
+- **`/compact`** — Claude Code built-in. Use it when this session's context gets long. The AI summarizes what's happened so far and we continue from there. Not a TerraAI feature, just a dev tool for us. --remove this section. we don't need it.
 
 ## 24. Lessons Learned (from /mnt/jbrowse/docs/misc/claude-didn't-listen.md)
 
