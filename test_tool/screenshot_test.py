@@ -164,7 +164,7 @@ def run_screenshots():
     # Pre-populate some messages
     client.send_message(".optin")
     client.send_message(".addprompt wea sunny")
-    client.send_message("hello")
+    client.send_message(".ai hello")
 
     app = TerraAIScreenshotApp(client)
 
@@ -176,10 +176,10 @@ def run_screenshots():
                 f.write(svg)
             await pilot.pause(0.5)
 
-            # Screenshot 2: After typing a message
-            await pilot.press(*"hello world")
+            # Screenshot 2: After typing a message (.ai to trigger AI response)
+            await pilot.press(*".ai hello world")
             await pilot.press("enter")
-            await pilot.pause(1)
+            await pilot.pause(3)  # AI response can take a few seconds
             svg = app.export_screenshot()
             with open("test_tool/screenshots/after-message.svg", "w") as f:
                 f.write(svg)
@@ -198,9 +198,9 @@ def run_screenshots():
             await pilot.pause(0.5)
 
             # Screenshot 4: Long message wrapping
-            # Submit the long message, then capture after it renders in chat
+            # Submit the long message via .ai, then capture after it renders in chat
             long_msg = "this is a very long message that should wrap to multiple lines when it exceeds the width of the chat window"
-            await pilot.press(*long_msg)
+            await pilot.press(*f".ai {long_msg}")
             await pilot.press("enter")
             # Wait for on_input_submitted to render the update
             await pilot.pause(2)

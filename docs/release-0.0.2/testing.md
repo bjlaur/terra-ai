@@ -25,7 +25,7 @@
 | 2 | Empty chat on launch, input line at bottom | [x] | [ ] | skip | — | | |
 | 3 | `quit` / `/quit` / `exit` exits cleanly | [x] | [ ] | skip | — | | |
 | 4 | `.optin` → "You are now opted in" | [x] | [ ] | skip | — | | |
-| 5 | Send `hello` (after opt-in) → AI responds | [x] | [ ] | **pass** | — | | |
+| 5 | Send `hello` (regular message) → ignored (no trigger) | [x] | [ ] | skip | — | | |
 | 6 | `.optout` → "You are opted out" | [x] | [ ] | skip | — | | |
 | 7 | Send `hello` (after opt-out) → no response | [x] | [ ] | skip | — | | |
 | 8 | `.noisy` → toggles ON/OFF | [x] | [ ] | skip | — | | |
@@ -35,6 +35,7 @@
 | 12 | `.effort low` → sets level | [x] | [ ] | skip | — | | |
 | 13 | `.effort ultra` → error (invalid) | [x] | [ ] | skip | — | | |
 | 14 | `.ai What is 2+2?` → AI responds (no history) | [x] | [ ] | **pass** | — | | |
+| 14a | `.ai hello` → AI responds (screenshot verified) | [x] | [ ] | **pass** | Screenshot test | | |
 | 15 | `.addprompt wea sunny` → "Added wea." | [x] | [ ] | skip | — | | |
 | 16 | `.wea` → "sunny" (custom prompt) | [x] | [ ] | skip | — | | |
 | 17 | `.listprompts` → lists prompts | [x] | [ ] | skip | — | | |
