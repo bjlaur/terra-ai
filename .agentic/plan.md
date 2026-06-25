@@ -448,7 +448,11 @@ The test tool should **feel like irssi** — familiar to IRC users, but we don't
 
 Single file: `test_tool/chat.py`. Uses **Textual** (python-textual from chaotic-aur) for the TUI — proper scrolling, split panes, text input built-in. Connects to the bot via a fake SOPEL bot instance (in-process, no real sockets needed) or optionally to a real IRC server for end-to-end testing.
 
-### 7.4 Automated Testing
+### 7.4 Manual Testing
+
+Test plan: `docs/release-0.0.2/test-requests.md`. Run `python test_tool/chat.py` in a real terminal and work through the scenarios. Results go in `testing-results.md`.
+
+### 7.5 Automated Testing
 
 No separate "test harness" for automation — just **pytest**. All automated tests live in `tests/` and use mocked providers. The test tool is strictly for interactive/manual testing.
 
