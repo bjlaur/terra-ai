@@ -54,27 +54,23 @@ terra-ai/
 ├── terraai/
 │   ├── __init__.py                           # Plugin metadata + version
 │   ├── bot.py                                # SOPEL plugin: decorators, command routing
-│   ├── database.py                           # SQLite schema, connection, CRUD
+│   ├── database.py                           # SQLite schema (3 tables), connection, CRUD
 │   ├── config.py                             # Load/validate YAML config
 │   ├── providers/
 │   │   ├── __init__.py                       # Re-exports + configured loader
 │   │   ├── base.py                           # AIProvider ABC
-│   │   ├── openrouter.py                     # OpenRouter implementation
-│   │   ├── gemini.py                         # Gemini (generativelanguage → OpenAI translate)
-│   │   ├── openai.py                         # OpenAI.com implementation
-│   │   ├── ollama.py                         # Ollama (localhost) implementation
-│   │   └── registry.py                       # Provider registry + fallback chain
+│   │   └── openrouter.py                     # OpenRouter implementation (default)
 │   ├── prompts/
 │   │   ├── __init__.py                       # Re-exports PromptManager
-│   │   ├── manager.py                        # CRUD for custom prompt rows
-│   │   └── defaults.py                       # Built-in system prompt (the fake conversation)
+│   │   ├── manager.py                        # CRUD for prompts table
+│   │   └── defaults.py                       # Fake conversation as context seed
 │   ├── context/
 │   │   ├── __init__.py                       # Re-exports ContextManager
-│   │   └── manager.py                        # History injection + trimming + system prompt build
+│   │   └── manager.py                        # Context assembly + history save
 │   └── commands/
 │       ├── __init__.py                       # Re-exports command handlers
 │       ├── admin.py                          # .listprompts, .rmprompt, .addprompt
-│       └── user.py                           # .optin, .optout, .noisy
+│       └── user.py                           # .optin, .optout, .ai
 ├── data/                                     # Runtime: terraai.db, logs. Gitignored.
 ├── tests/
 │   ├── __init__.py
@@ -82,13 +78,13 @@ terra-ai/
 │   ├── test_providers.py
 │   ├── test_commands.py
 │   └── test_integration.py
-├── test_tool/                                # Interactive test tool (irssi-like)
-│   └── irc_client.py                         # Terminal UI to interact with bot locally
 ├── docs/
-│   ├── release-0.0.1/                        # First release documentation
+│   ├── release-0.0.1/                        # First release
 │   │   ├── release-plan.md
-│   │   ├── manual-testing-results.md
-│   │   └── retest-checklist.md
+│   │   ├── feature.md
+│   │   └── manual-testing-results.md
+│   ├── future-release/                       # Deferred features
+│   │   └── release-plan.md
 │   └── misc/
 │       └── claude-didn't-listen.md
 ├── .agentic/
@@ -223,7 +219,7 @@ CREATE TABLE IF NOT EXISTS compactions (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS custom_prompts (
+CREATE TABLE IF NOT EXISTS prompts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     server TEXT NOT NULL,
     trigger TEXT NOT NULL,
@@ -261,7 +257,7 @@ CREATE TABLE IF NOT EXISTS performance_stats (
 CREATE INDEX IF NOT EXISTS idx_history_server_channel_nick
     ON conversation_history (server, channel, nick, id DESC);
 CREATE INDEX IF NOT EXISTS idx_prompts_server_trigger
-    ON custom_prompts (server, trigger);
+    ON prompts (server, trigger);
 CREATE INDEX IF NOT EXISTS idx_stats_server_command
     ON command_stats (server, command, timestamp);
 ```
@@ -279,10 +275,11 @@ These commands **create or modify custom prompts**. The scope depends on who sen
 
 | Command | Syntax | Behavior | Replies |
 |---|---|---|---|
-| `.listprompts` | `.listprompts` | Select all rows from `custom_prompts`, ordered alphabetically by trigger. | PMs each as `#N trigger: response (local\|ai)`. If empty: "No custom prompts configured." |
+| `.listprompts` | `.listprompts` | Select all rows from `prompts`, ordered alphabetically by trigger. | PMs each as `#N trigger: response (local\|ai)`. If empty: "No custom prompts configured." |
 | `.rmprompt` | `.rmprompt <number>` | Delete the prompt at the given index (from `.listprompts` numbering). | "Removed #N (\<trigger\>)" or "No such prompt." |
 | `.addprompt` | `.addprompt <trigger> <text>` | Insert a new row. When this trigger is seen, bot replies with the stored response without calling the AI. | "Added \<trigger\>." Errors on duplicate: "Trigger already exists." |
 | `.compact` | `.compact` | Admin only. Sends the full conversation history for the current channel to the AI with a pruning prompt. The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, update `sessions` table, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back in `sessions`, delete uncompacted rows.** | "Compacted history. Kept N exchanges, removed M." |
+| `.help` | `.help` | Shows all available commands with brief descriptions. | PMs command list | The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, update `sessions` table, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back in `sessions`, delete uncompacted rows.** | "Compacted history. Kept N exchanges, removed M." |
 | `.stats` | `.stats` | Admin only. Shows performance stats for the current server/channel: total AI calls, avg/total tokens, avg processing time, avg response length, provider/model breakdown. Queries `performance_stats` table. | PMs a summary table | The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back.** | "Compacted history. Kept N exchanges, removed M." |
 
 **Prompt ordering:** Prompts are ordered alphabetically by trigger name when listed. When matching, exact match wins first, then shortest-prefix match.
@@ -320,7 +317,7 @@ Sends a prompt to the AI **without any conversation context** — just the fake 
 
 Two-tier matching:
 
-1. **Management commands (local, no AI call):** `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.ai`, `.stats` — these are matched locally and never sent to the AI. They are handled directly by the bot.
+1. **Management commands (local, no AI call):** `.optin`, `.optout`, `.noisy`, `.addprompt`, `.rmprompt`, `.listprompts`, `.compact`, `.ai`, `.stats`, `.help` — these are matched locally and never sent to the AI. They are handled directly by the bot.
 
 2. **Everything else goes to the AI:** Custom prompts (`.wea`, `.weather`, etc.) and shorthand inputs are sent to the AI. The AI decides what's a custom prompt match, what's a regular question, and what response to give. This is the core behavior — the AI is in charge of understanding user intent.
 
@@ -402,6 +399,8 @@ An irssi-like terminal client for interacting with the bot locally without a rea
 - All messages go through the same code path as real IRC
 
 ### 7.2 Irssi-like Layout
+
+Irssi's interface: top status bar (channel name, clock, network), middle scrollable message log (nick + message), bottom input line. That's it. Keyboard-driven, no mouse, no split panes by default. Feels like a terminal — because it is one.
 
 The test tool should **feel like irssi** — familiar to IRC users, but we don't need to copy it exactly. Keep it minimal:
 

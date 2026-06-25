@@ -8,7 +8,7 @@
 
 1. **No pip install into system Python.** Dependencies are managed via the Containerfile. If a new dependency is needed, add it to `requirements.txt` and tell the user.
 2. **Commit messages:** ~8 words, imperative mood, no body.
-3. **Every commit must update** `plan.md`, `.agentic/TODO.md`, and `CHANGELOG.md` to reflect the current state.
+3. **Every commit must update** `.agentic/plan.md`, `.agentic/TODO.md`, and `CHANGELOG.md` to reflect the current state.
 4. **Always ask before committing/pushing.** No silent commits. No push to origin without explicit request.
 5. **Sign your work** in docs with `OWL — <description>`.
 6. **READ ALL PROMPTS before acting** — not just the latest one.
@@ -16,6 +16,8 @@
 8. **Wait for confirmation before moving/deleting files.**
 9. **ALWAYS `pwd && git remote -v` before any git command.**
 10. **Runtime files in `data/`**, configs committed only as `.example`.
+11. **Test for everything.** Don't ask the user to manually verify something that hasn't already passed its own test. Write a test first, then implement. Only skip tests with a very good reason.
+12. **Write a report if you make a mistake.** If you make an avoidable mistake (didn't read docs, didn't follow instructions, used the wrong repo, etc.), write a report in `docs/misc/claude-didn't-listen.md` immediately. See that file for the format.
 
 ## Git Identity
 
