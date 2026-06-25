@@ -67,6 +67,30 @@ class TestTestTool:
         responses = client.send_message("hello")
         assert len(responses) == 0, "Regular message should not produce a response"
 
+    def test_optout_blocks_response(self, terra):
+        """Test that opted-out users get no AI response.
+
+        This matches plugin.py behavior: should_respond() returns False
+        for opted-out users, so the bot ignores their messages.
+        Management commands still work so they can .optin again.
+        """
+        from test_tool.chat import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        # Opt in first (creates user in DB as opted-in)
+        client.send_message(".optin")
+        # Opt out
+        client.send_message(".optout")
+        # Regular message should be ignored
+        responses = client.send_message("hello")
+        assert len(responses) == 0, "Opted-out user should get no response"
+        # Trigger phrase also ignored
+        responses = client.send_message("TerraAI: hello")
+        assert len(responses) == 0, "Opted-out user should get no response to trigger"
+        # Management command still works
+        responses = client.send_message(".optin")
+        assert len(responses) > 0, "Management commands should still work when opted out"
+
     def test_send_as_different_nick(self, terra):
         """Test sending as different users."""
         from test_tool.chat import TerraAITestClient
