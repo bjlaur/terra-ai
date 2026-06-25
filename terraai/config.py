@@ -10,7 +10,7 @@ import yaml
 @dataclass
 class ProviderConfig:
     name: str = "openrouter"
-    model: str = "google/gemini-2.0-flash-001"
+    model: str = "openrouter/owl-alpha"
     api_key: str | None = None
     base_url: str | None = None
     timeout: int = 30

@@ -17,6 +17,7 @@
 9. **ALWAYS `pwd && git remote -v` before any git command.**
 10. **Runtime files in `data/`**, configs committed only as `.example`.
 11. **Test for everything.** Don't ask the user to manually verify something that hasn't already passed its own test. Write a test first, then implement. Only skip tests with a very good reason.
+12. **All tests that hit AI MUST use real APIs.** No mocking of AI provider calls. If the test needs AI, it calls the real API. Set the required API key in `.env` (gitignored). If the API key is not set, the test fails (no skip).
 12. **Write a report if you make a mistake.** If you make an avoidable mistake (didn't read docs, didn't follow instructions, used the wrong repo, etc.), write a report in `docs/misc/claude-didn't-listen.md` immediately. See that file for the format.
 
 ## Git Identity
@@ -42,10 +43,18 @@ pytest tests/
 ## Release Process
 
 1. Create `docs/release-X.Y.Z/release-plan.md`
-2. Implement features
-3. Create `docs/release-X.Y.Z/manual-testing-results.md`
-4. Follow testing format (see `.agentic/plan.md` §13.2)
-5. When all tests pass → commit, tag, update CHANGELOG.md
+2. Create `docs/release-X.Y.Z/feature.md`
+3. Create `docs/release-X.Y.Z/test-requests.md` — test requests to verify
+4. Implement features
+5. Run tests against real APIs (not just mocks)
+6. Create `docs/release-X.Y.Z/testing-results.md` — results of all tests
+7. When all tests pass → commit, tag, update CHANGELOG.md
+
+## File Naming Conventions
+
+- `test-requests.md` — what needs to be tested (requests from dev/agent)
+- `testing-results.md` — actual results from running tests
+- NOT `manual-testing-results.md`
 
 ## Architecture
 

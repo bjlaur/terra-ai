@@ -14,11 +14,11 @@ class OpenRouterProvider(AIProvider):
     Get an API key at https://openrouter.ai/keys
     """
 
-    def __init__(self, model: str, api_key: str | None = None,
+    def __init__(self, model: str = "openrouter/owl-alpha", api_key: str | None = None,
                  base_url: str = "https://openrouter.ai/api/v1",
                  timeout: int = 30):
         self._model = model
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        self._api_key = api_key
         self._base_url = base_url
         self._timeout = timeout
 

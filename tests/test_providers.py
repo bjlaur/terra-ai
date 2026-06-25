@@ -1,5 +1,6 @@
 """Tests for TerraAI providers."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,10 +9,13 @@ from terraai.providers.base import AIProvider, Message
 from terraai.providers.openrouter import OpenRouterProvider
 from terraai.providers.registry import ProviderRegistry
 
+# Skip real API tests unless OPENROUTER_API_KEY is set
+HAS_API_KEY = bool(os.environ.get("OPENROUTER_API_KEY"))
+
 
 class TestOpenRouterProvider:
     def test_name(self):
-        provider = OpenRouterProvider(model="google/gemini-2.0-flash-001", api_key="test-key")
+        provider = OpenRouterProvider(model="openrouter/owl-alpha", api_key="test-key")
         assert provider.name == "openrouter"
 
     def test_is_available_with_key(self):
@@ -83,3 +87,33 @@ class TestMessage:
     def test_repr(self):
         msg = Message("assistant", "hi")
         assert "assistant" in repr(msg)
+
+
+@pytest.mark.skipif(not HAS_API_KEY, reason="OPENROUTER_API_KEY not set")
+class TestOpenRouterProviderRealAPI:
+    """Integration tests that hit the real OpenRouter API.
+
+    Only run when OPENROUTER_API_KEY environment variable is set.
+    """
+
+    def test_real_chat(self):
+        """Test a real API call to OpenRouter."""
+        provider = OpenRouterProvider(
+            model="openrouter/owl-alpha",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
+        messages = [Message("user", "Say hello in one word.")]
+        result = provider.chat(messages)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_real_chat_with_system_prompt(self):
+        """Test a real API call with system prompt."""
+        provider = OpenRouterProvider(
+            model="openrouter/owl-alpha",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
+        messages = [Message("user", "What is 2+2? Answer with just the number.")]
+        result = provider.chat(messages, system_prompt="You are a helpful math assistant.")
+        assert isinstance(result, str)
+        assert "4" in result
