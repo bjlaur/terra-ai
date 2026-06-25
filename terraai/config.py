@@ -11,7 +11,7 @@ import yaml
 class ProviderConfig:
     name: str = "openrouter"
     model: str = "openrouter/owl-alpha"
-    api_key: str | None = None
+    api_key: str | None = "${OPENROUTER_API_KEY}"
     base_url: str | None = None
     timeout: int = 30
 

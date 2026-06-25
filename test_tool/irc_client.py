@@ -52,12 +52,26 @@ class TerraAITestClient:
     """Test client that connects to TerraAI without a real IRC server."""
 
     def __init__(self, config_path: str = "config/terraai.yaml"):
+        self._load_env()
         self.config = self._load_config(config_path)
         self.terra = TerraAI(self.config)
         self.server = "test-server"
         self.channel = "#terra-ai"
         self.nick = "tester"
         self.bot = FakeBot()
+
+    def _load_env(self):
+        """Load .env file if present."""
+        # Look for .env in project root (parent of test_tool/)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env_path = os.path.join(project_root, ".env")
+        if os.path.exists(env_path):
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        os.environ.setdefault(key.strip(), value.strip())
 
     def _load_config(self, path):
         """Load config, fall back to defaults if file missing."""
@@ -67,6 +81,7 @@ class TerraAITestClient:
         except FileNotFoundError:
             config = TerraConfig()
             config.sqlite_path = "data/test-terraai.db"
+            config.resolve_env()
             return config
 
     def send_message(self, text: str) -> list[str]:
