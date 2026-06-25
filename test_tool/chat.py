@@ -9,6 +9,7 @@ import asyncio
 import curses
 import sys
 import os
+import time
 
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -452,6 +453,10 @@ def run_interactive():
                         clear_hint_line()
                         redraw_input("".join(buf))
 
+        def ts():
+            """Irssi-style timestamp [HH:MM]."""
+            return time.strftime("[%H:%M]")
+
         while True:
             redraw_input("")
             cmd = read_line()
@@ -477,9 +482,9 @@ def run_interactive():
 
             # Display user message immediately (before blocking on AI)
             if is_pm:
-                messages.append(f"[PM <{client.nick}> {pm_text}")
+                messages.append(f"{ts()} [PM <{client.nick}> {pm_text}")
             else:
-                messages.append(f"<{client.nick}> {cmd}")
+                messages.append(f"{ts()} <{client.nick}> {cmd}")
             redraw_chat()
 
             # Show "thinking" indicator — also send notice to noisy users
@@ -494,21 +499,29 @@ def run_interactive():
             if client.terra.user.is_noisy(client.server, client.nick):
                 client.bot.notice(client.nick, "Thinking...")
 
+            # Capture notices before/after the call
+            notices_before = len(client.bot.notices)
+
             # Send message (blocks on API call) — route PMs differently
             if is_pm:
                 result = client.send_pm(client.nick, pm_text)
                 responses = result["say"]
-                for _, msg in result["notices"]:
-                    messages.append(f"[PM notice <TerraAI> {msg}")
             else:
                 responses = client.send_message(cmd)
+
+            # Collect any new notices from this call
+            new_notices = client.bot.notices[notices_before:]
 
             # Replace "thinking" with actual response
             for r in responses:
                 if is_pm:
-                    messages.append(f"[PM <TerraAI> {r}")
+                    messages.append(f"{ts()} [PM <TerraAI> {r}")
                 else:
-                    messages.append(f"<TerraAI> {r}")
+                    messages.append(f"{ts()} <TerraAI> {r}")
+
+            # Show notices in channel with -!- prefix (irssi-style)
+            for _, msg in new_notices:
+                messages.append(f"{ts()} -!- {msg}")
 
             redraw_chat()
 

@@ -82,22 +82,25 @@ class TerraAIScreenshotApp(App):
             self.chat_static.update("\n".join(self.chat_lines[-20:]))
             return
 
+        # Capture notices before the call
+        notices_before = len(self.client.bot.notices)
+
         # Send message (channel or PM)
         if is_pm:
             result = self.client.send_pm("tester", text)
             responses = result["say"]
-            notices = result["notices"]
             self.chat_lines.append(f"[PM <tester> {text}")
             for r in responses:
                 self.chat_lines.append(f"[PM <TerraAI> {r}")
-            for _, msg in notices:
-                # Show notices as if sent back as PM from bot
-                self.chat_lines.append(f"[PM notice <TerraAI> {msg}")
         else:
             responses = self.client.send_message(text)
             self.chat_lines.append(f"<tester> {text}")
             for r in responses:
                 self.chat_lines.append(f"<TerraAI> {r}")
+
+        # Show new notices in channel with -!- prefix (irssi-style)
+        for _, msg in self.client.bot.notices[notices_before:]:
+            self.chat_lines.append(f"-!- {msg}")
 
         self.chat_static.update("\n".join(self.chat_lines[-20:]))
 
