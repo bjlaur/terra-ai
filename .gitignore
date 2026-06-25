@@ -6,3 +6,6 @@ config/terraai-test.yaml
 config/sopel-test.cfg
 *.log
 .env
+ircd/
+test_tool/screenshots/
+.pytest_cache/

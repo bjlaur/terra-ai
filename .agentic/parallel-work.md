@@ -18,9 +18,15 @@ When multiple agents work on the same repo simultaneously, follow this workflow 
 
 ### 3. Create Your Workspace
 
-- Work in `/home/agent/git/terra-ai` directly (no clone needed unless user requests).
+- **Each agent works in a cloned repo**, not directly in origin.
+- Clone to `~/agentic-repos/terra-ai-{agent-name}/`.
 - Each agent gets its own test channel when running integration tests (e.g., `agent1/#terra-ai`).
-- Shared DB with WAL mode for concurrent access.
+- Each agent has its own SQLite DB (separate `data/` directory) to avoid conflicts.
+- WAL mode enabled for concurrent access within a single agent's work.
+
+### Agent Names
+
+- OWL = `agent1` (primary agent, works in `~/agentic-repos/terra-ai-agent1/`)
 
 ---
 
