@@ -137,9 +137,9 @@ def run_interactive():
     client = TerraAITestClient()
 
     def main(stdscr):
+        # Note: curses.wrapper() already called cbreak(), noecho(), etc.
+        # Don't call them again or they'll error.
         curses.curs_set(1)
-        curses.cbreak()  # Read keys immediately, don't wait for Enter
-        curses.noecho()  # Don't echo keystrokes automatically
         stdscr.keypad(True)  # Enable KEY_UP etc. on stdscr
         stdscr.clear()
         stdscr.refresh()
@@ -303,17 +303,37 @@ def run_interactive():
                 input_history.append(cmd)
             history_idx = -1
 
-            # Send message
+            # Display user message immediately (before blocking on AI)
+            messages.append(f"<{client.nick}> {cmd}")
+            chat.clear()
+            max_lines = height - 3
+            visible = messages[-max_lines:]
+            for i, msg in enumerate(visible):
+                try:
+                    if msg.startswith("<TerraAI>"):
+                        chat.addstr(i, 0, msg, curses.color_pair(1))
+                    else:
+                        chat.addstr(i, 0, msg)
+                except curses.error:
+                    pass
+            chat.refresh()
+
+            # Show "thinking" indicator
+            try:
+                chat.addstr(len(visible), 0, "<TerraAI> ...", curses.color_pair(1))
+            except curses.error:
+                pass
+            chat.refresh()
+
+            # Send message (blocks on API call)
             responses = client.send_message(cmd)
 
-            # Display user message
-            messages.append(f"<{client.nick}> {cmd}")
+            # Replace "thinking" with actual response
             for r in responses:
                 messages.append(f"<TerraAI> {r}")
 
-            # Redraw chat
+            # Redraw chat with response
             chat.clear()
-            max_lines = height - 3
             visible = messages[-max_lines:]
             for i, msg in enumerate(visible):
                 try:
