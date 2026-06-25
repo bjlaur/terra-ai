@@ -88,6 +88,8 @@ class TerraAI:
             return self.admin.handle_addprompt(server, nick, args)
         elif command == ".compact":
             return self.admin.handle_compact(server, channel, nick)
+        elif command == ".clear":
+            return self.admin.handle_clear(server, channel)
         elif command == ".stats":
             return self.admin.handle_stats(server, channel)
         elif command == ".help":

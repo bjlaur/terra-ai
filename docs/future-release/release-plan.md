@@ -66,6 +66,17 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 4. Conversation export
 5. Web dashboard
 
+## Done (in 0.0.2)
+
+- Test tool (Textual, irssi-like) + screenshot tests
+- Additional providers (Gemini, OpenAI, Ollama) + fallback chain
+- Web search (provider-native + DuckDuckGo fallback)
+- ergo integration testing
+- Context compaction (.compact) with session rotation
+- UX commands: .noisy, .setlocation, .help, .effort, .clear
+- Performance stats (.stats)
+- 80+ tests
+
 ## Done (moved to 0.0.1)
 
 - SOPEL plugin entry point

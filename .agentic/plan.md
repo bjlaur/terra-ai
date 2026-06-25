@@ -88,6 +88,8 @@ terra-ai/
 │   ├── release-0.0.1/                        # First release
 │   │   ├── release-plan.md
 │   │   ├── feature.md
+│   │   ├── testing-agent2.md
+│   │   ├── testing.md
 │   │   └── testing-results.md
 │   ├── future-release/                       # Deferred features
 │   │   └── release-plan.md
@@ -299,7 +301,7 @@ These commands **create or modify custom prompts**. The scope depends on who sen
 | `.optin` | `.optin` | `UPDATE users SET opted_in=1`. | "You are now opted in. TerraAI will respond to you." |
 | `.optout` | `.optout` | `UPDATE users SET opted_in=0` + `DELETE FROM conversation_history WHERE nick=?`. | "You are opted out. Your history has been forgotten." |
 | `.noisy` | `.noisy` | Toggles `noisy` boolean for that nick. When enabled, bot sends status notices (e.g., "Looking up weather...", "Sending to OpenRouter...", "Checking local prompts..."). | "Noisy mode ON." / "Noisy mode OFF." |
-| `.setlocation` | `.setlocation <city, state>` | **Hybrid:** (1) Sent to AI as `<nick> .setlocation \<city, state\>` so the AI "learns" the location. (2) Processed locally: creates a custom prompt with prompt=`<nick> .setlocation \<city, state\>`, response=`ok`. Responds directly: "Your location is set to \<city, state\>." No separate column in DB. | "Your location is set to \<city, state\>." |
+| `.setlocation` | `.setlocation <city, state>` | **Hybrid:** (1) Processed locally: creates a custom prompt with prompt=`<nick> .setlocation \<city, state\>`, response=`ok`. (2) Forwarded to AI as `<nick> .setlocation \<city, state\>` so the AI "learns" the location. The AI provides the response — no direct confirmation is injected. No separate column in DB. | (AI-generated response) |
 
 ### 5.3 AI Trigger Phrase
 
@@ -446,9 +448,13 @@ The test tool should **feel like irssi** — familiar to IRC users, but we don't
 
 ### 7.3 Implementation
 
-Single file: `test_tool/irc_client.py`. Uses **Textual** (python-textual from chaotic-aur) for the TUI — proper scrolling, split panes, text input built-in. Connects to the bot via a fake SOPEL bot instance (in-process, no real sockets needed) or optionally to a real IRC server for end-to-end testing.
+Single file: `test_tool/chat.py`. Uses **Textual** (python-textual from chaotic-aur) for the TUI — proper scrolling, split panes, text input built-in. Connects to the bot via a fake SOPEL bot instance (in-process, no real sockets needed) or optionally to a real IRC server for end-to-end testing.
 
-### 7.4 Automated Testing
+### 7.4 Manual Testing
+
+Test plan: `docs/release-0.0.2/test-requests.md`. Run `python test_tool/chat.py` in a real terminal and work through the scenarios. Results go in `testing-results.md`.
+
+### 7.5 Automated Testing
 
 No separate "test harness" for automation — just **pytest**. All automated tests live in `tests/` and use mocked providers. The test tool is strictly for interactive/manual testing.
 
@@ -488,7 +494,7 @@ Two testing modes:
 
 - Construct a fake SOPEL trigger object, pass directly to plugin handler functions
 - No real SOPEL instance, no network sockets
-- Used by pytest and the interactive test tool (`test_tool/irc_client.py`)
+- Used by pytest and the interactive test tool (`test_tool/chat.py`)
 - The plugin must be written so that all state (DB, providers, context, prompts) lives in plain Python objects, not SOPEL `bot` config
 - Handler functions accept `(bot, trigger)` but only use `bot.say`, `bot.reply`, `bot.notice`, `trigger.nick`, `trigger.channel`, `trigger.group`, `trigger.sender`
 - The test tool mocks these minimal bot methods
@@ -535,7 +541,8 @@ Following the pattern from `/mnt/jbrowse/docs/`:
 docs/
 ├── release-0.0.1/
 │   ├── release-plan.md              # What we're trying to ship
-│   ├── testing-results.md    # Test results (rounds)
+│   ├── testing-agent2.md          # Manual testing checklist (harness/manual/--real)
+│   └── testing-results.md          # Test results (rounds)
 └── misc/
     └── claude-didn't-listen.md     # Lessons learned
 ```
@@ -569,8 +576,8 @@ docs/
 
 1. Create `release-X.Y.Z/release-plan.md` with goals
 2. Implement features
-3. Create `testing-results.md` with test cases
-4. Agent runs tests, marks harness/manual columns
+3. Create `release-X.Y.Z/testing-agent1.md` and `testing-agent2.md` with test cases (checklist format)
+4. Agent runs tests, marks harness/manual/--real columns
 5. Failed items get fixed, new round added
 6. When all items pass → release
 
@@ -619,7 +626,7 @@ docs/
 
 ### Phase 7 — Test Tool + IRC Server
 
-- [x] `test_tool/irc_client.py` — irssi-like terminal UI for interactive testing
+- [x] `test_tool/chat.py` — irssi-like terminal UI for interactive testing
 - [x] Default channel `#terra-ai`
 - [x] PM support (message bot nick directly)
 - [x] `config/terraai-test.yaml.example` — test TerraAI config (ergo server)
@@ -639,7 +646,7 @@ docs/
 
 - [ ] `README.md`
 - [ ] `CHANGELOG.md` — initial 0.0.1 entry (already created, update with actual content)
-- [ ] `docs/release-0.0.1/` — release-plan.md, testing-results.md
+- [ ] `docs/release-0.0.1/` — release-plan.md, feature.md, testing-agent1.md, testing-agent2.md, testing-results.md
 
 ---
 

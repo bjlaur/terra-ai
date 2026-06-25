@@ -25,7 +25,7 @@ OWL — Updated 2026-06-25
 - **Missing 0.0.1 commands** — `.noisy`, `.setlocation`, `.help`, `.effort`, `.compact`, `.stats`
 
 ### Architecture additions
-- Test tool: `test_tool/irc_client.py`
+- Test tool: `test_tool/chat.py`
 - New providers: `terraai/providers/gemini.py`, `openai.py`, `ollama.py`
 - Web search: `terraai/tools/web_search.py`
 - Integration tests: `tests/test_ergo.py`

@@ -40,19 +40,20 @@ class UserCommands:
         return (server, nick) in self._noisy_users
 
     def handle_setlocation(self, server: str, channel: str, nick: str,
-                           args: str) -> str:
+                           args: str) -> str | None:
         """Handle .setlocation <city, state> command.
 
-        Hybrid: stores as custom prompt AND forwards to AI.
+        Hybrid: stores as custom prompt (if args provided), then returns
+        None so the caller forwards the message to AI. The AI responds
+        naturally; we do NOT inject a "Your location is set to..." confirmation.
         """
         location = args.strip()
-        if not location:
-            return "Usage: .setlocation <city, state>"
+        if location:
+            # Store as custom prompt so future AI calls include this context
+            self.prompts.add_prompt(server, ".setlocation", location, nick)
 
-        # Store as custom prompt
-        self.prompts.add_prompt(server, ".setlocation", location, nick)
-
-        return f"Your location is set to {location}."
+        # Return None — let the caller forward to AI for the actual response
+        return None
 
     def handle_ai(self) -> str:
         """Handle .ai command — just return usage note."""

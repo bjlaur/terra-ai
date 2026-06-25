@@ -103,12 +103,20 @@ def handle_shorthand(bot, trigger):
         response = terra.handle_management(server, channel, nick, text)
         if response:
             bot.say(response)
+        elif text.lower().startswith(".setlocation"):
+            # Hybrid: stored locally, forward to AI for the actual response
+            response = terra.handle_ai_message(server, channel, nick, f"{nick} {text}")
+            if response:
+                bot.say(response)
         return
 
-    # Custom prompt check
-    prompt_response = terra.prompts.match_prompt(server, text)
-    if prompt_response:
-        bot.say(prompt_response)
+    # Custom prompt — forward to AI with the prompt response as context
+    prompt_match = terra.prompts.match_prompt(server, text)
+    if prompt_match:
+        ai_text = f"{nick} {text} — {prompt_match}"
+        response = terra.handle_ai_message(server, channel, nick, ai_text)
+        if response:
+            bot.say(response)
         return
 
     # .ai command — context-free
