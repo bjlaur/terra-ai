@@ -44,7 +44,7 @@ pytest tests/
 
 1. Create `docs/release-X.Y.Z/release-plan.md`
 2. Create `docs/release-X.Y.Z/feature.md`
-3. Create `docs/release-X.Y.Z/test-requests.md` — test requests to verify
+3. Create `docs/release-X.Y.Z/testing.md` — manual testing checklist (see jbrowse format: harness / manual / --real test columns)
 4. Implement features
 5. Run tests against real APIs (not just mocks)
 6. Create `docs/release-X.Y.Z/testing-results.md` — results of all tests
@@ -52,9 +52,9 @@ pytest tests/
 
 ## File Naming Conventions
 
-- `test-requests.md` — what needs to be tested (requests from dev/agent)
+- `testing.md` — manual testing checklist. Follow the jbrowse format: `/mnt/jbrowse/docs/release-X.Y.Z/ipc-fastfollower-testing.md` (legend, columns: Harness / Manual / --real test / Why no harness? / Dev notes / Agent notes, rounds per agent).
 - `testing-results.md` — actual results from running tests
-- NOT `manual-testing-results.md`
+- NOT `test-requests.md`, NOT `manual-testing-results.md`
 
 ## Architecture
 

@@ -88,7 +88,8 @@ terra-ai/
 │   ├── release-0.0.1/                        # First release
 │   │   ├── release-plan.md
 │   │   ├── feature.md
-│   │   └── manual-testing-results.md
+│   │   ├── testing.md
+│   │   └── testing-results.md
 │   ├── future-release/                       # Deferred features
 │   │   └── release-plan.md
 │   └── misc/
@@ -539,7 +540,8 @@ Following the pattern from `/mnt/jbrowse/docs/`:
 docs/
 ├── release-0.0.1/
 │   ├── release-plan.md              # What we're trying to ship
-│   ├── manual-testing-results.md    # Test results (rounds)
+│   ├── testing.md                  # Manual testing checklist (harness/manual/--real)
+│   ├── testing-results.md          # Test results (rounds)
 └── misc/
     └── claude-didn't-listen.md     # Lessons learned
 ```
@@ -573,8 +575,8 @@ docs/
 
 1. Create `release-X.Y.Z/release-plan.md` with goals
 2. Implement features
-3. Create `manual-testing-results.md` with test cases
-4. Agent runs tests, marks harness/manual columns
+3. Create `release-X.Y.Z/testing.md` with test cases (checklist format)
+4. Agent runs tests, marks harness/manual/--real columns
 5. Failed items get fixed, new round added
 6. When all items pass → release
 
@@ -640,7 +642,7 @@ docs/
 
 - [ ] `README.md`
 - [ ] `CHANGELOG.md` — initial 0.0.1 entry (already created, update with actual content)
-- [ ] `docs/release-0.0.1/` — release-plan.md, manual-testing-results.md
+- [ ] `docs/release-0.0.1/` — release-plan.md, feature.md, testing.md, testing-results.md
 
 ---
 
