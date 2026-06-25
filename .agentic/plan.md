@@ -279,8 +279,8 @@ These commands **create or modify custom prompts**. The scope depends on who sen
 | `.rmprompt` | `.rmprompt <number>` | Delete the prompt at the given index (from `.listprompts` numbering). | "Removed #N (\<trigger\>)" or "No such prompt." |
 | `.addprompt` | `.addprompt <trigger> <text>` | Insert a new row. When this trigger is seen, bot replies with the stored response without calling the AI. | "Added \<trigger\>." Errors on duplicate: "Trigger already exists." |
 | `.compact` | `.compact` | Admin only. Sends the full conversation history for the current channel to the AI with a pruning prompt. The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, update `sessions` table, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back in `sessions`, delete uncompacted rows.** | "Compacted history. Kept N exchanges, removed M." |
-| `.help` | `.help` | Shows all available commands with brief descriptions. | PMs command list | The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, update `sessions` table, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back in `sessions`, delete uncompacted rows.** | "Compacted history. Kept N exchanges, removed M." |
-| `.stats` | `.stats` | Admin only. Shows performance stats for the current server/channel: total AI calls, avg/total tokens, avg processing time, avg response length, provider/model breakdown. Queries `performance_stats` table. | PMs a summary table | The prompt instructs the AI to carefully review each exchange and judge whether it's worth keeping. Criteria for removal: repeated commands where the bot gave the same response, exchanges that contain no unique information, conversations about topics that are no longer relevant. Criteria for keeping: user preferences, location info, unique questions, exchanges where the AI gave a non-obvious answer, the most recent N exchanges (always preserved regardless of quality). The AI outputs the pruned history as role/content pairs. **Process: generate new UUID for session_id, keep old rows with their original session_id, insert pruned rows with new session_id, log the compaction in `compactions` table. Revert: query `compactions` for the channel, swap session_id back.** | "Compacted history. Kept N exchanges, removed M." |
+| `.help` | `.help` | Shows all available commands with brief descriptions. | PMs command list |
+| `.stats` | `.stats` | Admin only. Shows performance stats for the current server/channel: total AI calls, avg/total tokens, avg processing time, avg response length, provider/model breakdown. Queries `performance_stats` table. | PMs a summary table |
 
 **Prompt ordering:** Prompts are ordered alphabetically by trigger name when listed. When matching, exact match wins first, then shortest-prefix match.
 
@@ -298,7 +298,7 @@ These commands **create or modify custom prompts**. The scope depends on who sen
 Configured string, default `TerraAI:`. When a user message starts with this trigger:
 
 1. Check `users.opted_in`. If `0`, ignore silently (or send notice if `noisy`).
-2. Look up custom prompts. If matched and `is_local=1`, reply from template. Do NOT hit the AI.
+2. Look up custom prompts. If matched, reply with the stored response. Do NOT hit the AI.
 3. Otherwise, pass through `ContextManager` → provider → reply.
 
 ### 5.4 Shorthand Mode
@@ -522,7 +522,6 @@ docs/
 ├── release-0.0.1/
 │   ├── release-plan.md              # What we're trying to ship
 │   ├── manual-testing-results.md    # Test results (rounds)
-│   └── retest-checklist.md          # Re-test checklist
 └── misc/
     └── claude-didn't-listen.md     # Lessons learned
 ```
@@ -623,7 +622,7 @@ docs/
 
 - [ ] `README.md`
 - [ ] `CHANGELOG.md` — initial 0.0.1 entry (already created, update with actual content)
-- [ ] `docs/release-0.0.1/` — release-plan.md, manual-testing-results.md, retest-checklist.md
+- [ ] `docs/release-0.0.1/` — release-plan.md, manual-testing-results.md
 
 ---
 
@@ -776,7 +775,7 @@ These tests are **MUST PASS** — they are not optional:
 - [ ] `pytest tests/` passes
 - [ ] Containerfile builds and `sopel --version` runs in container
 - [ ] `.optin`, `.optout` DB round-trip works in tests
-- [ ] `.addprompt --local` stores a prompt served without calling a provider
+- [ ] `.addprompt` stores a prompt served without calling a provider
 - [ ] Provider fallback chain returns the first available provider
 - [ ] The fake conversation is injected into context as pre-existing messages
 - [ ] `.noisy` toggles status notices to the user
@@ -786,11 +785,11 @@ These tests are **MUST PASS** — they are not optional:
 
 ---
 
-## 21. Development Tools
+## 23. Development Tools
 
 - **`/compact`** — Claude Code built-in. Use it when this session's context gets long. The AI summarizes what's happened so far and we continue from there. Not a TerraAI feature, just a dev tool for us.
 
-## 22. Lessons Learned (from /mnt/jbrowse/docs/misc/claude-didn't-listen.md)
+## 24. Lessons Learned (from /mnt/jbrowse/docs/misc/claude-didn't-listen.md)
 
 1. When the user says "add this test" — actually do it, don't just note it
 2. When manual testing reveals a FAIL — fix the code, don't just document it

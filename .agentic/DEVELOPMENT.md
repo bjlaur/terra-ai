@@ -44,7 +44,7 @@ pytest tests/
 1. Create `docs/release-X.Y.Z/release-plan.md`
 2. Implement features
 3. Create `docs/release-X.Y.Z/manual-testing-results.md`
-4. Follow retest checklist format (see plan.md §13.2)
+4. Follow testing format (see `.agentic/plan.md` §13.2)
 5. When all tests pass → commit, tag, update CHANGELOG.md
 
 ## Architecture

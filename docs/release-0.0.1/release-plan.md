@@ -35,7 +35,7 @@ See `feature.md` for full description.
 ## Release Checklist
 
 ### Every Few Commits
-- [ ] `plan.md` updated
+- [ ] `.agentic/plan.md` updated
 - [ ] `.agentic/TODO.md` updated
 - [ ] `CHANGELOG.md` updated
 - [ ] `python -m py_compile terraai/<file>.py` passes
