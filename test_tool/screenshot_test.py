@@ -48,21 +48,17 @@ class TerraAIScreenshotApp(App):
         color: $text;
         padding: 0 1;
     }
-    .user-msg {
-        color: $text;
-    }
-    .bot-msg {
-        color: $accent;
-    }
     """
 
     def __init__(self, client: TerraAITestClient):
         super().__init__()
         self.client = client
+        self.chat_lines: list[str] = []
 
     def compose(self):
         yield Static("#terra-ai (test mode)", id="header")
-        yield Static("", id="chat")
+        self.chat_static = Static("", id="chat")
+        yield self.chat_static
         yield Input(placeholder="Type a message...", id="input")
 
     def on_input_submitted(self, event: Input.Submitted):
@@ -75,15 +71,10 @@ class TerraAIScreenshotApp(App):
         responses = self.client.send_message(text)
 
         # Update chat
-        chat = self.query_one("#chat", Static)
-        current = str(chat.renderable).strip() if hasattr(chat, 'renderable') and chat.renderable else ""
-        lines = []
-        if current:
-            lines = current.split("\n")
-        lines.append(f"<tester> {text}")
+        self.chat_lines.append(f"<tester> {text}")
         for r in responses:
-            lines.append(f"<TerraAI> {r}")
-        chat.update("\n".join(lines[-20:]))  # Keep last 20 lines
+            self.chat_lines.append(f"<TerraAI> {r}")
+        self.chat_static.update("\n".join(self.chat_lines[-20:]))
 
 
 def check_svg(svg_path: str, expected_texts: list[str]) -> None:
@@ -111,6 +102,7 @@ def run_screenshots():
 
     # Pre-populate some messages
     client.send_message(".optin")
+    client.send_message(".addprompt wea sunny")
     client.send_message("hello")
 
     app = TerraAIScreenshotApp(client)
@@ -150,7 +142,7 @@ def run_screenshots():
     print("Checking SVGs...")
     check_svg("test_tool/screenshots/initial.svg", ["#terra-ai"])
     check_svg("test_tool/screenshots/after-message.svg", ["<tester>", "<TerraAI>"])
-    check_svg("test_tool/screenshots/listprompts.svg", [".wea", "sunny"])
+    check_svg("test_tool/screenshots/listprompts.svg", ["wea", "sunny"])
 
     print("\nScreenshots exported to test_tool/screenshots/")
     print("VISUAL INSPECTION REQUIRED: Open each SVG in a browser/image viewer and verify:")
