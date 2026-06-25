@@ -138,6 +138,9 @@ def run_interactive():
 
     def main(stdscr):
         curses.curs_set(1)
+        curses.cbreak()  # Read keys immediately, don't wait for Enter
+        curses.noecho()  # Don't echo keystrokes automatically
+        stdscr.keypad(True)  # Enable KEY_UP etc. on stdscr
         stdscr.clear()
         stdscr.refresh()
 
@@ -153,6 +156,7 @@ def run_interactive():
         header = curses.newwin(1, width, 0, 0)
         chat = curses.newwin(height - 2, width, 1, 0)
         input_win = curses.newwin(1, width, height - 1, 0)
+        input_win.keypad(True)  # Enable KEY_UP etc. on input window
 
         header.addstr(0, 0, " #terra-ai (test mode) — type 'quit' to exit ", curses.A_BOLD)
         header.refresh()
