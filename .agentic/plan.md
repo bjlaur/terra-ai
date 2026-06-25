@@ -61,7 +61,11 @@ terra-ai/
 │   ├── providers/
 │   │   ├── __init__.py                       # Re-exports + configured loader
 │   │   ├── base.py                           # AIProvider ABC
-│   │   └── openrouter.py                     # OpenRouter implementation (default)
+│   │   ├── openrouter.py                     # OpenRouter implementation (default)
+│   │   ├── gemini.py                         # Gemini (generativelanguage → OpenAI translate)
+│   │   ├── openai.py                         # OpenAI.com implementation
+│   │   ├── ollama.py                         # Ollama (localhost) implementation
+│   │   └── registry.py                       # Provider registry + fallback chain
 │   ├── prompts/
 │   │   ├── __init__.py                       # Re-exports PromptManager
 │   │   ├── manager.py                        # CRUD for prompts table
