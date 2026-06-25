@@ -13,7 +13,7 @@ provider:
   api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable
   timeout: 30
 
-sqlite_path: "data/terraai.db"
+sqlite_path: "~/.terra-ai/terraai.db"
 
 admin_nicks: []                  # List of nicks treated as admins
 

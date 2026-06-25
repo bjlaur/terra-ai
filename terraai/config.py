@@ -45,7 +45,7 @@ class TerraConfig:
 
 def load_config(path: str | Path) -> TerraConfig:
     """Load and validate configuration from a YAML file."""
-    path = Path(path)
+    path = Path(path).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 

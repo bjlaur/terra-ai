@@ -22,8 +22,9 @@ class Database:
 
     def __init__(self, config: DBConfig | None = None):
         self.config = config or DBConfig()
-        Path(self.config.path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.config.path)
+        db_path = Path(self.config.path).expanduser()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(db_path))
         self.conn.row_factory = sqlite3.Row
         if self.config.wal:
             self.conn.execute("PRAGMA journal_mode=WAL")

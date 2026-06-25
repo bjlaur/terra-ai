@@ -62,11 +62,11 @@ class TestErgoSmoke:
 
     def test_ergo_port_open(self):
         """Verify ergochat is listening on 6667."""
-        assert ergo_available(), "ergochat not reachable"
+        assert ergo_running(), "ergochat not reachable"
 
     def test_ergo_config_exists(self):
         """Verify ergochat config file exists."""
-        assert os.path.exists("/etc/ergochat/ircd.yaml")
+        assert os.path.exists(os.path.expanduser("~/.ircd/ircd.yaml"))
 
     def test_can_connect_socket(self):
         """Test raw socket connection to ergo."""
