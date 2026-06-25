@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from textual.app import App
 from textual.widgets import Static, Input
 
-from test_tool.irc_client import TerraAITestClient
+from test_tool.chat import TerraAITestClient
 
 
 class TerraAIScreenshotApp(App):

@@ -446,7 +446,7 @@ The test tool should **feel like irssi** — familiar to IRC users, but we don't
 
 ### 7.3 Implementation
 
-Single file: `test_tool/irc_client.py`. Uses **Textual** (python-textual from chaotic-aur) for the TUI — proper scrolling, split panes, text input built-in. Connects to the bot via a fake SOPEL bot instance (in-process, no real sockets needed) or optionally to a real IRC server for end-to-end testing.
+Single file: `test_tool/chat.py`. Uses **Textual** (python-textual from chaotic-aur) for the TUI — proper scrolling, split panes, text input built-in. Connects to the bot via a fake SOPEL bot instance (in-process, no real sockets needed) or optionally to a real IRC server for end-to-end testing.
 
 ### 7.4 Automated Testing
 
@@ -488,7 +488,7 @@ Two testing modes:
 
 - Construct a fake SOPEL trigger object, pass directly to plugin handler functions
 - No real SOPEL instance, no network sockets
-- Used by pytest and the interactive test tool (`test_tool/irc_client.py`)
+- Used by pytest and the interactive test tool (`test_tool/chat.py`)
 - The plugin must be written so that all state (DB, providers, context, prompts) lives in plain Python objects, not SOPEL `bot` config
 - Handler functions accept `(bot, trigger)` but only use `bot.say`, `bot.reply`, `bot.notice`, `trigger.nick`, `trigger.channel`, `trigger.group`, `trigger.sender`
 - The test tool mocks these minimal bot methods
@@ -619,7 +619,7 @@ docs/
 
 ### Phase 7 — Test Tool + IRC Server
 
-- [ ] `test_tool/irc_client.py` — irssi-like terminal UI for interactive testing
+- [ ] `test_tool/chat.py` — irssi-like terminal UI for interactive testing
 - [ ] Default channel `#terra-ai`
 - [ ] PM support (message bot nick directly)
 - [ ] `config/terraai-test.yaml.example` — test SOPEL config (ergo server)

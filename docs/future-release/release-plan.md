@@ -40,7 +40,7 @@ Inspiration: `/mnt/jbrowse/tools/svg_screenshot_poc.py` — uses `app.run_test()
 
 **Test the test tool**: The test tool itself needs automated tests. Use Textual's `run_test()` + `pilot` to simulate user input and verify bot responses. **Screenshots + visual inspection** — export SVGs and look at them to verify the UI looks right. This is how jbrowse does it (`/mnt/jbrowse/tools/svg_screenshot_poc.py`).
 
-**Files**: `test_tool/irc_client.py`, `tests/test_tool.py`
+**Files**: `test_tool/chat.py`, `tests/test_tool.py`
 
 ---
 

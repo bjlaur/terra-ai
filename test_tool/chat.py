@@ -2,7 +2,7 @@
 """Irssi-like terminal client for testing TerraAI locally.
 
 Usage:
-    python test_tool/irc_client.py
+    python test_tool/chat.py
 """
 
 import asyncio

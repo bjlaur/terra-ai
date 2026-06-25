@@ -45,7 +45,7 @@ class TestTestTool:
 
     def test_send_message(self, terra):
         """Test sending a management command."""
-        from test_tool.irc_client import TerraAITestClient
+        from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
         responses = client.send_message(".optin")
@@ -54,7 +54,7 @@ class TestTestTool:
 
     def test_send_ai_message(self, terra):
         """Test sending an AI message."""
-        from test_tool.irc_client import TerraAITestClient
+        from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
         responses = client.send_message("hello")
@@ -62,7 +62,7 @@ class TestTestTool:
 
     def test_send_as_different_nick(self, terra):
         """Test sending as different users."""
-        from test_tool.irc_client import TerraAITestClient
+        from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
         responses = client.send_as("other-user", "hello")
@@ -70,7 +70,7 @@ class TestTestTool:
 
     def test_custom_prompt_flow(self, terra):
         """Test creating and matching a custom prompt."""
-        from test_tool.irc_client import TerraAITestClient
+        from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
 
@@ -84,7 +84,7 @@ class TestTestTool:
 
     def test_help_command(self, terra):
         """Test help command."""
-        from test_tool.irc_client import TerraAITestClient
+        from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
         responses = client.send_message(".help")
