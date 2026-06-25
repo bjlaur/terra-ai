@@ -177,11 +177,22 @@ def run_interactive():
         input_history: list[str] = []
         history_idx = -1  # -1 = new input
         cursor_pos = 0
+        completions_shown = False  # True when completion hints are on the hint line
 
-        # Known commands for tab completion
-        known_commands = [".optin", ".optout", ".noisy", ".setlocation", ".ai",
-                          ".effort", ".listprompts", ".addprompt", ".rmprompt",
-                          ".compact", ".stats", ".help"]
+        # Nicks to tab-complete. In a real IRC client this is the channel
+        # member list; here the only other entity is the bot.
+        tab_nicks = ["TerraAI"]
+
+        def clear_hint_line():
+            """Clear the completion hint line (row above input)."""
+            nonlocal completions_shown
+            completions_shown = False
+            try:
+                chat.move(height - 3, 0)
+                chat.clrtoeol()
+                chat.refresh()
+            except curses.error:
+                pass
 
         def redraw_input(buffer: str):
             """Redraw the input line with buffer content."""
@@ -224,10 +235,12 @@ def run_interactive():
                     if cursor_pos > 0:
                         cursor_pos -= 1
                         buf.pop(cursor_pos)
+                        clear_hint_line()
                         redraw_input("".join(buf))
                 elif key == curses.KEY_DC:  # Delete
                     if cursor_pos < len(buf):
                         buf.pop(cursor_pos)
+                        clear_hint_line()
                         redraw_input("".join(buf))
                 elif key == curses.KEY_LEFT:
                     if cursor_pos > 0:
@@ -256,28 +269,34 @@ def run_interactive():
                             buf = []
                         cursor_pos = len(buf)
                         redraw_input("".join(buf))
-                elif key == 9:  # Tab completion
+                elif key == 9:  # Tab completion — complete nicks
                     current = "".join(buf[:cursor_pos])
+                    # Only complete the first word (nicks don't contain spaces)
                     if " " in current:
-                        # Don't complete after first word
                         curses.beep()
                     else:
-                        matches = [c for c in known_commands
-                                   if c.startswith(current)]
+                        # Case-insensitive prefix match against known nicks
+                        matches = [n for n in tab_nicks
+                                   if n.lower().startswith(current.lower())]
                         if matches:
-                            # Complete common prefix
+                            # Complete to the common prefix (case from first match)
                             common = matches[0]
                             for m in matches[1:]:
-                                while not m.startswith(common):
+                                while not m.lower().startswith(common.lower()):
                                     common = common[:-1]
                             buf = list(common)
                             cursor_pos = len(buf)
                             redraw_input("".join(buf))
                             if len(matches) > 1:
-                                # Show completions below
-                                chat.addstr(height - 3, 0, "  ".join(matches[:8]),
-                                           curses.color_pair(1))
-                                chat.refresh()
+                                # Show all matches on the hint line
+                                clear_hint_line()
+                                try:
+                                    chat.addstr(height - 3, 0, "  ".join(matches[:8]),
+                                               curses.color_pair(1))
+                                    chat.refresh()
+                                    completions_shown = True
+                                except curses.error:
+                                    pass
                         else:
                             curses.beep()
                 elif key == curses.KEY_HOME:
@@ -291,6 +310,7 @@ def run_interactive():
                     if len(buf) < 200:
                         buf.insert(cursor_pos, chr(key))
                         cursor_pos += 1
+                        clear_hint_line()
                         redraw_input("".join(buf))
 
         while True:

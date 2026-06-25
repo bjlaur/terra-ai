@@ -181,3 +181,11 @@ class TestInteractiveMode:
         # The help output should appear somewhere in the rendered output
         assert "optin" in stdout.lower() or "optin" in stderr.lower(), \
             "Help command response not found"
+
+    def test_interactive_tab_completes_nick(self, env_setup):
+        """Test that Tab completes the bot nick: 'Ter<Tab>' -> 'TerraAI'."""
+        stdout, stderr = self._run_interactive([b"Ter\t", b"quit\n"])
+        assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
+        # After Tab, the input line should contain the completed nick "TerraAI"
+        assert "TerraAI" in stdout, \
+            "Tab did not complete 'Ter' to 'TerraAI' in the input line"
