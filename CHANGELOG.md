@@ -23,8 +23,8 @@ Test tool, provider expansion, routing fixes, new commands.
 
 ### Testing
 - 80+ unit tests passing
-- `--real` API test class added (TestRealAPI) — effort, custom prompt routing, noisy, setlocation
-- Interactive test for tab completion
+- `--real` API tests passing (4/4): effort level, unknown command routing, noisy toggle, setlocation
+- Interactive tests passing (launch, input, tab completion)
 - Manual testing rounds 1–3 documented in `docs/release-0.0.2/testing-agent2.md`
 - Deferred tests tracked in `docs/release-0.0.2/deferred-testing-agent2.md`
 
