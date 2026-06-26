@@ -154,7 +154,7 @@ cd ~/.ircd && ergochat run --conf ircd.yaml --quiet &
 # Run all ergo tests:
 pytest tests/test_ergo.py -v
 
-# Results: 13 passed, 2 failed in ~165s
+# Results: 16 passed, 0 failed in ~122s
 ```
 
 ### Ergo Test Status
@@ -163,9 +163,18 @@ pytest tests/test_ergo.py -v
 |------|--------|-------|
 | TestErgoSmoke (3) | ✅ All pass | 0.02s |
 | TestErgoIRCProtocol (4) | ✅ All pass | 10-42s each (socket timeouts) |
-| TestErgoSopelBot (8) | ⚠️ 6 pass, 2 fail | Session-scoped SOPEL (~10s once) |
-| `test_bot_responds_to_unknown_command` | ❌ FAIL | 451 ERR_NOTREGISTERED — ergo rejects PRIVMSG before NICK completes |
-| `test_bot_optin_optout` | ❌ FAIL | Same 451 issue |
+| TestErgoSopelBot (9) | ✅ All pass | Session-scoped SOPEL (~10s once) |
+
+### Ergo Fixes Applied
+
+- Fixed IRC test client handshake (wait for 001/366 instead of sleeping)
+- Added unknown-command fallback handler (`prefixed_freeform_fallback`) using `@plugin.rule_lazy`
+- Added `test_bot_reports_error_on_ai_failure` — verifies bot sends `Error:` when AI provider fails
+- Fixed `cmd_optin` guard bug — removed `_guard` from all management commands
+- Added `_irc_error_handler` decorator — all handlers log + send `Error:` on crash
+- Added `logger.error` to prompts/manager.py, web_search.py, providers/ollama.py
+- Fixed `"AI provider not configured."` → `"Error: AI provider not configured."` in bot.py
+- Documented ergo test setup in `docs/misc/ergo-test-guide.md`
 
 ### Ergo Optimization
 

@@ -1,6 +1,8 @@
 """SOPEL plugin interface for TerraAI."""
 
+import functools
 import logging
+import re
 
 from sopel import plugin as sopel_plugin
 from sopel import bot as sopel_bot
@@ -10,6 +12,22 @@ from terra_ai.bot import TerraAI
 from terra_ai.config import load_config
 
 logger = logging.getLogger("terraai")
+
+
+def _irc_error_handler(func):
+    """Decorator: catch exceptions, log them, and send 'Error:' to IRC.
+
+    Ensures the bot NEVER stays silent on a crash — users always see
+    an error message, and operators always see the traceback in logs.
+    """
+    @functools.wraps(func)
+    def wrapper(bot, trigger, *args, **kwargs):
+        try:
+            return func(bot, trigger, *args, **kwargs)
+        except Exception as e:
+            logger.error("Handler %s crashed: %s", func.__name__, e, exc_info=True)
+            bot.say(f"Error: {e}")
+    return wrapper
 
 # Global instance — set during setup
 _terrai: TerraAI | None = None
@@ -71,17 +89,18 @@ def _guard(server, nick) -> bool:
 # ── Management commands (-command) ──────────────────────────────────────────
 
 @sopel_plugin.command("optin")
+@_irc_error_handler
 def cmd_optin(bot, trigger):
     """Opt in to AI responses."""
+    # Don't guard — users should always be able to opt back in
     terra = _get_terra()
     server = _server_name(bot)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     bot.say(terra.user.handle_optin(server, nick))
 
 
 @sopel_plugin.command("optout")
+@_irc_error_handler
 def cmd_optout(bot, trigger):
     """Opt out of AI responses."""
     # Don't guard — users should always be able to opt out
@@ -96,6 +115,7 @@ def cmd_optout(bot, trigger):
 
 
 @sopel_plugin.command("ai")
+@_irc_error_handler
 def cmd_ai(bot, trigger):
     """Send a prompt to the AI without conversation history."""
     terra = _get_terra()
@@ -112,118 +132,103 @@ def cmd_ai(bot, trigger):
 
 
 @sopel_plugin.command("addprompt")
+@_irc_error_handler
 def cmd_addprompt(bot, trigger):
     """Add a custom prompt."""
     terra = _get_terra()
     server = _server_name(bot)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     args = (trigger.group(2) or "").strip()
     bot.say(terra.management.handle_addprompt(server, nick, args))
 
 
 @sopel_plugin.command("rmprompt")
+@_irc_error_handler
 def cmd_rmprompt(bot, trigger):
     """Remove a custom prompt."""
     terra = _get_terra()
     server = _server_name(bot)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     args = (trigger.group(2) or "").strip()
     bot.say(terra.management.handle_rmprompt(server, nick, args))
 
 
 @sopel_plugin.command("listprompts")
+@_irc_error_handler
 def cmd_listprompts(bot, trigger):
     """List all custom prompts."""
     terra = _get_terra()
     server = _server_name(bot)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     bot.say(terra.management.handle_listprompts(server, nick))
 
 
 @sopel_plugin.command("compact")
 @sopel_plugin.require_admin("Permission denied. .compact is admin-only.")
+@_irc_error_handler
 def cmd_compact(bot, trigger):
     """Compact conversation history. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
-    if not _guard(server, trigger.nick):
-        return
     bot.say(terra.management.handle_compact(server, channel, trigger.nick))
 
 
 @sopel_plugin.command("clear")
+@_irc_error_handler
 def cmd_clear(bot, trigger):
     """Clear conversation history."""
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
-    nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     bot.say(terra.management.handle_clear(server, channel))
 
 
 @sopel_plugin.command("effort")
+@_irc_error_handler
 def cmd_effort(bot, trigger):
     """Set reasoning effort level."""
     terra = _get_terra()
-    server = _server_name(bot)
-    nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     args = (trigger.group(2) or "").strip()
     bot.say(terra.user.handle_effort(args))
 
 
 @sopel_plugin.command("noisy")
+@_irc_error_handler
 def cmd_noisy(bot, trigger):
     """Toggle noisy mode."""
     terra = _get_terra()
     server = _server_name(bot)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     bot.say(terra.user.handle_noisy(server, nick))
 
 
 @sopel_plugin.command("stats")
+@_irc_error_handler
 def cmd_stats(bot, trigger):
     """Show performance stats."""
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
-    nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     bot.say(terra.management.handle_stats(server, channel))
 
 
 @sopel_plugin.command("help")
+@_irc_error_handler
 def cmd_help(bot, trigger):
     """Show available commands."""
     terra = _get_terra()
-    nick = _nick(trigger)
-    if not _guard(_server_name(bot), nick):
-        return
     bot.say(terra.management.handle_help())
 
 
 @sopel_plugin.command("setlocation")
+@_irc_error_handler
 def cmd_setlocation(bot, trigger):
     """Set your location (stored locally, then forwarded to AI)."""
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
     nick = _nick(trigger)
-    if not _guard(server, nick):
-        return
     args = (trigger.group(2) or "").strip()
     # Store locally as custom prompt
     terra.prompts.add_prompt(server, ".setlocation", args, nick)
@@ -234,10 +239,85 @@ def cmd_setlocation(bot, trigger):
         bot.say(response)
 
 
+# ── Unknown -command fallback: route to AI ─────────────────────────────────
+
+
+def _prefix_fallback_loader(settings):
+    """Build a regex from Sopel's configured command prefix.
+
+    settings.core.prefix is already a regex, e.g. '-'.
+    Wrap it in a non-capturing group and use named captures for the command
+    and rest of line.
+    """
+    prefix = settings.core.prefix
+    pattern = rf'^(?:{prefix})(?P<command>\S+)(?:\s+(?P<args>.*))?$'
+    logger.info("TerraAI prefix fallback regex: %s", pattern)
+    return [re.compile(pattern)]
+
+
+def _is_registered_sopel_command(bot, command: str) -> bool:
+    """Return True if Sopel already has a command by this name or alias."""
+    command = (command or '').strip().lower()
+    if not command:
+        return False
+
+    # `bot` in plugin handlers is usually a SopelWrapper, but it proxies the
+    # underlying Sopel object. `bot.rules` should work in normal Sopel usage.
+    return bot.rules.has_command(command, follow_alias=True)
+
+
+@sopel_plugin.rule_lazy(_prefix_fallback_loader)
+@sopel_plugin.priority('low')
+@sopel_plugin.thread(False)
+def unknown_prefixed_command_to_ai(bot, trigger):
+    """Route unknown `-whatever` messages to AI.
+
+    Examples:
+      -what is 2+2       -> AI sees "what is 2+2"
+      -explain sqlite    -> AI sees "explain sqlite"
+
+    Known Sopel commands are skipped:
+      -help              -> normal @plugin.command('help') handler
+      -ai hello          -> normal @plugin.command('ai') handler
+      -optin             -> normal @plugin.command('optin') handler
+    """
+    command = (trigger.group('command') or '').strip()
+    args = (trigger.group('args') or '').strip()
+
+    if not command:
+        return
+
+    command_lc = command.lower()
+
+    # This replaces `_KNOWN_COMMANDS`.
+    if _is_registered_sopel_command(bot, command_lc):
+        logger.debug(
+            "TerraAI prefix fallback skipping registered command: %s",
+            command_lc,
+        )
+        return
+
+    text = f'{command} {args}'.strip()
+    logger.info("TerraAI prefix fallback handling unknown command as AI: %r", text)
+
+    terra = _get_terra()
+    server = _server_name(bot)
+    channel = _channel_name(trigger)
+    nick = _nick(trigger)
+
+    if not terra.should_respond(server, nick):
+        return
+
+    response = terra.handle_ai_message(server, channel, nick, text)
+    if response:
+        bot.say(response)
+
+
 # ── Freeform addressed queries: TerraAI: <message> ──────────────────────────
 
 @sopel_plugin.rule(r"$nick (.+)")
 @sopel_plugin.allow_bots
+@_irc_error_handler
 def addressed_freeform(bot, trigger):
     """Handle freeform messages addressed to the bot by nick."""
     terra = _get_terra()

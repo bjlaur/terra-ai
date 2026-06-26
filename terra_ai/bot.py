@@ -66,7 +66,7 @@ class TerraAI:
         """Handle a message that should go to the AI."""
         provider = self.registry.get()
         if not provider:
-            return "AI provider not configured."
+            return "Error: AI provider not configured."
 
         try:
             start = time.time()

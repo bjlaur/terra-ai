@@ -322,10 +322,12 @@ default_optin: true
         env = os.environ.copy()
         env["PYTHONPATH"] = project_dir
 
+        stdout_file = open(os.path.join(tempfile.gettempdir(), "sopel_stdout.log"), "w")
+        stderr_file = open(os.path.join(tempfile.gettempdir(), "sopel_stderr.log"), "w")
         proc = subprocess.Popen(
             ["sopel", "-c", str(sopel_config)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_file,
+            stderr=stderr_file,
             stdin=subprocess.DEVNULL,
             env=env,
         )
@@ -339,6 +341,116 @@ default_optin: true
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
+        stdout_file.close()
+        stderr_file.close()
+
+    BAD_PROVIDER_CHANNEL = "#terra-ai-error-test"
+    BAD_PROVIDER_BOT_NICK = "ErrBot"
+
+    @pytest.fixture(scope="session")
+    def sopel_config_bad_provider(self, tmp_path_factory):
+        """Create a SOPEL config with a provider that will fail (bad URL).
+
+        The provider has an API key but points at a non-existent endpoint,
+        so the HTTP call itself will error — exercising the real error path.
+        """
+        tmp = tmp_path_factory.mktemp("sopel-badprov")
+        db_path = tmp / "terra_ai.db"
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        plugins_lines = "\n    ".join(self.PLUGIN_LIST)
+        config_content = f"""[core]
+nick = {self.BAD_PROVIDER_BOT_NICK}
+host = {self.ERGO_HOST}
+port = {self.ERGO_PORT}
+use_ssl = false
+owner = agent1
+channels = {self.BAD_PROVIDER_CHANNEL}
+prefix = -
+help_prefix = -
+extra = {project_dir}
+enable =
+    {plugins_lines}
+
+[terraai]
+config_path = {tmp / "terra_ai.yaml"}
+"""
+        config_file = tmp / "sopel.cfg"
+        config_file.write_text(config_content)
+
+        # TerraAI yaml — valid key format but unreachable URL
+        terraai_yaml = tmp / "terra_ai.yaml"
+        terraai_yaml.write_text(f"""bot:
+  trigger_phrase: "TerraAI:"
+  bot_nick: "{self.BAD_PROVIDER_BOT_NICK}"
+provider:
+  name: openrouter
+  model: openrouter/owl-alpha
+  api_key: "sk-or-test-key-that-exists"
+  base_url: "http://127.0.0.1:1/nonexistent"
+sqlite_path: "{db_path}"
+default_optin: true
+""")
+
+        return config_file
+
+    @pytest.fixture(scope="session")
+    def sopel_bot_bad_provider(self, sopel_config_bad_provider):
+        """Start a SOPEL bot with a bad provider URL for error-path testing."""
+        import subprocess
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = os.environ.copy()
+        env["PYTHONPATH"] = project_dir
+        env.pop("OPENROUTER_API_KEY", None)
+
+        stdout_file = open(os.path.join(tempfile.gettempdir(), "sopel_errbot_stdout.log"), "w")
+        stderr_file = open(os.path.join(tempfile.gettempdir(), "sopel_errbot_stderr.log"), "w")
+        proc = subprocess.Popen(
+            ["sopel", "-c", str(sopel_config_bad_provider)],
+            stdout=stdout_file,
+            stderr=stderr_file,
+            stdin=subprocess.DEVNULL,
+            env=env,
+        )
+        time.sleep(self.BOT_STARTUP_WAIT)
+        yield proc
+        # Kill immediately — don't let SOPEL send QUIT to ergo, which can
+        # interfere with the main bot's connection.
+        proc.kill()
+        proc.wait(timeout=5)
+
+    def _read_irc_until(self, sock, predicate, timeout=None):
+        """Read lines from sock until predicate(line) returns True.
+        Returns list of all lines seen. Raises on timeout."""
+        import socket
+        timeout = timeout or self.IRC_TIMEOUT
+        deadline = time.time() + timeout
+        buf = b""
+        lines = []
+        while time.time() < deadline:
+            sock.settimeout(max(0.1, min(1.0, deadline - time.time())))
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            buf += chunk
+            while b"\r\n" in buf:
+                raw, buf = buf.split(b"\r\n", 1)
+                if not raw:
+                    continue
+                line = raw.decode(errors="replace")
+                lines.append(line)
+                if line.startswith("PING "):
+                    token = line.split(" ", 1)[1]
+                    sock.sendall(f"PONG {token}\r\n".encode())
+                if predicate(line):
+                    return lines
+        raise AssertionError(
+            "Timed out waiting for IRC condition. Lines seen:\n"
+            + "\n".join(lines)
+        )
 
     def _irc_connect(self, nick):
         """Connect to ergo plaintext and register. Returns socket."""
@@ -346,75 +458,27 @@ default_optin: true
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((self.ERGO_HOST, self.ERGO_PORT))
 
-        sock.sendall(f"NICK {nick}\r\n".encode())
-        sock.sendall(f"USER {nick} 0 * :TerraAI Test\r\n".encode())
+        # Send NICK/USER/CAP END defensively, then wait for 001
+        sock.sendall(
+            f"NICK {nick}\r\n"
+            f"USER {nick} 0 * :TerraAI Test\r\n"
+            f"CAP END\r\n".encode()
+        )
+        lines = self._read_irc_until(
+            sock,
+            lambda line: f" 001 {nick} " in line,
+        )
+        assert any(f" 001 {nick} " in line for line in lines), \
+            "Did not receive 001 RPL_WELCOME"
+        return sock
 
-        # Wait for 001
-        buf = b""
-        deadline = time.time() + self.IRC_TIMEOUT
-        while time.time() < deadline:
-            sock.settimeout(2)
-            try:
-                chunk = sock.recv(4096)
-            except OSError:
-                continue
-            if not chunk:
-                break
-            buf += chunk
-            for line in buf.split(b"\r\n"):
-                decoded = line.decode(errors="replace")
-                if " 001 " in decoded:
-                    return sock
-                if decoded.startswith("PING"):
-                    pong = decoded.replace("PING", "PONG", 1)
-                    sock.sendall(f"{pong}\r\n".encode())
-        raise AssertionError(f"Did not receive 001 from ergo for nick {nick}")
-
-    def _irc_join(self, sock, channel):
-        """Join a channel and wait for confirmation."""
+    def _irc_join(self, sock, nick, channel):
+        """Join a channel and wait for 366 end-of-NAMES."""
         sock.sendall(f"JOIN {channel}\r\n".encode())
-        # Read until we see the JOIN or NAMES
-        deadline = time.time() + self.IRC_TIMEOUT
-        buf = b""
-        while time.time() < deadline:
-            sock.settimeout(2)
-            try:
-                chunk = sock.recv(4096)
-            except OSError:
-                continue
-            if not chunk:
-                break
-            buf += chunk
-            for line in buf.split(b"\r\n"):
-                decoded = line.decode(errors="replace")
-                if f"JOIN {channel}" in decoded or ("353" in decoded and channel in decoded):
-                    return
-                if decoded.startswith("PING"):
-                    pong = decoded.replace("PING", "PONG", 1)
-                    sock.sendall(f"{pong}\r\n".encode())
-
-    def _irc_read_until(self, sock, predicate, timeout=10):
-        """Read from socket until predicate matches. Returns matching line or None."""
-        buf = b""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            sock.settimeout(2)
-            try:
-                chunk = sock.recv(4096)
-            except OSError:
-                continue
-            if not chunk:
-                break
-            buf += chunk
-            for line in buf.split(b"\r\n"):
-                decoded = line.decode(errors="replace")
-                if decoded.startswith("PING"):
-                    pong = decoded.replace("PING", "PONG", 1)
-                    sock.sendall(f"{pong}\r\n".encode())
-                    continue
-                if predicate(decoded):
-                    return decoded
-        return None
+        self._read_irc_until(
+            sock,
+            lambda line: f" 366 {nick} {channel} " in line,
+        )
 
     def _irc_quit(self, sock):
         """Send QUIT and close socket."""
@@ -434,30 +498,29 @@ default_optin: true
     def test_bot_joins_channel(self, sopel_bot_process):
         """Test that the bot joins the test channel."""
         sock = self._irc_connect("TestChecker")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(1)
+        self._irc_join(sock, "TestChecker", self.TEST_CHANNEL)
 
         # Request NAMES to verify bot is present
         sock.sendall(f"NAMES {self.TEST_CHANNEL}\r\n".encode())
-        names_line = self._irc_read_until(
+        names_lines = self._read_irc_until(
             sock,
             lambda line: "353" in line and self.TEST_CHANNEL in line,
             timeout=10
         )
-        assert names_line is not None, "Did not receive NAMES reply"
-        assert self.BOT_NICK in names_line, "TerraAI not in channel"
+        assert names_lines is not None, "Did not receive NAMES reply"
+        names_text = " ".join(names_lines)
+        assert self.BOT_NICK in names_text, f"{self.BOT_NICK} not in channel, got: {names_text}"
 
         self._irc_quit(sock)
 
     def test_bot_responds_to_help(self, sopel_bot_process):
         """Test that the bot responds to help command."""
         sock = self._irc_connect("TestHelp")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestHelp", self.TEST_CHANNEL)
 
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}help\r\n".encode())
 
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line and self.TEST_CHANNEL in line,
             timeout=15
@@ -469,14 +532,13 @@ default_optin: true
     def test_bot_responds_to_trigger(self, sopel_bot_process):
         """Test that the bot responds to TerraAI: trigger."""
         sock = self._irc_connect("TestTrigger")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestTrigger", self.TEST_CHANNEL)
 
         # Send trigger
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: hello\r\n".encode())
 
         # Look for a response from the bot (this will hit the real AI API)
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
             timeout=30
@@ -488,12 +550,11 @@ default_optin: true
     def test_bot_responds_to_unknown_command(self, sopel_bot_process):
         """Test that unknown commands are routed to AI and get a response."""
         sock = self._irc_connect("TestUnknown")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestUnknown", self.TEST_CHANNEL)
 
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}what is 2+2\r\n".encode())
 
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
             timeout=30
@@ -505,8 +566,7 @@ default_optin: true
     def test_bot_ignores_regular_messages(self, sopel_bot_process):
         """Test that regular messages (no trigger, no .command) are ignored."""
         sock = self._irc_connect("TestIgnore")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestIgnore", self.TEST_CHANNEL)
 
         # Send a regular message — should be ignored
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :just regular chatter\r\n".encode())
@@ -516,7 +576,7 @@ default_optin: true
         time.sleep(3)
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}help\r\n".encode())
 
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
             timeout=15
@@ -528,14 +588,13 @@ default_optin: true
     def test_bot_noisy_toggle(self, sopel_bot_process):
         """Test that .noisy toggles status notices."""
         sock = self._irc_connect("TestNoisy")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestNoisy", self.TEST_CHANNEL)
 
         # Toggle noisy ON
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}noisy\r\n".encode())
 
         # Should see a notice about noisy mode
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "Noisy" in line,
             timeout=10
@@ -547,12 +606,11 @@ default_optin: true
     def test_bot_optin_optout(self, sopel_bot_process):
         """Test that .optout prevents responses and .optin re-enables."""
         sock = self._irc_connect("TestOptInOut")
-        self._irc_join(sock, self.TEST_CHANNEL)
-        time.sleep(2)
+        self._irc_join(sock, "TestOptInOut", self.TEST_CHANNEL)
 
         # Opt out
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}optout\r\n".encode())
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "opted out" in line,
             timeout=10
@@ -566,11 +624,36 @@ default_optin: true
 
         # Opt back in
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}optin\r\n".encode())
-        response = self._irc_read_until(
+        response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "opted in" in line,
             timeout=10
         )
         assert response is not None, "Bot did not confirm opt-in"
+
+        self._irc_quit(sock)
+
+    def test_bot_reports_error_on_ai_failure(self, sopel_bot_bad_provider):
+        """Bot MUST send an error message to IRC when the AI provider fails.
+
+        Provider URL is unreachable, so the HTTP call errors. The bot must
+        respond with 'Error:' — never stay silent.
+        """
+        sock = self._irc_connect("TestBadProv")
+        self._irc_join(sock, "TestBadProv", self.BAD_PROVIDER_CHANNEL)
+
+        # Send a trigger — this will attempt an AI call that fails (connection error)
+        sock.sendall(f"PRIVMSG {self.BAD_PROVIDER_CHANNEL} :{self.BAD_PROVIDER_BOT_NICK}: hello\r\n".encode())
+
+        # Read until we see the bot respond with an error
+        all_lines = self._read_irc_until(
+            sock,
+            lambda line: self.BAD_PROVIDER_BOT_NICK in line and "PRIVMSG" in line,
+            timeout=35,
+        )
+        assert all_lines is not None, "Bot stayed silent when AI provider failed — must send error message"
+        full_text = "\n".join(all_lines)
+        assert "Error:" in full_text, \
+            f"Bot response should contain 'Error:', got:\n{full_text}"
 
         self._irc_quit(sock)

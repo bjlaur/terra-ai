@@ -5,8 +5,11 @@ Falls back to a simple web scrape if no instant answer is available.
 """
 
 import json
+import logging
 
 import httpx
+
+logger = logging.getLogger("terraai")
 
 
 def web_search(query: str) -> str:
@@ -45,4 +48,5 @@ def web_search(query: str) -> str:
         return "No results found."
 
     except Exception as e:
-        return f"Search failed: {e}"
+        logger.error("Web search failed for %r: %s", query, e)
+        return f"Error: Search failed: {e}"
