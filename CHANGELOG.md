@@ -69,6 +69,16 @@
 - New tests: test_async_ai_call (real API), test_interactive_accepts_pm, test_interactive_noisy_notice, test_pm_direct_message, test_pm_setlocation_forwards_to_ai, test_interactive_empty_input, test_interactive_ctrl_d_exits, test_interactive_history_navigation
 - `docs/misc/claude-didn't-listen.md` — report on async testing gap
 
+#### Cleanup (OWL)
+- Deleted `handle_management()` routing layer from `bot.py` — plugin command handlers now call `user.*`/`management.*` handlers directly
+- Renamed `AdminCommands` → `ManagementCommands` (file: `commands/admin.py` → `commands/management.py`)
+- Removed dead code: `is_management_command()`, `match_prompt()`, `handle_setlocation()`, `handle_ai()`, `MANAGEMENT_COMMANDS` set
+- Removed unused `text` param from `TerraAI.should_respond()`
+- Test tool now calls real plugin handlers via `getattr(terra_plugin, f"cmd_{name}")` dispatch — no duplicated routing
+- Test tool reads `trigger_char`/`botnick` from config instead of hardcoding
+- Admin gating switched from config-driven `admin_nicks` list to SOPEL's `trigger.admin` / `@plugin.require_admin` — `.compact` uses the decorator; `.optout <nick>` checks `trigger.admin` in the handler
+- Removed `TerraAI.is_admin()` and `admin_nicks` from config schema
+
 #### Bug Fixes
 - `.effort` no response — added "effort" to MANAGEMENT_COMMANDS set
 - `.setlocation` (no args) — now correctly forwards to AI instead of erroring

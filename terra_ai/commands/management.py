@@ -1,10 +1,10 @@
-"""Admin commands for TerraAI."""
+"""Management commands for TerraAI."""
 
 from terra_ai.database import Database
 from terra_ai.prompts.manager import PromptManager
 
 
-class AdminCommands:
+class ManagementCommands:
     """Management commands that never reach the AI."""
 
     def __init__(self, db: Database, prompts: PromptManager):

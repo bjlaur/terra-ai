@@ -14,6 +14,7 @@ import time
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
 from terra_ai.config import TerraConfig
 from terra_ai.database import Database, DBConfig
@@ -22,14 +23,33 @@ from terra_ai.database import Database, DBConfig
 class FakeTrigger:
     """Mimics a SOPEL trigger object."""
 
-    def __init__(self, nick, channel, text, is_pm=False):
+    def __init__(self, nick, channel, text, is_pm=False, admin=False):
         self.nick = nick
         # For PMs, sender is the nick; for channel messages, sender is the channel
         self.sender = nick if is_pm else channel
-        self.group = lambda x: None
         self.match = None
         self.text = text
         self.is_pm = is_pm
+        self.admin = admin
+        # For @plugin.command() handlers: group(1) = command name, group(2) = args
+        # We parse them from text so handlers can read trigger.group(2)
+        self._text = text
+
+    def group(self, num):
+        """Return trigger group. group(1) = command word, group(2) = args."""
+        if num == 0:
+            return self._text
+        text = self._text
+        if text.startswith("."):
+            text = text[1:]
+        elif text.startswith("-"):
+            text = text[1:]
+        parts = text.split(None, 1)
+        if num == 1:
+            return parts[0] if parts else ""
+        if num == 2:
+            return parts[1] if len(parts) > 1 else ""
+        return None
 
 
 class FakeBot:
@@ -43,6 +63,8 @@ class FakeBot:
     def __init__(self):
         self.messages = []  # say() calls — channel messages
         self.notices = []   # notice() calls — PM responses
+        # Minimal isupport for _server_name(bot)
+        self.isupport = {"NETWORK": "test-network"}
 
     def say(self, msg):
         self.messages.append(msg)
@@ -65,7 +87,7 @@ class TerraAITestClient:
         self._load_env()
         self.config = self._load_config(config_path)
         self.terra = TerraAI(self.config)
-        self.server = "test-server"
+        self.server = "test-network"  # Matches FakeBot.isupport["NETWORK"]
         self.channel = "#terra-ai"
         self.nick = "tester"
         self.bot = FakeBot()
@@ -101,74 +123,48 @@ class TerraAITestClient:
     def send_message(self, text: str) -> list[str]:
         """Send a message as the test user and return bot responses.
 
-        Mimics real IRC bot routing:
-        - Management commands (.) are handled locally
-        - .ai <prompt> sends to AI without history
-        - Trigger phrase (TerraAI:) sends to AI with history
-        - Everything else is ignored (bot doesn't respond to regular chat)
+        Calls the real plugin.py handler functions directly via getattr dispatch.
+        No routing logic here — just like SOPEL, we look up cmd_<name> by convention.
 
         NOTE: opt-in/opt-out gating (should_respond) is core bot
         functionality in plugin.py — NOT tested here. This method
-        just routes messages the same way regardless of opt-in status.
+        calls handlers regardless of opt-in status.
         """
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
-        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "")
         trigger_char = self.terra.prompts.trigger_char if self.terra.prompts else ""
+        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "")
 
         # Send "Thinking..." notice to noisy users before AI calls
-        # (matches plugin.py behavior: bot.notice(nick, "Thinking..."))
         def notify_thinking():
             if self.terra.user.is_noisy(self.server, self.nick):
                 self.bot.notice(self.nick, "Thinking...")
 
-        # .ai command — context-free (checked first because .ai is in the
-        # management command list but handle_management returns None for it)
-        if text.startswith(f"{trigger_char}ai "):
-            ai_text = text[len(trigger_char) + 3:]
-            notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, self.channel, self.nick, ai_text, include_history=False
-            )
-            self.bot.say(response)
-            return list(self.bot.messages)
-
-        # Check management commands (.optin, .optout, .help, etc.)
-        if self.terra.is_management_command(text):
-            response = self.terra.handle_management(self.server, self.channel, self.nick, text)
-            if response:
-                self.bot.say(response)
-            elif text.lower().startswith(f"{trigger_char}setlocation"):
-                # Hybrid command: stored locally, now forward to AI for response
-                ai_text = f"{self.nick} {text}"
-                ai_response = self.terra.handle_ai_message(
-                    self.server, self.channel, self.nick, ai_text, include_history=True
-                )
-                if ai_response:
-                    self.bot.say(ai_response)
-            return list(self.bot.messages)
-
-        # Trigger phrase — route to AI with history
-        if text.lower().startswith(trigger_phrase.lower()):
-            ai_text = text[len(trigger_phrase):].strip()
-            notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, self.channel, self.nick, ai_text, include_history=True
-            )
-            if response:
-                self.bot.say(response)
-            return list(self.bot.messages)
-
-        # Unknown .command — forward to AI (matches plugin.py behavior:
-        # anything starting with . that isn't a management command goes to AI)
+        # Determine the command word (if any)
+        cmd_word = ""
         if text.startswith(trigger_char):
-            full_text = text[len(trigger_char):].strip()
+            cmd_word = text[len(trigger_char):].split()[0].lower() if text[len(trigger_char):].strip() else ""
+
+        # Try to find a registered command handler: cmd_<name>
+        if cmd_word:
+            handler = getattr(terra_plugin, f"cmd_{cmd_word}", None)
+            if handler:
+                notify_thinking()
+                handler(self.bot, trigger)
+                return list(self.bot.messages)
+            else:
+                # Unknown .command → forward to addressed_freeform
+                full_text = text[len(trigger_char):].strip()
+                trigger.group = lambda n: full_text if n == 1 else None
+                notify_thinking()
+                terra_plugin.addressed_freeform(self.bot, trigger)
+                return list(self.bot.messages)
+
+        # Trigger phrase → addressed_freeform ($nick (.+) rule)
+        if text.lower().startswith(trigger_phrase.lower()):
             notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, self.channel, self.nick, full_text, include_history=True
-            )
-            if response:
-                self.bot.say(response)
+            trigger.group = lambda n: text[len(trigger_phrase):].strip() if n == 1 else None
+            terra_plugin.addressed_freeform(self.bot, trigger)
             return list(self.bot.messages)
 
         # Regular message — ignore (real bot only responds to trigger phrase)
@@ -188,8 +184,7 @@ class TerraAITestClient:
 
         Unlike channel messages, PMs don't need a trigger phrase — everything
         in a PM is already addressed to the bot. Routing:
-        - Management commands (.) handled locally
-        - Unknown .commands forwarded to AI
+        - Management commands (.) handled locally via cmd_<name>
         - Everything else → AI with history (it's a direct message)
 
         Returns {"say": [...], "notice": [...]} with responses and notices.
@@ -203,44 +198,16 @@ class TerraAITestClient:
             if self.terra.user.is_noisy(self.server, nick):
                 self.bot.notice(nick, "Thinking...")
 
-        # .ai command — context-free (checked first)
-        if text.startswith(".ai "):
-            ai_text = text[4:]
-            notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, nick, nick, ai_text, include_history=False
-            )
-            if response:
-                self.bot.say(response)
-            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
-
-        # Check management commands
-        if self.terra.is_management_command(text):
-            response = self.terra.handle_management(self.server, nick, nick, text)
-            if response:
-                self.bot.say(response)
-            elif text.lower().startswith(".setlocation"):
-                ai_text = f"{nick} {text}"
+        # Check for command dispatch (cmd_<name>)
+        cmd_word = text.split()[0].lstrip(".-") if text.split() else ""
+        if cmd_word:
+            handler = getattr(terra_plugin, f"cmd_{cmd_word}", None)
+            if handler:
                 notify_thinking()
-                ai_response = self.terra.handle_ai_message(
-                    self.server, nick, nick, ai_text, include_history=True
-                )
-                if ai_response:
-                    self.bot.say(ai_response)
-            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+                handler(self.bot, trigger)
+                return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
-        # Unknown .command — forward to AI
-        if text.startswith("."):
-            full_text = text[1:].strip()
-            notify_thinking()
-            response = self.terra.handle_ai_message(
-                self.server, nick, nick, full_text, include_history=True
-            )
-            if response:
-                self.bot.say(response)
-            return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
-
-        # Direct message (no trigger phrase needed in PMs) — AI with history
+        # Not a command — route to AI with history (it's a direct message)
         notify_thinking()
         response = self.terra.handle_ai_message(
             self.server, nick, nick, text, include_history=True
@@ -299,8 +266,9 @@ def run_interactive():
                 max_lines = max(height - 3, 1)
                 visible = messages[-max_lines:]
                 chat.clear()
+                bot_prefix = f"<{botnick}>"
                 for i, msg in enumerate(visible):
-                    if msg.startswith("<TerraAI>"):
+                    if msg.startswith(bot_prefix):
                         chat.addstr(i, 0, msg, curses.color_pair(1))
                     else:
                         chat.addstr(i, 0, msg)

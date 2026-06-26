@@ -46,17 +46,22 @@ Only pending/unfinished work stays in the active sections below.
 - [x] HARD RULES 14+15 fix: removed all hardcoded "TerraAI" nicks and "." prefixes from logic code
 
 ### In Progress
-- [ ] Rework plan — `docs/release-0.0.2/rework-plan.md`
-  - Extract `dispatch()` into `bot.py`
-  - Slim `plugin.py` to thin wrapper
-  - Test tool calls `dispatch()` directly
-  - Remove MANAGEMENT_COMMANDS set
-  - **Status:** Drafted, not started — awaiting merge
 - [ ] Fix test_interactive_noisy_notice — AI not responding in test harness (works live)
 
 ### Pending (0.0.2)
 - [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)
-- [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts, match_prompt) — needs discussion
+- [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts) — needs discussion (separate task after cleanup)
+
+### Done (this session)
+- [x] SOPEL-native cleanup: deleted `handle_management()` routing layer, plugin commands call `user.*`/`management.*` directly
+- [x] Renamed `AdminCommands` → `ManagementCommands` (file + class)
+- [x] Removed dead code: `is_management_command()`, `match_prompt()`, `handle_setlocation()`, `handle_ai()`, `MANAGEMENT_COMMANDS` set
+- [x] Removed unused `text` param from `should_respond()`
+- [x] Test tool calls real plugin handlers via `getattr(terra_plugin, f"cmd_{name}")` dispatch
+- [x] Test tool reads config for trigger_char/botnick instead of hardcoding
+- [x] Updated tests to call handlers directly (no more `handle_management()`)
+- [x] Admin gating switched to SOPEL's `trigger.admin` / `@plugin.require_admin`
+- [x] Removed `TerraAI.is_admin()` and `admin_nicks` from config schema
 
 ### Manual testing needed
 - See `docs/release-0.0.2/testing-agent2-v2.md` — human needs to mark [x] in "Mine" column

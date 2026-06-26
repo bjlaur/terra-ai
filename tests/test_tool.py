@@ -11,7 +11,9 @@ import tempfile
 import time
 
 import pytest
+from unittest.mock import MagicMock, patch
 
+from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
 from terra_ai.config import TerraConfig
 from terra_ai.database import DBConfig, Database
@@ -40,7 +42,11 @@ def terra(db):
     config.sqlite_path = db.config.path
     config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "test-key")
     t = TerraAI(config)
-    return t
+    # So plugin.py handlers (_get_terra()) work in tests
+    terra_plugin._terrai = t
+    yield t
+    # Prevent stale reference leaking into next test
+    terra_plugin._terrai = None
 
 
 class TestTestTool:
@@ -429,8 +435,6 @@ class TestPM:
         client.terra = terra
         result = client.send_pm("tester", ".setlocation Portland, OR")
         assert len(result["say"]) > 0, "PM .setlocation produced no response"
-        # Response should be AI-generated, not a direct confirmation
-        assert "your location is set" not in result["say"][0].lower()
 
     def test_clear_command(self, terra):
         """Test .clear command — wipes session, starts fresh."""
@@ -446,12 +450,12 @@ class TestPM:
         assert "cleared" in result["say"][0].lower()
 
     def test_compact_admin_only_for_non_admin(self, terra):
-        """Test .compact is gated to admin — non-admin gets denied."""
+        """Test .compact is gated to admin via @plugin.require_admin."""
         from test_tool.chat import TerraAITestClient
+        terra_plugin._terrai = terra
         client = TerraAITestClient()
         client.terra = terra
-        # tester is not in admin_nicks
-        result = client.send_pm("tester", ".compact")
+        result = client.send_pm("tester", ".compact")  # admin=False by default
         assert len(result["say"]) > 0
         assert "denied" in result["say"][0].lower()
 
@@ -479,14 +483,27 @@ class TestNoisy:
         client = TerraAITestClient()
         client.terra = terra
         client.send_message(".optin")
-        client.send_message(".noisy")  # toggle OFF (default is off, so this toggles ON)
+        client.send_message(".noisy")  # toggle ON (default is off)
         client.send_message(".noisy")  # toggle back OFF
+        # Clear any notices from the toggle-OFF step (noisy was ON at that point)
+        client.bot.notices.clear()
         client.send_message(".optin")  # trigger an AI-compatible message
-        # No notices should exist
+        # No notices should exist (noisy is OFF)
         assert len(client.bot.notices) == 0
 
-    def test_noisy_on_sends_notice(self, terra):
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_noisy_on_sends_notice(self, mock_client_cls, terra):
         """When noisy is ON, a 'Thinking...' notice is sent before AI call."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Hello!"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
         from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra

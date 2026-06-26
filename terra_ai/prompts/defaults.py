@@ -42,12 +42,6 @@ If you get a prompt without a <nick> in front of it, that means it's an "admin" 
 
 IRC has a character limit. You will follow that limit. Give concise and truthful answers. Don't omit important details for the sake of following the character limit."""
 
-# Management commands that never go to AI
-MANAGEMENT_COMMANDS = {
-    "optin", "optout", "noisy", "addprompt", "rmprompt",
-    "listprompts", "compact", "clear", "ai", "stats", "help", "setlocation", "effort",
-}
-
 # Effort levels
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 DEFAULT_EFFORT = "high"

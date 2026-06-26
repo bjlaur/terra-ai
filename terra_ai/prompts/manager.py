@@ -1,13 +1,10 @@
 """Prompt manager for TerraAI."""
 
-import re
-
 from terra_ai.database import Database, PromptStore
 from terra_ai.prompts.defaults import (
     DEFAULT_EFFORT,
     EFFORT_LEVELS,
     FAKE_CONVERSATION,
-    MANAGEMENT_COMMANDS,
     SYSTEM_PROMPT_TEMPLATE,
 )
 
@@ -37,15 +34,6 @@ class PromptManager:
             return True
         return False
 
-    def is_management_command(self, text: str) -> bool:
-        """Check if text starts with a management command trigger."""
-        if not text.startswith(self._trigger_char):
-            return False
-        # Extract the command word after the trigger
-        rest = text[len(self._trigger_char):].strip()
-        command = rest.split()[0].lower() if rest else ""
-        return command in MANAGEMENT_COMMANDS
-
     def get_system_prompt(self) -> str:
         """Get the system prompt with variables interpolated."""
         botnick = self._config.bot.get("bot_nick", "") if self._config else ""
@@ -67,21 +55,6 @@ class PromptManager:
                 "source": "system",
             })
         return seed
-
-    def match_prompt(self, server: str, text: str) -> str | None:
-        """Try to match text against custom prompts.
-
-        Returns the stored response if matched, None otherwise.
-        """
-        if not text.startswith(self._trigger_char):
-            return None
-        rest = text[len(self._trigger_char):].strip()
-        trigger = rest.split()[0].lower() if rest else ""
-
-        prompt = self.store.get(server, f"{self._trigger_char}{trigger}")
-        if prompt:
-            return prompt["response"]
-        return None
 
     def add_prompt(self, server: str, trigger: str, response: str,
                    created_by: str | None = None) -> bool:

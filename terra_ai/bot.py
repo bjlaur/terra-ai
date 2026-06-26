@@ -3,7 +3,7 @@
 import logging
 import time
 
-from terra_ai.commands.admin import AdminCommands
+from terra_ai.commands.management import ManagementCommands
 from terra_ai.commands.user import UserCommands
 from terra_ai.config import TerraConfig
 from terra_ai.context.manager import ContextManager
@@ -29,7 +29,7 @@ class TerraAI:
         trigger_char = config.bot.get("trigger_char", ".") if config else "."
         self.prompts = PromptManager(self.db, trigger_char=trigger_char, config=config)
         self.context = ContextManager(self.db, self.prompts)
-        self.admin = AdminCommands(self.db, self.prompts)
+        self.management = ManagementCommands(self.db, self.prompts)
         self.user = UserCommands(self.db, self.prompts)
 
         # Set up provider
@@ -42,10 +42,6 @@ class TerraAI:
         self.registry = ProviderRegistry(provider)
         self._effort = config.bot.get("effort", "high")
 
-    def is_admin(self, nick: str) -> bool:
-        """Check if a nick is in the admin list."""
-        return nick in self.config.admin_nicks
-
     def is_opted_in(self, server: str, nick: str) -> bool:
         """Check if user is opted in. Defaults to True if user not in DB."""
         row = self.db.conn.execute(
@@ -56,7 +52,7 @@ class TerraAI:
             return True  # Default: opted in
         return bool(row["opted_in"])
 
-    def should_respond(self, server: str, nick: str, text: str) -> bool:
+    def should_respond(self, server: str, nick: str) -> bool:
         """Check if the bot should respond to this message."""
         if not self.is_opted_in(server, nick):
             return False
@@ -64,56 +60,6 @@ class TerraAI:
         if nick == self.config.bot.get("bot_nick", ""):
             return False
         return True
-
-    def is_management_command(self, text: str) -> bool:
-        """Check if text is a management command."""
-        return self.prompts.is_management_command(text)
-
-    def handle_management(self, server: str, channel: str, nick: str,
-                          text: str) -> str | None:
-        """Handle management commands. Returns response or None."""
-        # Extract command
-        parts = text.strip().split(None, 1)
-        if not parts:
-            return None
-
-        command = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
-
-        # Admin commands
-        if command == ".listprompts":
-            return self.admin.handle_listprompts(server, nick)
-        elif command == ".rmprompt":
-            return self.admin.handle_rmprompt(server, nick, args)
-        elif command == ".addprompt":
-            return self.admin.handle_addprompt(server, nick, args)
-        elif command == ".compact":
-            if not self.is_admin(nick):
-                return "Permission denied. .compact is admin-only."
-            return self.admin.handle_compact(server, channel, nick)
-        elif command == ".clear":
-            return self.admin.handle_clear(server, channel)
-        elif command == ".stats":
-            return self.admin.handle_stats(server, channel)
-        elif command == ".help":
-            return self.admin.handle_help()
-
-        # User commands
-        elif command == ".optin":
-            return self.user.handle_optin(server, nick)
-        elif command == ".optout":
-            return self.user.handle_optout(server, nick, args, self.config.admin_nicks)
-        elif command == ".noisy":
-            return self.user.handle_noisy(server, nick)
-        elif command == ".setlocation":
-            return self.user.handle_setlocation(server, channel, nick, args)
-        elif command == ".ai":
-            # .ai is special — it goes to AI without history
-            return None  # Let the AI handler deal with it
-        elif command == ".effort":
-            return self.user.handle_effort(args)
-
-        return None
 
     def handle_ai_message(self, server: str, channel: str, nick: str,
                           text: str, include_history: bool = True) -> str:
@@ -161,10 +107,3 @@ class TerraAI:
         except Exception as e:
             logger.error(f"AI call failed: {e}")
             return f"Error: {e}"
-
-    def handle_setlocation(self, server: str, channel: str, nick: str,
-                           location: str) -> None:
-        """Save location as system message in history."""
-        self.context.save_system_message(
-            server, channel, nick, f"{nick}'s location is {location}"
-        )

@@ -32,11 +32,6 @@ def terra(db):
 
 
 class TestTerraAI:
-    def test_is_admin(self, terra):
-        terra.config.admin_nicks = ["admin"]
-        assert terra.is_admin("admin") is True
-        assert terra.is_admin("user") is False
-
     def test_is_opted_in_default(self, terra):
         assert terra.is_opted_in("irc.example.com", "newuser") is True
 
@@ -46,23 +41,19 @@ class TestTerraAI:
 
     def test_should_respond_opted_out(self, terra):
         terra.user.handle_optout("irc.example.com", "nick")
-        assert terra.should_respond("irc.example.com", "nick", "hello") is False
+        assert terra.should_respond("irc.example.com", "nick") is False
 
     def test_should_respond_opted_in(self, terra):
-        assert terra.should_respond("irc.example.com", "nick", "hello") is True
+        assert terra.should_respond("irc.example.com", "nick") is True
 
     def test_should_respond_self(self, terra):
         # Without config setting bot_nick, self-nick is "" so any nick matches nothing
         botnick = terra.config.bot.get("bot_nick", "")
         if botnick:
-            assert terra.should_respond("irc.example.com", botnick, "hello") is False
+            assert terra.should_respond("irc.example.com", botnick) is False
         else:
             # Self-check disabled when bot_nick not configured
-            assert terra.should_respond("irc.example.com", "anyone", "hello") is True
-
-    def test_is_management_command(self, terra):
-        assert terra.is_management_command(".optin") is True
-        assert terra.is_management_command(".wea") is False
+            assert terra.should_respond("irc.example.com", "anyone") is True
 
     @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_handle_ai_message(self, mock_client_cls, terra):
@@ -79,19 +70,13 @@ class TestTerraAI:
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
 
-    def test_handle_management_optin(self, terra):
-        result = terra.handle_management("irc.example.com", "#chan", "nick", ".optin")
+    def test_handle_optin(self, terra):
+        result = terra.user.handle_optin("irc.example.com", "nick")
         assert "opted in" in result
 
-    def test_handle_management_optout(self, terra):
-        result = terra.handle_management("irc.example.com", "#chan", "nick", ".optout")
+    def test_handle_optout(self, terra):
+        result = terra.user.handle_optout("irc.example.com", "nick")
         assert "opted out" in result
-
-    def test_handle_management_setlocation(self, terra):
-        # .setlocation uses hybrid routing: handle_management returns None
-        # as a signal that the caller should forward to AI for the response
-        result = terra.handle_management("irc.example.com", "#chan", "nick", ".setlocation chicago, il")
-        assert result is None
 
 
 class TestPluginRules:
@@ -116,20 +101,20 @@ class TestPluginRules:
             "plugin.cmd_help must be callable"
 
 
-class TestAdminCommands:
+class TestManagementCommands:
     def test_add_and_list_prompts(self, terra):
-        terra.admin.handle_addprompt("irc.example.com", "nick", ".wea sunny")
-        result = terra.admin.handle_listprompts("irc.example.com", "nick")
+        terra.management.handle_addprompt("irc.example.com", "nick", ".wea sunny")
+        result = terra.management.handle_listprompts("irc.example.com", "nick")
         assert ".wea" in result
         assert "sunny" in result
 
     def test_rmprompt(self, terra):
-        terra.admin.handle_addprompt("irc.example.com", "nick", ".wea sunny")
-        result = terra.admin.handle_rmprompt("irc.example.com", "nick", "1")
+        terra.management.handle_addprompt("irc.example.com", "nick", ".wea sunny")
+        result = terra.management.handle_rmprompt("irc.example.com", "nick", "1")
         assert "Removed" in result
 
     def test_help(self, terra):
-        result = terra.admin.handle_help()
+        result = terra.management.handle_help()
         assert ".optin" in result
         assert ".ai" in result
 

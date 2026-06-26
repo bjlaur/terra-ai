@@ -31,14 +31,6 @@ def context(db, prompts):
 
 
 class TestPromptManager:
-    def test_is_management_command(self, prompts):
-        assert prompts.is_management_command(".optin") is True
-        assert prompts.is_management_command(".optout") is True
-        assert prompts.is_management_command(".ai hello") is True
-        assert prompts.is_management_command(".help") is True
-        assert prompts.is_management_command(".wea") is False
-        assert prompts.is_management_command("hello") is False
-
     def test_get_system_prompt(self, prompts):
         sp = prompts.get_system_prompt()
         # With no config, botnick defaults to "" so no name appears
@@ -50,19 +42,9 @@ class TestPromptManager:
         assert seed[0]["role"] == "user"
         assert seed[0]["source"] == "system"
 
-    def test_add_and_match_prompt(self, prompts):
+    def test_add_and_remove_prompt(self, prompts):
         prompts.add_prompt("irc.example.com", ".wea", "sunny", "admin")
-        result = prompts.match_prompt("irc.example.com", ".wea")
-        assert result == "sunny"
-
-    def test_match_prompt_not_found(self, prompts):
-        result = prompts.match_prompt("irc.example.com", ".unknown")
-        assert result is None
-
-    def test_remove_prompt(self, prompts):
-        prompts.add_prompt("irc.example.com", ".wea", "sunny")
         assert prompts.remove_prompt("irc.example.com", ".wea") is True
-        assert prompts.match_prompt("irc.example.com", ".wea") is None
 
     def test_list_prompts(self, prompts):
         prompts.add_prompt("irc.example.com", ".wea", "sunny")

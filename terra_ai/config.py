@@ -21,7 +21,6 @@ class TerraConfig:
     bot: dict = field(default_factory=dict)
     provider: ProviderConfig = field(default_factory=ProviderConfig)
     sqlite_path: str = "data/terraai.db"
-    admin_nicks: list[str] = field(default_factory=list)
     default_optin: bool = True
     rate_limit_enabled: bool = False
     rate_limit_messages: int = 5
