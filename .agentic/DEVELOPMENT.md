@@ -17,7 +17,7 @@
 9. **ALWAYS `pwd && git remote -v` before any git command.**
 10. **Runtime files in `data/`**, configs committed only as `.example`.
 11. **Test for everything.** Don't ask the user to manually verify something that hasn't already passed its own test. Write a test first, then implement. Only skip tests with a very good reason.
-12. **All tests that hit AI MUST use real APIs.** No mocking of AI provider calls. If the test needs AI, it calls the real API. Set the required API key in `.env` (gitignored). If the API key is not set, the test fails (no skip).
+12. **All tests that hit AI MUST use real APIs.** No mocking of AI provider calls. If the test needs AI, it calls the real API. Set the required API key in `.env` (gitignored). If the API key is not set, the test fails. Routing tests are **mocked by default** for speed (~0.01s each) — they test routing logic, not AI quality. Mark them with `@pytest.mark.real` and run with `--real` (requires `source ~/.terra-ai/.env`) to verify against the real API. **You MUST run `--real` when you've created new functionality.** Mock-only is for regression runs, not for validating new code.
 13. **Write a report if you make a mistake.** If you make an avoidable mistake (didn't read docs, didn't follow instructions, used the wrong repo, etc.), write a report in `docs/misc/claude-didn't-listen.md` immediately. See that file for the format.
 14. **NEVER hardcode the bot nick.** Always read it from SOPEL config (`bot.settings.core.nick`) or from the TerraAI config (`config.bot["bot_nick"]`). The string "TerraAI" must never appear in test IRC messages, assertions, or handler logic.
 15. **NEVER hardcode the command prefix.** Always read it from SOPEL config (`bot.settings.core.prefix` / `help_prefix`). The characters `-` and `.` must never appear as hardcoded prefixes in test IRC messages, assertions, or handler logic. Use a variable that references the config value.
@@ -37,7 +37,17 @@ python -m py_compile terraai/<file>.py
 
 Run full test suite:
 ```bash
+# Default (mock, fast)
 pytest tests/
+
+# Real API (requires sourced env + marker)
+source ~/.terra-ai/.env && pytest --real -m real
+
+# Slow tests
+pytest -m slow
+
+# Everything (all markers)
+pytest -m ""
 ```
 
 ## Release Process
@@ -65,4 +75,5 @@ pytest tests/
 - **Database:** `terraai/database.py` — 7 tables, WAL mode, `check_same_thread=False` for async
 - **Context:** `terraai/context/` — history assembly, session_id, compactions
 - **Test tool:** `test_tool/chat.py` — duplicates routing (rework plan will use single dispatch)
+- **Test fixtures:** `tests/conftest.py` — `db` and `terra` fixtures live here (not inline in test files); also manages the mock/real provider switching via the `--real` flag
 - **Rework plan:** `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture (drafted, not started)

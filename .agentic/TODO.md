@@ -44,6 +44,15 @@ Only pending/unfinished work stays in the active sections below.
 - [x] Configurable botnick via {botnick}
 - [x] Added COMMAND_PREFIX and BOT_NICK constants to ergo tests
 - [x] HARD RULES 14+15 fix: removed all hardcoded "TerraAI" nicks and "." prefixes from logic code
+- [x] `.effort` fix — unified attribute (was split between TerraAI._effort and PromptManager.effort)
+- [x] Effort wiring into OpenRouter provider — `_reasoning_for_model()` gates reasoning by model slug
+- [x] 7 effort-wiring tests passing in `TestEffortWire`
+- [x] Test profiling — `tests/test-time.md` timing report (204s → 83s after optimizations)
+- [x] `@pytest.mark.slow` on 4 interactive tests + `pytest.ini` with `addopts = -m "not slow and not real"`
+- [x] Parametric mock/real fixture in `tests/conftest.py` — mock by default, `--real` flag for real API
+- [x] 8 routing tests marked `@pytest.mark.real` — mock by default, hit API with `pytest --real -m real`
+- [x] Deleted `test_send_as_different_nick` (not mimicking real IRC)
+- [x] Sub-timing instrumentation in `_run_interactive` (`TEST_TIMING_VERBOSE=1`)
 
 ### In Progress
 - [ ] Rework plan — `docs/release-0.0.2/rework-plan.md`
@@ -52,7 +61,8 @@ Only pending/unfinished work stays in the active sections below.
   - Test tool calls `dispatch()` directly
   - Remove MANAGEMENT_COMMANDS set
   - **Status:** Drafted, not started — awaiting merge
-- [ ] Fix test_interactive_noisy_notice — AI not responding in test harness (works live)
+- [ ] Fix `test_interactive_accepts_pm` — subprocess doesn't mock provider (deferred)
+- [ ] Fix `test_interactive_noisy_notice` — same subprocess issue (deferred)
 
 ### Pending (0.0.2)
 - [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)

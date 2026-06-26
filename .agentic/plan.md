@@ -25,13 +25,13 @@ Class / module name: **TerraAI**
 - **Python:** 3.14.6 system-wide. **Do not `pip install` into system Python.** Dependencies managed via `Containerfile` for deployment. If a dep is missing locally, tell the user — do not install.
 - **SOPEL:** Only available in AUR (chaotic-aur). Will be built from `yay` as the first container build step.
 - **AUR:** chaotic-aur is configured and available.
-- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`.
+- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`, `agent1/test-profiling` (current active).
 - **Agent name:** OWL
 - **Container user:** `terra-ai` (UID 1000, non-root, with NOPASSWD sudo for initial yay build, then NOPASSWD removed)
 
 ### 1.2 Adopted Conventions (from /mnt/jbrowse project)
 
-1. Config example committed (`terraai.yaml.example`); real `config/terraai.yaml` and `data/` are gitignored.
+1. Config example committed (`terra_ai.yaml.example`); real `config/terra_ai.yaml` and `data/` are gitignored.
    - Release branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`.
 2. Runtime state lives in `data/`.
 3. Commit messages: ~8 words, imperative mood, no body unless needed.
@@ -46,14 +46,13 @@ Class / module name: **TerraAI**
 
 ## 2. Project Structure
 
---doesn't have where we moved stuff to .agentic
-
 ```
 terra-ai/
 ├── plan.md                                   # This file
+├── pytest.ini                                # Pytest configuration
 ├── config/
-│   ├── terraai.yaml.example                  # Safe example config (no real API keys)
-│   └── terraai-test.yaml.example             # Test config (ergo server, test channel)
+│   ├── terra_ai.yaml.example                 # Safe example config (no real API keys)
+│   └── terra_ai-test.yaml.example            # Test config (ergo server, test channel)
 ├── terra_ai/
 │   ├── __init__.py                           # Plugin metadata + version
 │   ├── bot.py                                # SOPEL plugin: decorators, command routing
@@ -81,9 +80,10 @@ terra-ai/
 │   │   └── user.py                           # .optin, .optout, .ai
 │   └── tools/
 │       └── __init__.py                       # Tool registry (web_search, etc.)
-├── data/                                     # Runtime: terraai.db, logs. Gitignored.
+├── data/                                     # Runtime: terra_ai.db, logs. Gitignored.
 ├── tests/
 │   ├── __init__.py
+│   ├── conftest.py                           # Shared fixtures
 │   ├── test_database.py
 │   ├── test_providers.py
 │   ├── test_commands.py
@@ -145,7 +145,7 @@ This conversation is fake. In real conversations, give actual answers. Do not re
 | ---------------- | ----------------------------------------------------------------------- |
 | `${triggerchar}` | First char of `trigger_phrase` from config (default `T` for `TerraAI:`) |
 
-**Note on trigger character:** In documentation and examples, `.` is used as the trigger character for clarity. In production, `-` is used because `.` is already taken by other bots. The trigger character is configurable in `config/terraai.yaml`.
+**Note on trigger character:** In documentation and examples, `.` is used as the trigger character for clarity. In production, `-` is used because `.` is already taken by other bots. The trigger character is configurable in `config/terra_ai.yaml`.
 
 ### 3.1 Prompt Development
 
@@ -184,7 +184,7 @@ This conversation is fake. In real conversations, give actual answers. Do not re
 
 ## 4. Database Schema
 
-File: `data/terraai.db`. Uses `PRAGMA user_version` for migrations (currently version 1).
+File: `data/terra_ai.db`. Uses `PRAGMA user_version` for migrations (currently version 1).
 
 -- Enable WAL mode for concurrent access
 PRAGMA journal_mode=WAL;
@@ -514,7 +514,7 @@ Two testing modes:
 - Each agent starts its own ergo instance on a unique port (parallelizable)
 - **Shared DB, isolated channels**: all agents use the same SQLite DB but each gets its own test channel (e.g., `agent1/#terra-ai`, `agent2/#terra-ai`) to avoid stepping on each other
 - WAL mode enabled for concurrent access
-- SOPEL config for testing: `config/terraai-test.yaml` (separate from production config)
+- SOPEL config for testing: `config/terra_ai-test.yaml` (separate from production config)
 - Tests can be scripted (send messages, assert responses) or manual (interactive)
 - Optional: user's real IRC server for final pre-release integration testing
 
@@ -524,8 +524,8 @@ Two testing modes:
 
 **`data/` contents:**
 
-- `terraai.db` — SQLite database (auto-created on first run)
-- `terraai.log` — rotating log file (10 MB max, keep 3 backups)
+- `terra_ai.db` — SQLite database (auto-created on first run)
+- `terra_ai.log` — rotating log file (10 MB max, keep 3 backups)
 - Log level: `DEBUG` to file, `WARNING+` to stderr/stdout
 - Standard Python `logging` module
 
@@ -595,40 +595,40 @@ docs/
 ### Phase 1 — Scaffold
 
 - [ ] `PACKAGES.md` — pin `sopel>=8.0`, `pyyaml`, `openai>=1.0`, `aiohttp`
-- [ ] `config/terraai.yaml.example` — defaults-only config with descriptive comments
+- [ ] `config/terra_ai.yaml.example` — defaults-only config with descriptive comments
 - [ ] `Containerfile` — Arch Linux base + chaotic-aur + yay + sopel + requirements
-- [ ] `terraai/__init__.py` — `__version__ = "0.0.1"`
-- [ ] `terraai/config.py` — dataclass + YAML load + validation
-- [ ] `.gitignore` — root: `data/`, `*.pyc`, `__pycache__/`, `config/terraai.yaml`
+- [ ] `terra_ai/__init__.py` — `__version__ = "0.0.1"`
+- [ ] `terra_ai/config.py` — dataclass + YAML load + validation
+- [ ] `.gitignore` — root: `data/`, `*.pyc`, `__pycache__/`, `config/terra_ai.yaml`
 
 ### Phase 2 — Database Layer
 
-- [ ] `terraai/database.py` — schema, `UserStore`, `HistoryStore`, `PromptStore`, `CommandStats`
+- [ ] `terra_ai/database.py` — schema, `UserStore`, `HistoryStore`, `PromptStore`, `CommandStats`
 - [ ] `tests/test_database.py` — in-memory SQLite tests for every store method
 
 ### Phase 3 — Provider
 
-- [ ] `terraai/providers/base.py` — AIProvider ABC
-- [ ] `terraai/providers/openrouter.py` — OpenRouter implementation
-- [ ] `terraai/providers/registry.py` — Provider registry
-- [ ] `terraai/providers/__init__.py` — re-exports + configured loader
+- [ ] `terra_ai/providers/base.py` — AIProvider ABC
+- [ ] `terra_ai/providers/openrouter.py` — OpenRouter implementation
+- [ ] `terra_ai/providers/registry.py` — Provider registry
+- [ ] `terra_ai/providers/__init__.py` — re-exports + configured loader
 - [ ] `tests/test_providers.py` — mock SDK calls
 
 ### Phase 4 — Prompts
 
-- [ ] `terraai/prompts/defaults.py` — the fake conversation as context seed
-- [ ] `terraai/prompts/manager.py` — CRUD + prompt matching
+- [ ] `terra_ai/prompts/defaults.py` — the fake conversation as context seed
+- [ ] `terra_ai/prompts/manager.py` — CRUD + prompt matching
 - [ ] `tests/test_commands.py` — covers `PromptManager`
 
 ### Phase 5 — Context Manager
 
-- [ ] `terraai/context/manager.py` — trimming + context assembly + history save
+- [ ] `terra_ai/context/manager.py` — trimming + context assembly + history save
 - [ ] Tests
 
 ### Phase 6 — Bot Wiring
 
-- [ ] `terraai/bot.py` — SOPEL plugin, all decorators, command routing, rate limiting
-- [ ] `terraai/commands/admin.py`, `user.py`
+- [ ] `terra_ai/bot.py` — SOPEL plugin, all decorators, command routing, rate limiting
+- [ ] `terra_ai/commands/admin.py`, `user.py`
 - [ ] `tests/test_integration.py` — full happy-path mocks
 
 ### Phase 7 — Test Tool + IRC Server
@@ -636,7 +636,7 @@ docs/
 - [x] `test_tool/chat.py` — irssi-like terminal UI for interactive testing
 - [x] Default channel `#terra-ai`
 - [x] PM support (message bot nick directly)
-- [x] `config/terraai-test.yaml.example` — test TerraAI config (ergo server)
+- [x] `config/terra_ai-test.yaml.example` — test TerraAI config (ergo server)
 - [x] `config/sopel-test.cfg.example` — test SOPEL config (minimal plugins, ergo)
 - [x] Set up ergo IRC server for integration testing (local, chaotic-aur)
 - [x] Scripted integration tests: connect to ergo, send messages, assert responses
@@ -689,7 +689,7 @@ USER terra-ai
 COPY . .
 
 VOLUME ["/home/terra-ai/data"]
-ENTRYPOINT ["sopel", "-c", "config/terraai.yaml"]
+ENTRYPOINT ["sopel", "-c", "config/terra_ai.yaml"]
 ```
 
 **User:** `terra-ai` (non-root, UID 1000)  
@@ -717,9 +717,9 @@ ENTRYPOINT ["sopel", "-c", "config/terraai.yaml"]
 
 | Path                          | Purpose             | Gitignored? |
 | ----------------------------- | ------------------- | ----------- |
-| `data/terraai.db`             | SQLite database     | Yes         |
-| `config/terraai.yaml`         | Real runtime config | Yes         |
-| `config/terraai.yaml.example` | Safe example        | No          |
+| `data/terra_ai.db`              | SQLite database     | Yes         |
+| `config/terra_ai.yaml`          | Real runtime config | Yes         |
+| `config/terra_ai.yaml.example`  | Safe example        | No          |
 | `__pycache__/`                | Python bytecode     | Yes         |
 | `*.pyc`                       | Compiled files      | Yes         |
 | `tests/*`                     | Test suite          | No          |
@@ -734,16 +734,16 @@ ENTRYPOINT ["sopel", "-c", "config/terraai.yaml"]
 ### 13.1 Compile Checks
 
 ```bash
-python -m py_compile terraai/__init__.py
-python -m py_compile terraai/config.py
-python -m py_compile terraai/database.py
-python -m py_compile terraai/providers/base.py
-python -m py_compile terraai/providers/registry.py
-python -m py_compile terraai/prompts/manager.py
-python -m py_compile terraai/context/manager.py
-python -m py_compile terraai/commands/admin.py
-python -m py_compile terraai/commands/user.py
-python -m py_compile terraai/bot.py
+python -m py_compile terra_ai/__init__.py
+python -m py_compile terra_ai/config.py
+python -m py_compile terra_ai/database.py
+python -m py_compile terra_ai/providers/base.py
+python -m py_compile terra_ai/providers/registry.py
+python -m py_compile terra_ai/prompts/manager.py
+python -m py_compile terra_ai/context/manager.py
+python -m py_compile terra_ai/commands/admin.py
+python -m py_compile terra_ai/commands/user.py
+python -m py_compile terra_ai/bot.py
 ```
 
 All must pass before any commit.
@@ -808,7 +808,7 @@ These tests are **MUST PASS** — they are not optional:
 ## 21. Acceptance Criteria
 
 - [ ] All files in §2 exist
-- [ ] `python -m py_compile` succeeds for every `.py` under `terraai/`
+- [ ] `python -m py_compile` succeeds for every `.py` under `terra_ai/`
 - [ ] `pytest tests/` passes
 - [ ] Containerfile builds and `sopel --version` runs in container
 - [ ] `.optin`, `.optout` DB round-trip works in tests

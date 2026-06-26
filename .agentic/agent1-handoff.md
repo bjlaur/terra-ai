@@ -2,10 +2,11 @@
 
 ## Current State
 
-All work merged to `release-0.0.2` on origin. Workspace: `~/agentic-repos/terra-ai-agent1/`.
-Branch: `agent1/carry-over-0.0.2` (created from release-0.0.2).
+Workspace: `~/agentic-repos/terra-ai-agent1/`.
+Branch: `agent1/test-profiling` (created from release-0.0.2, after carry-over merged).
+Latest commit: `6ed7679` — Fix .effort to actually affect AI provider calls + add effort wiring tests.
 
-## What Was Done (0.0.1 + 0.0.2 + carry-over)
+## What Was Done (0.0.1 + 0.0.2 + carry-over + test-profiling)
 
 ### 0.0.1 — Minimal SOPEL Plugin ✅
 - SOPEL plugin with `TerraAI:` trigger and `.` shorthand
@@ -23,7 +24,7 @@ Branch: `agent1/carry-over-0.0.2` (created from release-0.0.2).
 - `.clear` command added
 - 83 unit tests + 9 ergo integration tests passing
 
-### Carry-over (agent1/carry-over-0.0.2 branch) — SOPEL Dispatch Fix ✅
+### Carry-over (merged into release-0.0.2) — SOPEL Dispatch Fix ✅
 
 **Problem:** Bot connected to ergo and joined channel but never responded to messages.
 
@@ -56,37 +57,38 @@ Branch: `agent1/carry-over-0.0.2` (created from release-0.0.2).
 - `TerraAI: hello` → AI responds via real API ✓
 - Opt-out correctly suppresses responses ✓
 
-## Key Files Modified (carry-over)
+### Test Profiling (agent1/test-profiling branch) ✅
 
-- `terra_ai/__init__.py` — thin re-export: `from .plugin import *`
-- `terra_ai/plugin.py` — all handlers, setup(), shutdown(), @plugin.command(), @plugin.rule()
-- `terra_ai/bot.py` — passes config to PromptManager, updated optout dispatch
-- `terra_ai/commands/user.py` — `.optout` supports admin optout of other nicks
-- `terra_ai/config.py` — added `default_optin: bool = True`
-- `terra_ai/database.py` — `check_same_thread=False`
-- `terra_ai/prompts/defaults.py` — `{botnick}` variable instead of hardcoded "TerraAI"
-- `terra_ai/prompts/manager.py` — interpolates `{botnick}` in system prompt and context seed
-- `config/sopel-test.cfg.example` — `prefix = -`, `help_prefix = -`, `terra_ai` in enable list
-- `tests/test_ergo.py` — uses `COMMAND_PREFIX` and `BOT_NICK` constants
-- `tests/test_integration.py` — updated TestPluginRules for new handler names
-- `.agentic/DEVELOPMENT.md` — added rules 14 (no hardcoded nick) and 15 (no hardcoded prefix)
-- `docs/misc/claude-didn't-listen.md` — report about hardcoded prefix mistake
+**`.effort` command fix (3 bugs found, 2 fixed, 1 deferred):**
+1. **Attribute mismatch** — code referenced wrong attribute name on the provider. Fixed.
+2. **No provider wiring** — `.effort` updated the prompt but never passed the effort level to the provider call. Fixed.
+3. **No persistence** — effort setting did not survive restart. Deferred (not yet implemented).
+
+**Provider reasoning gating:**
+- Added `_reasoning_for_model()` to `terra_ai/providers/openrouter.py` — gates reasoning config by model slug so only reasoning-capable models receive the reasoning parameter.
+
+**Effort wiring tests:**
+- 7 tests passing in `TestEffortWire` (`tests/test_integration.py`) — committed as `6ed7679`.
+
+**Test infrastructure improvements:**
+- Created `pytest.ini` with `addopts = -m "not slow and not real"` — skips slow and real-API tests by default.
+- Added two markers: `@pytest.mark.slow` (4 interactive tests) and `@pytest.mark.real` (8 routing tests — the 7 routing tests + `test_noisy_on_sends_notice`).
+- Parametric mock/real fixture in `tests/conftest.py` — mocks `provider.chat()` by default; real API only when `--real` is passed AND test is marked `@real` AND `OPENROUTER_API_KEY` is set.
+- Removed duplicate `db` and `terra` fixtures from `test_tool.py` and `test_integration.py` (now centralized in `conftest.py`).
+- Simplified `test_handle_ai_message` from `httpx.Client` mock to direct `provider.chat` patch.
+- Added sub-timing instrumentation in `_run_interactive` (enable with `TEST_TIMING_VERBOSE=1`).
+- Deleted `test_send_as_different_nick`.
+
+**Test profiling report:** `tests/test-time.md` — suite time reduced from **204s → 83s** after optimizations.
 
 ## Test Status
 
-- 94 passed, 5 failed (ergo bot tests need re-run after latest fixes), 6 skipped
-- The 5 failures are in TestErgoSopelBot — likely now passing after the latest fixes (nick interpolation, test constants)
-- Need to re-run full suite to confirm
-
-## What's Left / Next Steps
-
-1. **Re-run full test suite** — verify all pass after latest changes
-2. **Commit** the carry-over work on branch `agent1/carry-over-0.0.2`
-3. **0.0.3 features** (planned, not started):
-   - Conversation TTL (auto-prune history older than N days)
-   - Opt-in default config flag (`default_optin` field added to schema but not enforced yet)
-   - Better provider error handling (retries + backoff)
-   - Automated dogfooding (e2e test sequences)
+- **95 passed, 2 failed, 9 skipped, 12 deselected** in ~83s (default mock run).
+- **Known failures (real, not flaky):**
+  - `test_interactive_accepts_pm` — subprocess test doesn't pick up conftest mock; real failure.
+  - `test_interactive_noisy_notice` — same subprocess mock issue.
+  - `test_pm_setlocation_forwards_to_ai` — flaky assertion with real API.
+- The 2 interactive subprocess failures and the flaky real-API test are deferred.
 
 ## Key Files
 
@@ -99,13 +101,28 @@ Branch: `agent1/carry-over-0.0.2` (created from release-0.0.2).
 - Ergo tests: `tests/test_ergo.py`
 - Shared DB: `~/.terra-ai/terraai.db`
 - Ergo config: `~/.ircd/ircd.yaml`
+- Pytest config: `pytest.ini`
+- Shared fixtures: `tests/conftest.py`
+- Test timing report: `tests/test-time.md`
+- Provider reasoning gating: `terra_ai/providers/openrouter.py` (`_reasoning_for_model()`)
+- Effort wiring tests: `tests/test_integration.py` (`TestEffortWire`)
 
 ## Running Tests
 
 ```bash
 cd ~/agentic-repos/terra-ai-agent1
-source ~/.terra-ai/.env && export OPENROUTER_API_KEY
-pytest tests/ -v
+
+# Default — mocked, fast (~83s)
+pytest tests/
+
+# Real API tests (requires OPENROUTER_API_KEY)
+source ~/.terra-ai/.env && pytest --real -m real
+
+# Slow/interactive tests
+pytest -m slow
+
+# Everything (no deselection)
+pytest -m ""
 ```
 
 ## Ergo Integration Tests
@@ -126,5 +143,16 @@ ERGO_TEST=1 pytest tests/test_ergo.py -v
 
 - `main` — base (renamed from master)
 - `release-0.0.1` — merged
-- `release-0.0.2` — current base
-- `agent1/carry-over-0.0.2` — current branch (carry-over work)
+- `release-0.0.2` — merged (includes carry-over)
+- `agent1/test-profiling` — current branch (effort fix + test profiling)
+
+## What's Left / Next Steps
+
+1. **Fix interactive subprocess tests** — `test_interactive_accepts_pm` and `test_interactive_noisy_notice` fail because the subprocess doesn't use the conftest mock. Need to wire mock into subprocess or convert to in-process test.
+2. **Fix flaky `test_pm_setlocation_forwards_to_ai`** — assertion instability with real API.
+3. **`.effort` persistence** — deferred; setting does not survive restart.
+4. **0.0.3 features** (planned, not started):
+   - Conversation TTL (auto-prune history older than N days)
+   - Opt-in default config flag (`default_optin` field added to schema but not enforced yet)
+   - Better provider error handling (retries + backoff)
+   - Automated dogfooding (e2e test sequences)

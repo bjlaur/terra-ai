@@ -35,9 +35,15 @@ When multiple agents work on the same repo simultaneously, follow this workflow 
 - **All changes go in `/home/agent/git/terra-ai`**.
 - Run test harnesses before every commit:
   ```bash
-  python -m py_compile terraai/<file>.py
-  pytest tests/
+  python -m py_compile terra_ai/<file>.py
+  pytest tests/              # mock mode (fast, default)
+  pytest --real -m real     # real API mode (needs OPENROUTER_API_KEY)
   ```
+- **Test harness commands:**
+  - Default: mock provider, skips slow and real tests
+  - `pytest -m slow` — runs only slow interactive tests
+  - `pytest --real -m real` — runs only real API tests
+  - `pytest -m ""` — runs everything
 - **READ ALL QUESTIONS/PROMPTS before acting** — not just the latest one.
 - **NEVER use AskUserQuestion** — print questions as plain text.
 - Sign your documentation changes with your agent name.

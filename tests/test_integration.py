@@ -1,35 +1,12 @@
 """Integration tests for TerraAI."""
 
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from terra_ai.bot import TerraAI
-from terra_ai.config import TerraConfig
-from terra_ai.database import DBConfig, Database
-from terra_ai.providers.base import Message
 from terra_ai.providers.openrouter import _reasoning_for_model
 
-
-@pytest.fixture
-def db():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
-    database = Database(config)
-    yield database
-    os.unlink(path)
-
-
-@pytest.fixture
-def terra(db):
-    config = TerraConfig()
-    config.sqlite_path = db.config.path
-    config.provider.api_key = "test-key"
-    t = TerraAI(config)
-    return t
+# db and terra fixtures live in conftest.py
 
 
 class TestTerraAI:
@@ -65,17 +42,10 @@ class TestTerraAI:
         assert terra.is_management_command(".optin") is True
         assert terra.is_management_command(".wea") is False
 
-    @patch("terra_ai.providers.openrouter.httpx.Client")
-    def test_handle_ai_message(self, mock_client_cls, terra):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello!"}}]
-        }
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+    def test_handle_ai_message(self, terra):
+        """Test that handle_ai_message returns the provider's response."""
+        provider = terra.registry.get()
+        provider.chat = lambda messages, system_prompt=None, effort="high": "Hello!"
 
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
