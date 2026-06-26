@@ -1,7 +1,7 @@
 """Admin commands for TerraAI."""
 
-from terraai.database import Database
-from terraai.prompts.manager import PromptManager
+from terra_ai.database import Database
+from terra_ai.prompts.manager import PromptManager
 
 
 class AdminCommands:
@@ -48,8 +48,8 @@ class AdminCommands:
         return "Trigger already exists."
 
     def handle_compact(self, server: str, channel: str, nick: str) -> str:
-        """Handle .compact command. Admin-only — gate is enforced by caller."""
-        from terraai.context.manager import ContextManager
+        """Handle .compact command."""
+        from terra_ai.context.manager import ContextManager
         context = ContextManager(self.db, self.prompts)
         new_session = context.compact(server, channel)
         return f"Context compacted. New session: {new_session[:8]}..."

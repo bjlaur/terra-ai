@@ -75,7 +75,7 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - Context compaction (.compact) with session rotation
 - UX commands: .noisy, .setlocation, .help, .effort, .clear
 - Performance stats (.stats)
-- 80+ tests
+- 107+ unit tests
 
 ## Done (moved to 0.0.1)
 
@@ -99,13 +99,18 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - SQLite threading fix (`check_same_thread=False`)
 - Async AI test with real API (`test_async_ai_call`)
 - `docs/misc/claude-didn't-listen.md` — async testing gap report
-- 83 unit tests + 9 ergo integration tests passing
+- 107+ unit tests + 9 ergo integration tests passing
 
 ## Done (carried from 0.0.2, unblocked by other agent)
 
 - SOPEL bot message dispatch fix (IRCv3)
 - SSL/TLS for ergo
 - Context compaction (.compact command)
+- Package rename: `terraai/` → `terra_ai/`
+- SOPEL module visibility fix
+- SQLite thread safety fix
+- Configurable botnick
+- Admin optout
 
 ## Done (moved to 0.0.3)
 

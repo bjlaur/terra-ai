@@ -7,7 +7,7 @@
 
 [core]
 # IRC connection
-nick = TerraAIBot
+nick = TerraAI
 host = 127.0.0.1
 port = 6667
 use_ssl = false
@@ -18,6 +18,10 @@ owner = agent1
 # Channel
 channels = #terra-ai-agent1
 
+# Command trigger prefix (use '-' in production)
+prefix = -
+help_prefix = -
+
 # Only load what we need — TerraAI is the main feature
 enable =
     admin
@@ -27,15 +31,12 @@ enable =
     safety
     tell
     coretasks
-    terraai
+    terra_ai
 
-# Extra plugin directory (where terraai/ package lives)
+# Extra plugin directory (where terra_ai/ package lives)
 # Set to the project root when running from a clone
 extra =
     /home/agent/agentic-repos/terra-ai-agent1
-
-[commands]
-prefix = .
 
 [terraai]
 # Path to TerraAI YAML config

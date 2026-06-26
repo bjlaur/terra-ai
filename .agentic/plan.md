@@ -1,6 +1,6 @@
 # TerraAI — Implementation Plan
 
-> **Status:** 0.0.1 released, 0.0.2 substantially complete (bot e2e blocked on IRCv3), 0.0.3 planned
+> **Status:** 0.0.1 released, 0.0.2 substantially complete (carry-over done: SOPEL dispatch fixed, bot e2e unblocked). 0.0.3 planned
 > **Agent:** OWL
 > **Last updated:** 2026-06-25
 
@@ -25,13 +25,14 @@ Class / module name: **TerraAI**
 - **Python:** 3.14.6 system-wide. **Do not `pip install` into system Python.** Dependencies managed via `Containerfile` for deployment. If a dep is missing locally, tell the user — do not install.
 - **SOPEL:** Only available in AUR (chaotic-aur). Will be built from `yay` as the first container build step.
 - **AUR:** chaotic-aur is configured and available.
-- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current).
+- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`.
 - **Agent name:** OWL
 - **Container user:** `terra-ai` (UID 1000, non-root, with NOPASSWD sudo for initial yay build, then NOPASSWD removed)
 
 ### 1.2 Adopted Conventions (from /mnt/jbrowse project)
 
 1. Config example committed (`terraai.yaml.example`); real `config/terraai.yaml` and `data/` are gitignored.
+   - Release branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`.
 2. Runtime state lives in `data/`.
 3. Commit messages: ~8 words, imperative mood, no body unless needed.
 4. Always ask before committing/pushing.
@@ -53,11 +54,12 @@ terra-ai/
 ├── config/
 │   ├── terraai.yaml.example                  # Safe example config (no real API keys)
 │   └── terraai-test.yaml.example             # Test config (ergo server, test channel)
-├── terraai/
+├── terra_ai/
 │   ├── __init__.py                           # Plugin metadata + version
 │   ├── bot.py                                # SOPEL plugin: decorators, command routing
 │   ├── database.py                           # SQLite schema (3 tables), connection, CRUD
 │   ├── config.py                             # Load/validate YAML config
+│   ├── plugin.py                             # SOPEL plugin entry point
 │   ├── providers/
 │   │   ├── __init__.py                       # Re-exports + configured loader
 │   │   ├── base.py                           # AIProvider ABC
@@ -73,10 +75,12 @@ terra-ai/
 │   ├── context/
 │   │   ├── __init__.py                       # Re-exports ContextManager
 │   │   └── manager.py                        # Context assembly + history save
-│   └── commands/
-│       ├── __init__.py                       # Re-exports command handlers
-│       ├── admin.py                          # .listprompts, .rmprompt, .addprompt
-│       └── user.py                           # .optin, .optout, .ai
+│   ├── commands/
+│   │   ├── __init__.py                       # Re-exports command handlers
+│   │   ├── admin.py                          # .listprompts, .rmprompt, .addprompt
+│   │   └── user.py                           # .optin, .optout, .ai
+│   └── tools/
+│       └── __init__.py                       # Tool registry (web_search, etc.)
 ├── data/                                     # Runtime: terraai.db, logs. Gitignored.
 ├── tests/
 │   ├── __init__.py
@@ -84,6 +88,9 @@ terra-ai/
 │   ├── test_providers.py
 │   ├── test_commands.py
 │   └── test_integration.py
+├── test_tool/
+│   ├── chat.py                               # irssi-like terminal UI
+│   └── __init__.py
 ├── docs/
 │   ├── release-0.0.1/                        # First release
 │   │   ├── release-plan.md
@@ -633,8 +640,9 @@ docs/
 - [x] `config/sopel-test.cfg.example` — test SOPEL config (minimal plugins, ergo)
 - [x] Set up ergo IRC server for integration testing (local, chaotic-aur)
 - [x] Scripted integration tests: connect to ergo, send messages, assert responses
-- [x] `tests/test_ergo.py` — smoke (3), IRC protocol (4), SOPEL bot (2 passing, 2 blocked on IRCv3)
-- [ ] Fix SOPEL IRCv3 message dispatch (bot doesn't respond to PRIVMSG from other nicks)
+- [x] `tests/test_ergo.py` — smoke (3), IRC protocol (4), SOPEL bot (all passing)
+- [x] Fix SOPEL IRCv3 message dispatch — bot now responds to PRIVMSG from other nicks
+  - OWL — SOPEL bot message dispatch fixed by agent1/carry-over: module visibility, allow_bots, SQLite thread safety
 
 ### Phase 8 — Containerfile Polish
 
@@ -765,13 +773,22 @@ docker run --rm terra-ai:0.0.1 sopel --version
 
 ## 19. Near-Term Roadmap
 
-1. **Conversation TTL** — auto-prune history older than N days → **0.0.3**
-2. **Model-per-channel routing** — different channels use different providers → deferred
-3. **Opt-in default config flag** — choose default state for unseen nicks → **0.0.3**
-4. **Better provider error handling** — retries, clearer failure messages → **0.0.3**
-5. **Automated dogfooding** — e2e test sequences through test tool → **0.0.3**
-6. **Web dashboard** — read-only SQLite viewer for stats → deferred
-7. **Test tool screenshots** (think about) — auto-capture screenshots during test tool sessions for docs/debugging → deferred
+### 0.0.3
+
+1. **Conversation TTL** — auto-prune history older than N days
+2. **Opt-in default config flag** — choose default state for unseen nicks. `default_optin` schema field added; enforcement is 0.0.3.
+3. **Better provider error handling** — retries, clearer failure messages
+4. **Automated dogfooding** — e2e test sequences through test tool
+
+### Deferred
+
+5. **Model-per-channel routing** — different channels use different providers
+6. **Web dashboard** — read-only SQLite viewer for stats
+7. **Test tool screenshots** — auto-capture screenshots during test tool sessions for docs/debugging
+
+### Verified (not a roadmap item)
+
+- **Context compaction (.compact)** — fully working (verified by agent2)
 
 ---
 

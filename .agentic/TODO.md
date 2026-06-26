@@ -34,6 +34,17 @@ Only pending/unfinished work stays in the active sections below.
 - [x] New tests: test_async_ai_call (real API), test_interactive_accepts_pm, test_interactive_noisy_notice, test_pm_direct_message, test_pm_setlocation_forwards_to_ai, test_interactive_empty_input, test_interactive_ctrl_d_exits, test_interactive_history_navigation
 - [x] `docs/misc/claude-didn't-listen.md` — report on async testing gap
 - [x] `docs/release-0.0.2/testing-agent2-v2.md` — comprehensive 68-test checklist
+- [x] Fix terraai/plugin.py setup() to read config from bot.config.terraai
+- [x] SOPEL test config examples committed (sopel-test.cfg.example, terraai-test.yaml.example)
+- [x] Minimal plugin set: admin, adminchannel, ping, reload, safety, tell, terraai
+- [x] 0.0.2 docs: CHANGELOG.md, feature.md, testing-results.md
+- [x] SOPEL dispatch fix (module visibility, allow_bots, thread safety) — IRCv3 capability issue resolved
+- [x] Bot connects, joins, and responds to PRIVMSG (SOPEL bot message dispatch)
+- [x] Unit tests for SOPEL bot end-to-end pass (ergo integration tests gated behind running server)
+- [x] Package rename terraai → terra_ai
+- [x] Configurable botnick via {botnick}
+- [x] Added COMMAND_PREFIX and BOT_NICK constants to ergo tests
+- [x] HARD RULES 14+15 fix: removed all hardcoded "TerraAI" nicks and "." prefixes from logic code
 
 ### In Progress
 - [ ] Rework plan — `docs/release-0.0.2/rework-plan.md`
@@ -42,14 +53,11 @@ Only pending/unfinished work stays in the active sections below.
   - Test tool calls `dispatch()` directly
   - Remove MANAGEMENT_COMMANDS set
   - **Status:** Drafted, not started — awaiting merge
-- [ ] SOPEL bot message dispatch — bot connects + joins but doesn't respond to PRIVMSG
-  - Likely IRCv3 capability issue with echo-message/server-time
-  - Blocked — needs OWL's input
 - [ ] Fix test_interactive_noisy_notice — AI not responding in test harness (works live)
 
 ### Pending (0.0.2)
-- [ ] Complete SOPEL bot end-to-end tests (responds to .help, TerraAI: trigger)
-- [ ] ssl/TLS support for ergo (broken with self-signed cert + CAP negotiation)
+- [ ] Verify SOPEL bot end-to-end (responds to .help, TerraAI: trigger) on a running server
+- [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)
 - [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts, match_prompt) — needs discussion
 
 ### Manual testing needed
@@ -68,7 +76,8 @@ All phases 1-5 complete.
 See `docs/future-release/release-plan.md` for the full deferred features list.
 
 High priority:
-- Fix SOPEL IRCv3 message dispatch (blocking for bot end-to-end)
+- SOPEL IRCv3 message dispatch fix merged (end-to-end verification still pending)
+- Context compaction (.compact) — fully working
 - Multi-server support
 - Rate limiting
 - Containerfile polish

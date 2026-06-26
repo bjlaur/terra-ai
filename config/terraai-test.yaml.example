@@ -4,7 +4,7 @@
 
 bot:
   trigger_phrase: "TerraAI:"    # What the bot responds to
-  bot_nick: "TerraAIBot"        # Bot's IRC nick for testing
+  bot_nick: "TerraAI"           # Bot's IRC nick for testing
   max_context_messages: 50      # How many messages to include in AI context
   irc_char_limit: 400           # IRC message length limit
 

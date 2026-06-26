@@ -28,6 +28,12 @@ sudo pacman -S --noconfirm python-yaml python-openai python-httpx python-aiohttp
 | `python-pytest-asyncio` | extra | Async test support (Textual) |
 | `google-generativeai` | pip | Gemini provider (no Arch package) |
 
+## Required (0.0.3+)
+
+| Package | Source | Purpose |
+|---------|--------|---------|
+| `irssi` | extra | IRC client for manual bot testing |
+
 ## Future
 
 | Package | Source | Purpose | For |

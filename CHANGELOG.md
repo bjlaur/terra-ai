@@ -2,6 +2,37 @@
 
 ## 0.0.2 — In Progress
 
+### Agent 1 (OWL) — Carry-over: SOPEL dispatch fix + package rename
+
+#### Fixes
+- **SOPEL module visibility** — SOPEL loaded `terra_ai/__init__.py` as a folder plugin, but all decorated handlers were in `plugin.py`. Fixed by making `__init__.py` re-export via `from .plugin import *`
+- **SOPEL IRCv3 message dispatch** — added `@plugin.allow_bots` decorators so SOPEL forwards bot-tagged messages to handlers
+- **SQLite thread safety** — handlers run in worker threads; added `check_same_thread=False` to `sqlite3.connect()` in `database.py`
+- **Single `_terrai` global** — moved `setup()` from `__init__.py` into `plugin.py` so the global is in the same module as handlers
+
+#### Refactoring
+- Renamed `terraai/` package to `terra_ai/` (underscore)
+- Renamed plugin from `terraai` to `terra_ai` in SOPEL config
+- Rewrote `plugin.py` to use `sopel.plugin` (not deprecated `sopel.module`)
+- Management commands now use `@plugin.command()` decorators
+- Freeform queries use `@plugin.rule(r"$nick (.+)")` with `$nick` placeholder
+- SOPEL config now uses `prefix = -` (not `.`)
+- Made bot nick configurable in prompts via `{botnick}` variable (no hardcoded "TerraAI")
+- Added `COMMAND_PREFIX` and `BOT_NICK` constants to ergo tests (no hardcoded values)
+- Added admin optout: `.optout <nick>` (admin only)
+- Added `default_optin: true` to config schema
+
+#### HARD RULES 14+15 compliance
+- Removed all hardcoded "TerraAI" nick fallbacks from logic code (`config.py`, `prompts/manager.py`, `bot.py`, `test_tool/chat.py`)
+- Removed all hardcoded "." prefix from string normalization and routing logic
+- Bot now reads `bot_nick` and `trigger_phrase` from config at runtime; empty string default means self-check is disabled when not configured
+- Test tool reads both values from config instead of hardcoding
+
+#### Testing
+- 107+ unit tests passing
+- All non-ergo tests passing
+- Package renamed throughout all imports and references
+
 ### Agent 1 (OWL) — Provider expansion, web search, ergo integration
 
 #### Features

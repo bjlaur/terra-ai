@@ -1,5 +1,5 @@
 """Prompt management for TerraAI."""
 
-from terraai.prompts.manager import PromptManager
+from terra_ai.prompts.manager import PromptManager
 
 __all__ = ["PromptManager"]

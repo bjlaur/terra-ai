@@ -1,7 +1,7 @@
 """User commands for TerraAI."""
 
-from terraai.database import Database
-from terraai.prompts.manager import PromptManager
+from terra_ai.database import Database
+from terra_ai.prompts.manager import PromptManager
 
 
 class UserCommands:
@@ -14,16 +14,31 @@ class UserCommands:
 
     def handle_optin(self, server: str, nick: str) -> str:
         """Handle .optin command."""
-        from terraai.database import UserStore
+        from terra_ai.database import UserStore
         users = UserStore(self.db)
         users.opt_in(server, nick)
         return "You are now opted in. TerraAI will respond to you."
 
-    def handle_optout(self, server: str, nick: str) -> str:
-        """Handle .optout command."""
-        from terraai.database import UserStore
+    def handle_optout(self, server: str, nick: str, args: str = "",
+                      admin_nicks: list[str] | None = None) -> str:
+        """Handle .optout command.
+
+        Without args: opts out the sender.
+        With <nick> (admin only): opts out the specified nick.
+        """
+        from terra_ai.database import UserStore
         users = UserStore(self.db)
-        users.opt_out(server, nick)
+
+        target = nick
+        if args:
+            if admin_nicks and nick in admin_nicks:
+                target = args.strip()
+                users.opt_out(server, target)
+                return f"{target} has been opted out."
+            else:
+                return "Only admins can opt out other users."
+
+        users.opt_out(server, target)
         return "You are opted out. Your history has been forgotten."
 
     def handle_noisy(self, server: str, nick: str) -> str:

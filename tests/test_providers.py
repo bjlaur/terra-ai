@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from terraai.providers.base import AIProvider, Message
-from terraai.providers.openrouter import OpenRouterProvider
-from terraai.providers.registry import ProviderRegistry
+from terra_ai.providers.base import AIProvider, Message
+from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.registry import ProviderRegistry
 
 # Skip real API tests unless OPENROUTER_API_KEY is set
 HAS_API_KEY = bool(os.environ.get("OPENROUTER_API_KEY"))
@@ -30,7 +30,7 @@ class TestOpenRouterProvider:
         provider = OpenRouterProvider(model="test", api_key="")
         assert provider.is_available() is False
 
-    @patch("terraai.providers.openrouter.httpx.Client")
+    @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_chat(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -49,7 +49,7 @@ class TestOpenRouterProvider:
         assert result == "Hello!"
         mock_client.post.assert_called_once()
 
-    @patch("terraai.providers.openrouter.httpx.Client")
+    @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_chat_without_system_prompt(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.json.return_value = {

@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from terraai.providers.openai import OpenAIProvider
-from terraai.providers.ollama import OllamaProvider
-from terraai.providers.registry import ProviderRegistry
-from terraai.tools.web_search import web_search
+from terra_ai.providers.openai import OpenAIProvider
+from terra_ai.providers.ollama import OllamaProvider
+from terra_ai.providers.registry import ProviderRegistry
+from terra_ai.tools.web_search import web_search
 
 
 class TestOpenAIProvider:
@@ -24,7 +24,7 @@ class TestOpenAIProvider:
         provider = OpenAIProvider(model="gpt-4o", api_key=None)
         assert provider.is_available() is False
 
-    @patch("terraai.providers.openai.httpx.Client")
+    @patch("terra_ai.providers.openai.httpx.Client")
     def test_chat(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -46,7 +46,7 @@ class TestOllamaProvider:
         provider = OllamaProvider(model="llama3", api_key=None)
         assert provider.name == "ollama"
 
-    @patch("terraai.providers.ollama.httpx.Client")
+    @patch("terra_ai.providers.ollama.httpx.Client")
     def test_chat(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -62,7 +62,7 @@ class TestOllamaProvider:
         result = provider.chat([MagicMock(to_dict=lambda: {"role": "user", "content": "hi"})])
         assert result == "Hello from Ollama!"
 
-    @patch("terraai.providers.ollama.httpx.Client")
+    @patch("terra_ai.providers.ollama.httpx.Client")
     def test_is_available_reachable(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -112,7 +112,7 @@ class TestProviderRegistry:
 
 
 class TestWebSearch:
-    @patch("terraai.tools.web_search.httpx.Client")
+    @patch("terra_ai.tools.web_search.httpx.Client")
     def test_search_with_abstract(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.text = '{"AbstractText": "Python is a programming language."}'
@@ -125,7 +125,7 @@ class TestWebSearch:
         result = web_search("what is python")
         assert "Python" in result
 
-    @patch("terraai.tools.web_search.httpx.Client")
+    @patch("terra_ai.tools.web_search.httpx.Client")
     def test_search_failure(self, mock_client_cls):
         mock_client_cls.side_effect = Exception("Connection error")
         result = web_search("test")

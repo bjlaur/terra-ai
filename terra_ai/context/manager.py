@@ -2,8 +2,8 @@
 
 import uuid
 
-from terraai.database import Database, HistoryStore
-from terraai.prompts.manager import PromptManager
+from terra_ai.database import Database, HistoryStore
+from terra_ai.prompts.manager import PromptManager
 
 
 class ContextManager:

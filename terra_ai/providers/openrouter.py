@@ -4,7 +4,7 @@ import os
 
 import httpx
 
-from terraai.providers.base import AIProvider, Message
+from terra_ai.providers.base import AIProvider, Message
 
 
 class OpenRouterProvider(AIProvider):

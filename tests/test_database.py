@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from terraai.database import (
+from terra_ai.database import (
     CommandStats,
     DBConfig,
     Database,

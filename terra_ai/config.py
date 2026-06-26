@@ -22,6 +22,7 @@ class TerraConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
     sqlite_path: str = "data/terraai.db"
     admin_nicks: list[str] = field(default_factory=list)
+    default_optin: bool = True
     rate_limit_enabled: bool = False
     rate_limit_messages: int = 5
     rate_limit_window_seconds: int = 60
@@ -31,7 +32,7 @@ class TerraConfig:
             self.provider = ProviderConfig(**self.provider)
         if isinstance(self.bot, dict):
             self.bot.setdefault("trigger_phrase", "TerraAI:")
-            self.bot.setdefault("bot_nick", "TerraAI")
+            self.bot.setdefault("bot_nick", "")
             self.bot.setdefault("max_context_messages", 50)
             self.bot.setdefault("irc_char_limit", 400)
 
