@@ -37,14 +37,20 @@ python -m py_compile terraai/<file>.py
 
 Run full test suite:
 ```bash
-# Default (mock, fast)
+# Default (mock, fast, skips slow+real+broken)
 pytest tests/
 
 # Real API (requires sourced env + marker)
 source ~/.terra-ai/.env && pytest --real -m real
 
-# Slow tests
+# Slow tests (interactive subprocess tests)
 pytest -m slow
+
+# Broken tests (known failures, deferred)
+pytest -m broken
+
+# Ergo integration tests (requires ergo on localhost:6667)
+pytest tests/test_ergo.py
 
 # Everything (all markers)
 pytest -m ""

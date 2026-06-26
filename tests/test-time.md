@@ -31,6 +31,37 @@ After applying three optimizations, the default test run dropped from **~204s to
 
 **Note:** The per-test timing table below reflects the **ORIGINAL (pre-optimization) run** for reference. The "Very Slow" and "Slow" categories for routing/AI tests are now instant in mock mode.
 
+## Ergo Integration Tests (2026-06-26)
+
+Ergo tests run separately: `pytest tests/test_ergo.py` (requires ergo on localhost:6667).
+
+| Test | Time (s) | Status | Notes |
+|------|----------|--------|-------|
+| TestErgoSmoke::test_ergo_port_open | 0.00 | ✅ | |
+| TestErgoSmoke::test_ergo_config_exists | 0.00 | ✅ | |
+| TestErgoSmoke::test_can_connect_socket | 0.00 | ✅ | |
+| TestErgoIRCProtocol::test_register_nick | 10.01 | ✅ | Socket timeout loop |
+| TestErgoIRCProtocol::test_join_channel | 20.02 | ✅ | Socket timeout loop |
+| TestErgoIRCProtocol::test_send_and_receive_message | 42.04 | ✅ | Slow — 2s socket timeouts |
+| TestErgoIRCProtocol::test_private_message | 21.02 | ✅ | Same pattern |
+| TestErgoSopelBot::test_sopel_connects_to_ergo | 1.00 | ✅ | 10s setup (session) |
+| TestErgoSopelBot::test_bot_joins_channel | 1.00 | ✅ | |
+| TestErgoSopelBot::test_bot_responds_to_help | 2.01 | ✅ | |
+| TestErgoSopelBot::test_bot_responds_to_trigger | 2.00 | ✅ | Real AI call |
+| TestErgoSopelBot::test_bot_responds_to_unknown_command | 32.03 | ❌ | 451 ERR_NOTREGISTERED |
+| TestErgoSopelBot::test_bot_ignores_regular_messages | 5.00 | ✅ | |
+| TestErgoSopelBot::test_bot_noisy_toggle | 2.00 | ✅ | |
+| TestErgoSopelBot::test_bot_optin_optout | 16.09 | ❌ | 451 ERR_NOTREGISTERED |
+| **Total** | **~164s** | **13 pass, 2 fail** | |
+
+### Ergo Optimizations Applied
+- Session-scoped `sopel_bot_process` fixture (saved ~60s vs per-test startup)
+- Removed `admin_nicks` from test yaml (broke plugin load after rework)
+- Fixed `shutdown()` signature for SOPEL 8.0
+
+### Ergo Deferred
+- `test_bot_responds_to_unknown_command` + `test_bot_optin_optout`: ergo rejects PRIVMSG with 451 before NICK/USER registration completes. May need to allow unregistered users or fix test client to wait for 001.
+
 ## Summary (Original Pre-Optimization)
 
 | Category | Count | Total Time | Avg Time |

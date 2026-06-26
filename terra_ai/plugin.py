@@ -35,7 +35,7 @@ def setup(bot):
     logger.info("TerraAI setup complete")
 
 
-def shutdown():
+def shutdown(bot=None):
     """Called by Sopel when the plugin is unloaded."""
     global _terrai
     _terrai = None
