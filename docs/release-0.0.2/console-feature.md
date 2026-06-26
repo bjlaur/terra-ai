@@ -29,35 +29,51 @@ From `.agentic/plan.md` §7.1:
 
 ---
 
-## 3. Irssi-like Layout
+## 3. Technology Choice: Textual (not curses)
 
-From `.agentic/plan.md` §7.2:
+**The console uses the [Textual](https://textual.textualize.io/) TUI library, not the standard `curses` module.**
+
+Why Textual instead of curses:
+- **Built-in SVG export.** `app.screen.export_screenshot(format="svg")` returns the rendered UI as an SVG string — colors, layout, and text positions preserved. This makes automated UI verification possible without parsing raw pty output.
+- **Test automation API.** `app.run_test()` returns a `Pilot` that can `press()`, `type()`, `pause()`, and `resize()` the app headlessly — no pty subprocess needed for tests.
+- **No pty/curses/httpx deadlock.** The original curses version hung because `anyio` (used by httpx) conflicted with curses+pty. Textual's test runner uses a virtual terminal — no pty, no event loop conflict.
+- **Widget-based.** Header, chat scroll view, and input are separate widgets — no manual window management.
+
+The standard `curses` module is **not used**. There is no `curses.wrapper()`, no `stdscr.getch()`, no manual `KEY_RESIZE` handling. Textual handles all of this.
+
+---
+
+## 4. Irssi-like Layout
+
+From `.agentic/plan.md` §7.2, adapted for Textual widgets:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ #terra-ai                                    12:34     │
+│ #terra-ai                                    12:34     │  ← Header (Static)
 │─────────────────────────────────────────────────────────│
 │ [12:34] <nick1> hey TerraAI                             │
 │ [12:34] <TerraAI> hi there                              │
-│ [12:35] [PM] <nick1> hello                              │
+│ [12:35] [PM] <nick1> hello                              │  ← Chat (Static, scrollable)
 │ [12:35] [PM] <TerraAI> response                         │
 │ [12:36] -!- Thinking...                                 │
 │                                                         │
 │─────────────────────────────────────────────────────────│
-│ _                                                       │
+│ _                                                       │  ← Input
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Top bar:** channel name + clock
-- **Middle:** scrollable message history (nick + message, bot responses)
-- **Bottom:** input line with `_` cursor
-- Single channel view — no window list, no split panes, no nick list
+Textual widget tree:
+- `Header` (Static) — channel name + clock, bold
+- `Chat` (Static) — message history, scrollable, grows as messages arrive
+- `Input` (Input) — single-line input with placeholder
+
+Single channel view — no window list, no split panes, no nick list.
 
 ---
 
-## 4. Controls
+## 5. Controls
 
-From `.agentic/plan.md` §7.3:
+From `.agentic/plan.md` §7.3, adapted for Textual:
 
 | Key | Action |
 |-----|--------|
@@ -66,12 +82,12 @@ From `.agentic/plan.md` §7.3:
 | `Ctrl+D` | Quit |
 | `Ctrl+C` | Quit |
 | `Tab` | Complete trigger phrase (start-of-line → `TerraAI: `, mid-line → `TerraAI `) |
+| `Enter` | Submit input |
 | Anything else | Send as message to current target |
 
 Additional implementation features:
-- `KEY_RESIZE` — recreate windows on terminal resize
-- `KEY_HOME` / `KEY_END` — move cursor to start/end of input
-- Full arrow-key editing (left/right/backspace/delete)
+- Terminal resize handled by Textual automatically
+- Input history navigation works in the Input widget
 
 ---
 
@@ -148,7 +164,7 @@ All of that lives in `plugin.py`. The console just:
 - Mid-line (after a space): `<Tab>` → completes to `TerraAI ` (just the nick, no colon)
 - Mid-line (mid-word): `<Tab>` → completes the word at cursor to the trigger phrase
 - Case-insensitive prefix matching: `ter<Tab>` → `TerraAI: `
-- If no match found: `curses.beep()` (visual/audio feedback)
+- If no match found: flash the terminal bell (visual/audio feedback)
 - Completions are hardcoded: `["TerraAI: "]` for start-of-line, `["TerraAI "]` for mid-line
 - From `testing-agent2.md` Round 1 #3a: `Ter<Tab>` → `TerraAI: `
 - From `testing-agent2.md` Round 6 #57: mid-line `Ter<Tab>` completes correctly (word-at-cursor matching, not just start-of-line)
@@ -166,7 +182,7 @@ All of that lives in `plugin.py`. The console just:
 
 ### 7.1 Single file: `test_tool/console.py`
 
-Uses Python's built-in `curses` module for the TUI.
+Uses the [Textual](https://textual.textualize.io/) library for the TUI. Not curses.
 
 ### 7.2 FakeTrigger
 
@@ -431,7 +447,7 @@ if __name__ == "__main__":
         run_interactive()
 ```
 
-2. **Interactive (`run_interactive()`):** launches a curses TUI with a main loop that:
+2. **Interactive (`run_interactive()`):** launches a Textual TUI (`TerraAIApp`) with:
    - Dispatches local management commands (`.optin`, `.optout`, etc.) directly in-process via `getattr(terra_plugin, f"cmd_{word}")`
    - Sends AI-bound messages synchronously in the main thread
    - Renders a scrolling chat window, input line with history and tab completion, and `[HH:MM]` timestamps
@@ -456,7 +472,9 @@ do_ai_call(text, is_pm)
 maybe_finish_call()
 ```
 
-**Phase 2 — Asynchronous with spawned worker process.**
+**Phase 2 — Asynchronous with spawned worker process. (Might not be needed with Textual.)**
+
+> **Note:** Phase 1 (synchronous) is the default. Phase 2 is kept here as a fallback in case the AI call still causes UI jank with Textual. The httpx+curses+pty deadlock that originally motivated this is specific to curses — Textual's event loop should not have the same issue. Revisit only if Phase 1 proves unacceptable.
 
 When the UI must stay responsive (e.g. user wants to type while waiting), move AI calls into a separate spawned process. This avoids the httpx+curses+pty deadlock because the worker doesn't inherit curses/pty state.
 
@@ -464,7 +482,7 @@ The full root cause analysis and worker implementation details are in `docs/rele
 
 - `multiprocessing.get_context("spawn")` gives a fresh interpreter without curses/pty state
 - Jobs flow through `input_q`, results flow back through `output_q`
-- The curses main loop polls the output queue each tick (100ms via `input_win.timeout(100)`)
+- The main loop polls the output queue each tick
 - The worker process uses the real `OpenRouterProvider` (httpx) which works fine outside the pty
 
 ```python
@@ -492,15 +510,13 @@ def maybe_finish_call():
         # render result
 ```
 
-**Hybrid approach for testing:** Phase 1 for the console itself (simple, works in terminal), Phase 2 documented for when async is needed.
-
 **Test architecture — three layers:**
 
-1. **Unit tests (§8.1)** use `TerraAITestClient` directly in the test process. No pty, no curses, no AI mock. They test routing and plugin logic by calling `client.send_message("hello")` and asserting on the returned strings.
+1. **Unit tests (§8.1)** use `TerraAITestClient` directly in the test process. No pty, no TUI, no AI mock. They test routing and plugin logic by calling `client.send_message("hello")` and asserting on the returned strings.
 
-2. **SVG tests (§8.2)** run the console in a pty subprocess, send keystrokes, export the UI as SVG, and parse the SVG DOM in the test to verify content. This tests the curses rendering without relying on pty output capture.
+2. **SVG tests (§8.2)** use Textual's `app.run_test()` pilot to drive the real `TerraAIApp` headlessly, then call `app.screen.export_screenshot(format="svg")` to get the rendered UI as an SVG string. Tests parse the SVG and assert on content. No pty subprocess needed.
 
-3. **Interactive tests (§8.3)** are the same as SVG tests but focused on user-facing behaviors (launch, exit, tab complete, history navigation, etc.). They also use SVG export for verification.
+3. **Interactive tests (§8.3)** use the same `run_test()` pilot pattern to test user-facing behaviors (launch, exit, tab complete, history navigation, etc.). Also use SVG export for verification.
 
 Neither unit tests nor interactive tests depend on the console's main loop AI strategy (Phase 1 vs Phase 2). Unit tests bypass the console entirely. Interactive/SVG tests verify the UI via exported SVG, not by reading pty output.
 
@@ -512,7 +528,7 @@ All tests use the **real AI provider** (no mocking). Tests that need an API key 
 
 ### 8.1 Unit tests (`tests/test_console.py`)
 
-Non-interactive tests that use `TerraAITestClient` directly (no pty subprocess). These test the routing and plugin logic, not the curses UI.
+Non-interactive tests that use `TerraAITestClient` directly (no pty subprocess). These test the routing and plugin logic, not the Textual UI.
 
 **TestTestTool:**
 - `test_send_message` — trigger phrase routes to AI
@@ -539,30 +555,32 @@ Non-interactive tests that use `TerraAITestClient` directly (no pty subprocess).
 
 ### 8.2 Console SVG tests (`tests/test_console_screenshots.py`)
 
-These tests exercise the **curses UI** by running the console in a pty subprocess, sending keystrokes, and exporting SVG screenshots of the result. The tests then **inspect the SVG content programmatically** to verify the UI shows the correct output.
+These tests exercise the **Textual UI** by using Textual's built-in test pilot (`app.run_test()`) to drive the real `TerraAIApp` headlessly, then exporting SVG screenshots via `app.screen.export_screenshot(format="svg")`. The tests then **inspect the SVG content programmatically** to verify the UI shows the correct output.
 
 **How SVG export works:**
 
-The console uses `curses` (not Textual). To export SVG with colors:
-- After the console runs, call `stdscr.export_svg(path)` — this dumps the curses screen buffer as SVG with ANSI colors rendered.
+Textual has built-in SVG export:
+- `svg_string = await app.screen.export_screenshot(format="svg")` returns the rendered UI as an SVG string with colors and layout preserved.
 - The SVG contains `<text>` elements with `(x, y)` positions and content.
 - Tests parse the SVG, extract text elements, and assert expected strings are present.
 
 **Test format:**
 
 ```python
-def test_pm_mode():
+@pytest.mark.asyncio
+async def test_pm_mode():
     """PM mode shows [PM] prefix and bot responds."""
-    with ConsoleRunner() as runner:
-        runner.send_keys("/msg hello\n")
-        runner.expect_response(timeout=30)
-        svg = runner.export_svg()
-        
+    app = TerraAIApp(client=client)
+    async with app.run_test() as pilot:
+        await pilot.type("#input", "/msg hello")
+        await pilot.press("enter")
+        await pilot.pause(2)  # wait for AI response to render
+        svg = await app.screen.export_screenshot(format="svg")
+
         # Parse SVG and verify content
         texts = extract_svg_texts(svg)
-        assert "[PM] <tester> hello" in texts
-        assert any("TerraAI" in t and "hello" not in t for t in texts), \
-            "Bot response not found"
+        assert any("[PM]" in t and "tester" in t and "hello" in t for t in texts)
+        assert any("TerraAI" in t for t in texts)
 ```
 
 **SVG tests:**
@@ -579,14 +597,14 @@ def test_pm_mode():
 
 **Why SVG tests?**
 
-- Can't inspect curses output programmatically in a pty
+- Textual's test pilot can drive the UI headlessly without a pty
 - SVG export preserves colors, layout, and text positions
 - Tests can parse the SVG DOM and assert on content
 - Visual inspection still possible (open SVG in browser)
 
 ### 8.3 Interactive tests
 
-Pty-subprocess tests that launch `run_interactive()` and verify behavior through the pty. These use the SVG export approach from §8.2 to verify UI state.
+These use the same `run_test()` pilot pattern from §8.2, focused on user-facing behaviors (launch, exit, tab complete, history navigation, etc.). Driven entirely through the pilot — no pty subprocess needed.
 
 From `testing-agent2.md` Round 8:
 - `test_interactive_launches_and_exits`
@@ -614,7 +632,7 @@ These hit the real OpenRouter API. Skipped unless `--real` is passed.
 
 ### 8.4 Deleted: screenshot_test.py
 
-The old `test_tool/screenshot_test.py` was a standalone script using Textual (which was never the actual implementation — the console uses curses). Deleted. Replaced by `tests/test_console_screenshots.py` which uses the real console + curses SVG export.
+The old `test_tool/screenshot_test.py` was a standalone Textual script that didn't use the real console. Deleted. Replaced by `tests/test_console_screenshots.py` which drives the real `TerraAIApp` via Textual's `run_test()` pilot and uses `app.screen.export_screenshot(format="svg")`.
 
 ---
 
@@ -622,7 +640,7 @@ The old `test_tool/screenshot_test.py` was a standalone script using Textual (wh
 
 | File | Purpose |
 |------|---------|
-| `test_tool/console.py` | Interactive console (curses TUI) |
+| `test_tool/console.py` | Interactive console (Textual TUI) |
 | `test_tool/__init__.py` | Package marker |
 | `tests/test_console.py` | Automated tests for the console |
 | `data/` | Runtime files (DB, logs, result files) |
