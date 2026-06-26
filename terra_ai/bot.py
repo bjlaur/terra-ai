@@ -1,11 +1,11 @@
-"""SOPEL plugin entry point for TerraAI."""
+"""Core TerraAI plugin logic."""
 
 import logging
 import time
 
 from terra_ai.commands.management import ManagementCommands
 from terra_ai.commands.user import UserCommands
-from terra_ai.config import TerraConfig
+from terra_ai.config import TerraAISection
 from terra_ai.context.manager import ContextManager
 from terra_ai.database import Database, DBConfig
 from terra_ai.providers.base import Message
@@ -23,21 +23,22 @@ class TerraAI:
     SOPEL @rule decorators delegate to this class.
     """
 
-    def __init__(self, config: TerraConfig):
+    def __init__(self, config: TerraAISection):
         self.config = config
         self.db = Database(DBConfig(path=config.sqlite_path))
-        trigger_char = config.bot.get("trigger_char", ".") if config else "."
-        self.prompts = PromptManager(self.db, trigger_char=trigger_char, config=config)
+        self.prompts = PromptManager(
+            self.db, trigger_char=config.trigger_char, config=config
+        )
         self.context = ContextManager(self.db, self.prompts)
         self.management = ManagementCommands(self.db, self.prompts)
         self.user = UserCommands(self.db, self.prompts)
 
         # Set up provider
         provider = OpenRouterProvider(
-            model=config.provider.model,
-            api_key=config.provider.api_key,
-            base_url=config.provider.base_url or "https://openrouter.ai/api/v1",
-            timeout=config.provider.timeout,
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.provider_timeout,
         )
         self.registry = ProviderRegistry(provider)
 
@@ -56,7 +57,7 @@ class TerraAI:
         if not self.is_opted_in(server, nick):
             return False
         # Don't respond to our own messages
-        if nick == self.config.bot.get("bot_nick", ""):
+        if nick == self.config.bot_nick:
             return False
         return True
 

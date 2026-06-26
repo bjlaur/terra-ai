@@ -16,7 +16,7 @@ class PromptManager:
         self.db = db
         self.store = PromptStore(db)
         self._trigger_char = trigger_char
-        self._effort = config.bot.get("effort", DEFAULT_EFFORT) if config else DEFAULT_EFFORT
+        self._effort = config.effort if config and hasattr(config, 'effort') else DEFAULT_EFFORT
         self._config = config
 
     @property
@@ -36,7 +36,7 @@ class PromptManager:
 
     def get_system_prompt(self) -> str:
         """Get the system prompt with variables interpolated."""
-        botnick = self._config.bot.get("bot_nick", "") if self._config else ""
+        botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
         return SYSTEM_PROMPT_TEMPLATE.format(triggerchar=self._trigger_char, botnick=botnick)
 
     def get_context_seed(self, server: str, channel: str) -> list[dict]:
@@ -44,7 +44,7 @@ class PromptManager:
 
         Uses source='system' so the AI knows it's context, not user messages.
         """
-        botnick = self._config.bot.get("bot_nick", "") if self._config else ""
+        botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
         seed = []
         for msg in FAKE_CONVERSATION:
             content = msg["content"].replace("${triggerchar}", self._trigger_char)

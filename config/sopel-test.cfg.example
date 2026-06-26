@@ -39,5 +39,17 @@ extra =
     /home/agent/agentic-repos/terra-ai-agent1
 
 [terraai]
-# Path to TerraAI YAML config
-config_path = config/terraai-test.yaml
+# AI provider
+model = openrouter/owl-alpha
+api_key = ${OPENROUTER_API_KEY}
+base_url = https://openrouter.ai/api/v1
+provider_timeout = 30
+
+# Bot behavior
+trigger_phrase = TerraAI:
+bot_nick = TerraAI
+trigger_char = .
+effort = high
+
+# Storage
+sqlite_path = data/terraai.db

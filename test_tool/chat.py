@@ -26,8 +26,27 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
-from terra_ai.config import TerraConfig
-from terra_ai.database import Database, DBConfig
+from terra_ai.config import TerraAISection
+
+
+def _default_test_config():
+    """Create a lightweight config object with TerraAISection defaults.
+
+    Used when there's no SOPEL bot running (test tool, fixtures).
+    Returns a SimpleNamespace with the same attributes as TerraAISection.
+    """
+    from types import SimpleNamespace
+    c = SimpleNamespace()
+    c.model = os.environ.get("TERRAI_MODEL", "openrouter/owl-alpha")
+    c.api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    c.base_url = "https://openrouter.ai/api/v1"
+    c.provider_timeout = 30
+    c.trigger_phrase = "TerraAI:"
+    c.bot_nick = ""
+    c.trigger_char = "."
+    c.effort = "high"
+    c.sqlite_path = "data/test-terraai.db"
+    return c
 
 
 class FakeTrigger:
@@ -121,14 +140,19 @@ class TerraAITestClient:
 
     def _load_config(self, path):
         """Load config, fall back to defaults if file missing."""
+        # Build a simple namespace with the same attributes as TerraAISection
+        # The test tool doesn't have a running SOPEL bot, so we can't use
+        # bot.settings.terraai directly. Instead we create a lightweight config.
+        import configparser
+        from sopel.config import Config as SopelConfig
+
         try:
-            from terra_ai.config import load_config
-            return load_config(path)
-        except FileNotFoundError:
-            config = TerraConfig()
-            config.sqlite_path = "data/test-terraai.db"
-            config.resolve_env()
-            return config
+            sopel_config = SopelConfig(path)
+            sopel_config.define_section('terraai', TerraAISection)
+            return sopel_config.terraai
+        except Exception:
+            # Fallback: create a minimal config with defaults
+            return _default_test_config()
 
     def send_message(self, text: str) -> list[str]:
         """Send a message as the test user and return bot responses.
@@ -144,7 +168,7 @@ class TerraAITestClient:
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
         trigger_char = self.terra.prompts.trigger_char if self.terra.prompts else ""
-        trigger_phrase = self.terra.config.bot.get("trigger_phrase", "")
+        trigger_phrase = self.terra.config.trigger_phrase
 
         # Send "Thinking..." notice to noisy users before AI calls
         def notify_thinking():
@@ -239,7 +263,7 @@ def run_interactive():
     def main(stdscr):
         # Set plugin global so handlers can find the TerraAI instance
         terra_plugin._terrai = client.terra
-        botnick = client.terra.config.bot.get("bot_nick", "")
+        botnick = client.terra.config.bot_nick
         # Note: curses.wrapper() already called cbreak(), noecho(), etc.
         # Don't call them again or they'll error.
         curses.curs_set(1)
@@ -306,7 +330,7 @@ def run_interactive():
         # from the channel member list; here the only other entity is the
         # bot. We include the trigger-phrase suffix so the user can
         # immediately type their message after completing.
-        trigger_phrase = client.terra.config.bot.get("trigger_phrase", "")
+        trigger_phrase = client.terra.config.trigger_phrase
         tab_completions = [trigger_phrase] if trigger_phrase else []
 
         def clear_hint_line():
@@ -565,7 +589,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Non-interactive mode for testing
         client = TerraAITestClient()
-        botnick = client.terra.config.bot.get("bot_nick", "")
+        botnick = client.terra.config.bot_nick
         print(f"{botnick or 'TerraAI'} Test Client")
         print("=" * 40)
 

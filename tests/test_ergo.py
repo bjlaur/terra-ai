@@ -14,7 +14,6 @@ import time
 
 import pytest
 
-from terra_ai.config import TerraConfig
 from terra_ai.database import DBConfig, Database
 
 # Check if ergo is reachable
@@ -49,11 +48,13 @@ def db():
 
 @pytest.fixture
 def terra(db):
-    config = TerraConfig()
-    config.sqlite_path = db.config.path
-    config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    config.bot["nick"] = "TerraAI"
     from terra_ai.bot import TerraAI
+    from tests.conftest import _make_test_config
+    config = _make_test_config(
+        sqlite_path=db.config.path,
+        api_key=os.environ.get("OPENROUTER_API_KEY", ""),
+        bot_nick="TerraAI",
+    )
     return TerraAI(config)
 
 

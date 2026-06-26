@@ -12,11 +12,11 @@ Mock vs Real provider:
 
 import os
 import tempfile
+from types import SimpleNamespace
 
 import pytest
 
 from terra_ai.bot import TerraAI
-from terra_ai.config import TerraConfig
 from terra_ai.database import DBConfig, Database
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai import plugin as terra_plugin
@@ -27,6 +27,27 @@ def pytest_addoption(parser):
         "--real", action="store_true", default=False,
         help="Run tests that hit the real OpenRouter API",
     )
+
+
+def _make_test_config(**overrides):
+    """Create a lightweight config with TerraAISection defaults.
+
+    Tests don't have a running SOPEL bot, so we use a SimpleNamespace
+    with the same attributes as TerraAISection.
+    """
+    defaults = dict(
+        model="openrouter/owl-alpha",
+        api_key=os.environ.get("OPENROUTER_API_KEY", "test-key"),
+        base_url="https://openrouter.ai/api/v1",
+        provider_timeout=30,
+        trigger_phrase="TerraAI:",
+        bot_nick="",
+        trigger_char=".",
+        effort="high",
+        sqlite_path="data/terraai.db",
+    )
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
 
 
 @pytest.fixture
@@ -54,9 +75,7 @@ def terra(db, request):
         and request.node.get_closest_marker("real") is not None
     )
 
-    config = TerraConfig()
-    config.sqlite_path = db.config.path
-    config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "test-key")
+    config = _make_test_config(sqlite_path=db.config.path)
     t = TerraAI(config)
 
     if use_real:

@@ -520,16 +520,7 @@ class TestNoisy:
     @pytest.mark.real
     def test_noisy_on_sends_notice(self, terra):
         """When noisy is ON, a 'Thinking...' notice is sent before AI call."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello!"}}]
-        }
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
+        # provider.chat() is already mocked by conftest (returns "mocked AI response")
         from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
@@ -564,11 +555,12 @@ class TestRealAPI:
 
     @pytest.fixture
     def real_terra(self, db):
-        from terra_ai.config import TerraConfig
         from terra_ai.bot import TerraAI
-        config = TerraConfig()
-        config.sqlite_path = db.config.path
-        config.provider.api_key = os.environ["OPENROUTER_API_KEY"]
+        from tests.conftest import _make_test_config
+        config = _make_test_config(
+            sqlite_path=db.config.path,
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
         t = TerraAI(config)
         terra_plugin._terrai = t
         return t

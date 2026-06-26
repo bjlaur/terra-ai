@@ -26,7 +26,7 @@ class TestTerraAI:
 
     def test_should_respond_self(self, terra):
         # Without config setting bot_nick, self-nick is "" so any nick matches nothing
-        botnick = terra.config.bot.get("bot_nick", "")
+        botnick = terra.config.bot_nick
         if botnick:
             assert terra.should_respond("irc.example.com", botnick) is False
         else:
