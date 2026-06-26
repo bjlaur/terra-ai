@@ -564,6 +564,8 @@ class TestRealAPI:
 
     @pytest.fixture
     def real_terra(self, db):
+        from terra_ai.config import TerraConfig
+        from terra_ai.bot import TerraAI
         config = TerraConfig()
         config.sqlite_path = db.config.path
         config.provider.api_key = os.environ["OPENROUTER_API_KEY"]
