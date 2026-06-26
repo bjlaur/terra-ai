@@ -324,6 +324,46 @@ class TerraAIApp(App):
             self.messages = self.messages[-500:]
         self._redraw_chat()
 
+    def on_key(self, event):
+        """Handle Tab/Up/Down in the input widget."""
+        inp = self.query_one("#input", Input)
+        if not inp.has_focus:
+            return
+
+        key = event.key
+        if key == "tab":
+            current = inp.value
+            at_start = current == current.lstrip()
+            if at_start:
+                inp.value = "TerraAI: "
+            else:
+                inp.value = current + "TerraAI " if not current.endswith(" ") else current + "TerraAI"
+            inp.cursor_position = len(inp.value)
+            event.prevent_default()
+            return
+
+        if key == "up":
+            if self.input_history:
+                if self.history_idx == -1:
+                    self.history_idx = len(self.input_history) - 1
+                elif self.history_idx > 0:
+                    self.history_idx -= 1
+                inp.value = self.input_history[self.history_idx]
+                inp.cursor_position = len(inp.value)
+                event.prevent_default()
+            return
+
+        if key == "down":
+            if self.input_history and self.history_idx >= 0:
+                if self.history_idx < len(self.input_history) - 1:
+                    self.history_idx += 1
+                else:
+                    self.history_idx = -1
+                inp.value = self.input_history[self.history_idx] if self.history_idx >= 0 else ""
+                inp.cursor_position = len(inp.value)
+                event.prevent_default()
+            return
+
     async def on_input_submitted(self, event: Input.Submitted):
         text = event.value
         event.input.value = ""

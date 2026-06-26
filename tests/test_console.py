@@ -247,7 +247,6 @@ class TestInteractiveMode:
             await pilot.press("enter")
             await pilot.pause()
             # The chat should now contain the optin response
-            chat = app.query_one("#chat", app.chat_static.__class__)
             content = "\n".join(app.messages)
             assert "optin" in content.lower() or "opted" in content.lower()
 
@@ -262,7 +261,6 @@ class TestInteractiveMode:
             await _type_text(pilot, "#input", "/msg hello")
             await pilot.press("enter")
             await pilot.pause()
-            chat = app.query_one("#chat", app.chat_static.__class__)
             content = "\n".join(app.messages)
             assert "[PM]" in content
 
