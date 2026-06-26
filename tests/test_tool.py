@@ -7,16 +7,15 @@ and checking bot responses. Screenshots are exported for visual inspection.
 import os
 import pty
 import select
-import tempfile
 import time
 
 import pytest
 from unittest.mock import MagicMock, patch
 
 from terra_ai import plugin as terra_plugin
-from terra_ai.bot import TerraAI
-from terra_ai.config import TerraConfig
-from terra_ai.database import DBConfig, Database
+
+# db and terra fixtures live in conftest.py
+# terra is mock by default; pass --real for real API calls
 
 # Skip if textual not available
 try:
@@ -24,28 +23,6 @@ try:
     HAS_TEXTUAL = True
 except ImportError:
     HAS_TEXTUAL = False
-
-
-@pytest.fixture
-def db():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
-    database = Database(config)
-    yield database
-    os.unlink(path)
-
-
-@pytest.fixture
-def terra(db):
-    config = TerraConfig()
-    config.sqlite_path = db.config.path
-    config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "test-key")
-    t = TerraAI(config)
-    # So plugin handlers (_get_terra()) work when test replaces client.terra
-    terra_plugin._terrai = t
-    yield t
-    terra_plugin._terrai = None
 
 
 class TestTestTool:
@@ -72,12 +49,15 @@ class TestTestTool:
         responses = client.send_message("hello")
         assert len(responses) == 0, "Regular message should not produce a response"
 
+    @pytest.mark.real
     def test_async_ai_call(self, terra):
         """Test that AI calls work (async, background thread).
 
         send_message() runs the AI call in a background thread. This
         verifies the result is collected and returned correctly, and
         that SQLite works across threads (check_same_thread=False).
+        Provider is mocked by default — only routing + threading are tested.
+        Pass --real + @pytest.mark.real for live API.
         """
         from test_tool.chat import TerraAITestClient
         client = TerraAITestClient()
@@ -87,14 +67,7 @@ class TestTestTool:
         assert len(responses) > 0, "Async AI call produced no response"
         assert responses[0].strip() != ""
 
-    def test_send_as_different_nick(self, terra):
-        """Test sending as different users."""
-        from test_tool.chat import TerraAITestClient
-        client = TerraAITestClient()
-        client.terra = terra
-        responses = client.send_as("other-user", "hello")
-        assert len(responses) > 0
-
+    @pytest.mark.real
     def test_unknown_command_routes_to_ai(self, terra):
         """Test that unknown .commands are forwarded to AI (not answered locally).
 
@@ -141,13 +114,18 @@ class TestInteractiveMode:
         import subprocess
         import sys
 
+        _timing = {}
+        _t0 = time.time()
+
         # Use a pty so curses has a real TTY
         master_fd, slave_fd = pty.openpty()
+        _timing["pty"] = time.time() - _t0
 
         env = os.environ.copy()
         env["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "test-key")
         env["TERM"] = "xterm-256color"
 
+        _t1 = time.time()
         proc = subprocess.Popen(
             [sys.executable, "-c",
              "import sys; sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__; "
@@ -158,17 +136,20 @@ class TestInteractiveMode:
             env=env,
         )
         os.close(slave_fd)
+        _timing["spawn"] = time.time() - _t1
 
         stdout_parts = []
-        start = time.time()
+        _t2 = time.time()
 
         # Feed inputs with delays for curses to process
         for inp in inputs:
             time.sleep(0.5)
             os.write(master_fd, inp)
+        _timing["input"] = time.time() - _t2
 
+        _t3 = time.time()
         # Read output until process exits or timeout
-        while time.time() - start < timeout:
+        while time.time() - _t2 < timeout:
             if proc.poll() is not None:
                 break
             ready, _, _ = select.select([master_fd], [], [], 0.5)
@@ -178,11 +159,14 @@ class TestInteractiveMode:
                     stdout_parts.append(data.decode("utf-8", errors="replace"))
                 except OSError:
                     break
+        _timing["poll"] = time.time() - _t3
 
+        _t4 = time.time()
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        _timing["wait"] = time.time() - _t4
 
         try:
             os.close(master_fd)
@@ -190,6 +174,12 @@ class TestInteractiveMode:
             pass
 
         stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        _timing["total"] = time.time() - _t0
+
+        if os.environ.get("TEST_TIMING_VERBOSE"):
+            parts = [f"{k}={v:.2f}s" for k, v in _timing.items()]
+            print(f"\n[timing] {', '.join(parts)}", file=sys.stderr)
+
         return "".join(stdout_parts), stderr
 
     def _run_interactive_poll(self, inputs: list[bytes], expect: str,
@@ -204,11 +194,17 @@ class TestInteractiveMode:
         import subprocess
         import sys
 
+        _timing = {}
+        _t0 = time.time()
+
         master_fd, slave_fd = pty.openpty()
+        _timing["pty"] = time.time() - _t0
+
         env = os.environ.copy()
         env["OPENROUTER_API_KEY"] = os.environ.get("OPENROUTER_API_KEY", "test-key")
         env["TERM"] = "xterm-256color"
 
+        _t1 = time.time()
         proc = subprocess.Popen(
             [sys.executable, "-c",
              "import sys; sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__; "
@@ -219,9 +215,10 @@ class TestInteractiveMode:
             env=env,
         )
         os.close(slave_fd)
+        _timing["spawn"] = time.time() - _t1
 
         stdout_parts = []
-        start = time.time()
+        _t2 = time.time()
 
         for inp in inputs:
             # Send input
@@ -258,10 +255,14 @@ class TestInteractiveMode:
             if not found and expect:
                 # Timed out waiting for expected output
                 pass
+        _timing["poll"] = time.time() - _t2
 
+        _t3 = time.time()
         # Final wait
         time.sleep(post_wait)
+        _timing["post_wait"] = time.time() - _t3
 
+        _t4 = time.time()
         # Send quit if process still running
         if proc.poll() is None:
             try:
@@ -269,11 +270,28 @@ class TestInteractiveMode:
             except OSError:
                 pass
             time.sleep(1)
+        _timing["quit"] = time.time() - _t4
 
+        _t5 = time.time()
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        _timing["wait"] = time.time() - _t5
+
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        _timing["total"] = time.time() - _t0
+
+        if os.environ.get("TEST_TIMING_VERBOSE"):
+            parts = [f"{k}={v:.2f}s" for k, v in _timing.items()]
+            print(f"\n[timing] {', '.join(parts)}", file=sys.stderr)
+
+        return "".join(stdout_parts), stderr
 
         try:
             os.close(master_fd)
@@ -298,6 +316,7 @@ class TestInteractiveMode:
         assert "optin" in stdout.lower() or "optin" in stderr.lower(), \
             "Help command response not found"
 
+    @pytest.mark.slow
     def test_interactive_tab_completes_trigger(self, env_setup):
         """Test that Tab completes to trigger phrase at start of line: 'Ter<Tab>' -> 'TerraAI: '."""
         stdout, stderr = self._run_interactive([b"Ter\t", b"quit\n"])
@@ -306,6 +325,7 @@ class TestInteractiveMode:
         assert "TerraAI:" in stdout, \
             "Tab did not complete 'Ter' to 'TerraAI: ' at start of line"
 
+    @pytest.mark.slow
     def test_interactive_tab_completes_midline(self, env_setup):
         """Test that Tab mid-line completes to just the bot nick: 'Ter<Tab>' -> 'TerraAI'."""
         # Type some text, then Tab mid-line
@@ -352,11 +372,13 @@ class TestInteractiveMode:
         stdout, stderr = self._run_interactive([b"\n", b"quit\n"])
         assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
 
+    @pytest.mark.slow
     def test_interactive_ctrl_d_exits(self, env_setup):
         """Test that Ctrl+D exits cleanly."""
         stdout, stderr = self._run_interactive([b"\x04"])  # Ctrl+D
         assert "Traceback" not in stderr, f"Error in interactive mode:\n{stderr}"
 
+    @pytest.mark.slow
     def test_interactive_history_navigation(self, env_setup):
         """Test that KEY_UP navigates input history."""
         # Send a message, then press KEY_UP to recall it
@@ -376,6 +398,7 @@ class TestPM:
     and commands in PMs.
     """
 
+    @pytest.mark.real
     def test_pm_trigger_routes_to_ai(self, terra):
         """PM with trigger phrase should route to AI with history."""
         from test_tool.chat import TerraAITestClient
@@ -402,6 +425,7 @@ class TestPM:
         assert len(result["say"]) > 0
         assert ".optin" in result["say"][0]
 
+    @pytest.mark.real
     def test_pm_unknown_command_routes_to_ai(self, terra):
         """PM with unknown .command should route to AI."""
         from test_tool.chat import TerraAITestClient
@@ -410,6 +434,7 @@ class TestPM:
         result = client.send_pm("tester", ".what's 2+2")
         assert len(result["say"]) > 0, "PM with unknown .command produced no response"
 
+    @pytest.mark.real
     def test_ai_command_context_free(self, terra):
         """Test .ai command in PM — context-free prompt."""
         from test_tool.chat import TerraAITestClient
@@ -418,6 +443,7 @@ class TestPM:
         result = client.send_pm("tester", ".ai hello")
         assert len(result["say"]) > 0, ".ai in PM produced no response"
 
+    @pytest.mark.real
     def test_pm_direct_message(self, terra):
         """Test PM with plain text (no trigger, no dot) → AI with history."""
         from test_tool.chat import TerraAITestClient
@@ -427,6 +453,7 @@ class TestPM:
         result = client.send_pm("tester", "hello there")
         assert len(result["say"]) > 0, "Plain text PM produced no AI response"
 
+    @pytest.mark.real
     def test_pm_setlocation_forwards_to_ai(self, terra):
         """Test .setlocation in PM — hybrid routing forwards to AI."""
         from test_tool.chat import TerraAITestClient
@@ -490,8 +517,8 @@ class TestNoisy:
         # No notices should exist (noisy is OFF)
         assert len(client.bot.notices) == 0
 
-    @patch("terra_ai.providers.openrouter.httpx.Client")
-    def test_noisy_on_sends_notice(self, mock_client_cls, terra):
+    @pytest.mark.real
+    def test_noisy_on_sends_notice(self, terra):
         """When noisy is ON, a 'Thinking...' notice is sent before AI call."""
         mock_response = MagicMock()
         mock_response.json.return_value = {

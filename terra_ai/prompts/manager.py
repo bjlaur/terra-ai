@@ -16,7 +16,7 @@ class PromptManager:
         self.db = db
         self.store = PromptStore(db)
         self._trigger_char = trigger_char
-        self._effort = DEFAULT_EFFORT
+        self._effort = config.bot.get("effort", DEFAULT_EFFORT) if config else DEFAULT_EFFORT
         self._config = config
 
     @property

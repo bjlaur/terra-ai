@@ -40,7 +40,6 @@ class TerraAI:
             timeout=config.provider.timeout,
         )
         self.registry = ProviderRegistry(provider)
-        self._effort = config.bot.get("effort", "high")
 
     def is_opted_in(self, server: str, nick: str) -> bool:
         """Check if user is opted in. Defaults to True if user not in DB."""
@@ -83,8 +82,8 @@ class TerraAI:
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
-            logger.info("handle_ai_message: calling provider.chat model=%s effort=%s", provider._model, self._effort)
-            response = provider.chat(msg_objs, effort=self._effort)
+            logger.info("handle_ai_message: calling provider.chat model=%s effort=%s", provider._model, self.prompts.effort)
+            response = provider.chat(msg_objs, effort=self.prompts.effort)
             logger.info("handle_ai_message: provider.chat returned %r", response[:80] if response else None)
 
             elapsed_ms = int((time.time() - start) * 1000)
