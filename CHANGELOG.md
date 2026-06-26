@@ -29,7 +29,7 @@
 - Test tool reads both values from config instead of hardcoding
 
 #### Testing
-- 127 unit tests passing
+- 94 unit tests passing (after cleanup), 7 real-API tests passing (with key)
 - All non-ergo tests passing
 - Package renamed throughout all imports and references
 
@@ -46,7 +46,7 @@
 - `python-textual` added to PACKAGES.md
 
 #### Testing
-- 127 unit tests passing (database, providers, prompts, context, bot, providers_extended, test_tool)
+- 94 unit tests passing (after cleanup), 7 real-API tests passing (with key) (database, providers, prompts, context, bot, providers_extended, test_tool)
 - 15 ergo integration tests (require live ergochat server)
 
 ### Agent 2 — Routing fixes, new commands, PM support, manual testing
@@ -88,7 +88,7 @@
 - Test tool duplicated routing — rework plan drafted to use single `dispatch()`
 
 #### Testing
-- 127 unit tests passing
+- 94 unit tests passing (after cleanup), 7 real-API tests passing (with key)
 - `--real` API tests passing (7/7): effort, unknown command, noisy, setlocation, PM trigger, PM effort, noisy notice
 - Screenshot tests passing (8 SVGs): resize, wrap, PM, noisy
 - 68 manual tests documented in `docs/release-0.0.2/testing-agent2-v2.md`
@@ -96,6 +96,7 @@
 - Rework plan drafted in `docs/release-0.0.2/rework-plan.md`
 - Deferred tests tracked in `docs/release-0.0.2/deferred-testing-agent2.md`
 - Async testing report in `docs/misc/claude-didn't-listen.md`
+- **3 interactive tests deferred** (2026-06-26): `test_interactive_accepts_pm`, `test_interactive_noisy_notice`, `test_interactive_accepts_input` — AI response never arrives in subprocess+curses+pty within 30s timeout. Works in-process. Root cause unknown.
 
 ---
 

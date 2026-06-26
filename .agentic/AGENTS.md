@@ -8,6 +8,8 @@
 - Default provider: **OpenRouter (OWL)**
 - Trigger character in production: `-` (`.` used in docs)
 - SOPEL plugin API: `@plugin.command()`, `@plugin.rule()` (NOT `@sopel.module`)
+- Admin gating: `@plugin.require_admin` / `trigger.admin` (NOT config-driven `admin_nicks`)
+- Command handlers: `ManagementCommands` (was `AdminCommands`) in `commands/management.py`
 
 ## User and Environment
 

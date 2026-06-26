@@ -42,10 +42,9 @@ def terra(db):
     config.sqlite_path = db.config.path
     config.provider.api_key = os.environ.get("OPENROUTER_API_KEY", "test-key")
     t = TerraAI(config)
-    # So plugin.py handlers (_get_terra()) work in tests
+    # So plugin handlers (_get_terra()) work when test replaces client.terra
     terra_plugin._terrai = t
     yield t
-    # Prevent stale reference leaking into next test
     terra_plugin._terrai = None
 
 
@@ -541,7 +540,9 @@ class TestRealAPI:
         config = TerraConfig()
         config.sqlite_path = db.config.path
         config.provider.api_key = os.environ["OPENROUTER_API_KEY"]
-        return TerraAI(config)
+        t = TerraAI(config)
+        terra_plugin._terrai = t
+        return t
 
     def test_real_effort_level(self, real_terra):
         """Test .effort low sets the level and responds with confirmation."""

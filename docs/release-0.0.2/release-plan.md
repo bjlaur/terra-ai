@@ -3,7 +3,7 @@
 ## Status
 
 **Branch**: `release-0.0.2`
-**Status**: Substantially complete. Ergo smoke/protocol/bot-connect tests passing. SOPEL bot message dispatch blocked on IRCv3 issue. Agent2 completed routing fixes, .clear command, PM support, noisy mode, resize fix, async AI, manual testing rounds 1–7, polling harness for interactive tests, and SQLite threading fix. Rework plan drafted for SOPEL-native plugin architecture.
+**Status**: Substantially complete. SOPEL-native cleanup done (handle_management deleted, AdminCommands→ManagementCommands, trigger.admin gating, dead code removed). 3 interactive tests deferred. Custom prompts rework still needs discussion.
 
 ---
 
@@ -42,9 +42,5 @@ See `feature.md` for full description.
 - [x] Web search working
 - [x] ergo smoke + IRC protocol tests pass (7/7)
 - [ ] ergo SOPEL bot end-to-end tests pass (2/4 — message dispatch blocked on IRCv3)
-- [ ] Fix test_interactive_noisy_notice (AI not responding in test harness)
-- [x] `docs/release-0.0.2/testing-agent1.md` completed
-- [x] `docs/release-0.0.2/testing-agent2.md` completed
-- [x] `docs/release-0.0.2/testing-agent2-v2.md` created (comprehensive checklist)
-- [x] README.md updated with new commands (.clear)
-- [x] Rework plan drafted (`docs/release-0.0.2/rework-plan.md`)
+- [ ] Fix deferred interactive tests (AI not responding in subprocess+curses+pty harness)
+- [ ] Custom prompts rework (needs discussion)

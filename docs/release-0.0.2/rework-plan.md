@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-25 (updated 2026-06-26)
 **Agent:** agent2 (original), OWL (cleanup pass)
-**Status:** In progress — big rewrite done, cleanup pass remaining
+**Status:** Complete — all cleanup steps C1–C8 done (2026-06-26). 3 interactive tests deferred.
 
 ---
 
@@ -276,7 +276,7 @@ source ~/.terra-ai/.env && python -m pytest tests/ -v --ignore=tests/test_ergo.p
 python test_tool/chat.py --test
 ```
 
-Expected: no new failures. The 2 interactive test failures (`test_interactive_noisy_notice`, `test_interactive_accepts_pm`) are pre-existing — AI doesn't respond in test harness.
+Expected: no new failures. The 3 interactive test failures (`test_interactive_noisy_notice`, `test_interactive_accepts_pm`, `test_interactive_accepts_input`) are deferred — AI response never arrives in subprocess+curses+pty test setup within the 30s timeout. Works in-process. Root cause unknown.
 
 ---
 

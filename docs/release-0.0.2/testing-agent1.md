@@ -4,12 +4,7 @@ OWL — 2026-06-25
 
 ## Unit Tests
 
-**107+ tests passing**
-
-```
-pytest tests/ -v
-============================= 107+ passed in 30.12s ==============================
-```
+**94 tests passing (after SOPEL-native cleanup), 7 real-API tests passing (with key), 9 skipped (need key)**
 
 ### Breakdown
 - `test_database.py` — SQLite CRUD, WAL mode

@@ -244,8 +244,10 @@ def addressed_freeform(bot, trigger):
     server = _server_name(bot)
     channel = _channel_name(trigger)
     nick = _nick(trigger)
+    logger.info("addressed_freeform server=%r nick=%r text=%r", server, nick, trigger.group(1))
 
     if not terra.should_respond(server, nick):
+        logger.info("addressed_freeform: should_respond=False")
         return
 
     text = (trigger.group(1) or "").strip()
@@ -253,8 +255,11 @@ def addressed_freeform(bot, trigger):
 
     # Avoid double-processing known management commands
     if first_word in _KNOWN_NICK_COMMANDS:
+        logger.info("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
         return
 
+    logger.info("addressed_freeform: calling handle_ai_message text=%r", text)
     response = terra.handle_ai_message(server, channel, nick, text)
+    logger.info("addressed_freeform: response=%r", response)
     if response:
         bot.say(response)

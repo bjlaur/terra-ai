@@ -7,9 +7,19 @@ Usage:
 
 import asyncio
 import curses
+import logging
 import sys
 import os
 import time
+
+# Log to file so subprocess test output isn't polluted
+os.makedirs("data", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    handlers=[logging.FileHandler("data/test_tool.log", mode="w")],
+)
+logger = logging.getLogger("terraai")
 
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -130,6 +140,7 @@ class TerraAITestClient:
         functionality in plugin.py — NOT tested here. This method
         calls handlers regardless of opt-in status.
         """
+        logger.info("send_message text=%r", text)
         self.bot.messages.clear()
         trigger = FakeTrigger(self.nick, self.channel, text)
         trigger_char = self.terra.prompts.trigger_char if self.terra.prompts else ""
@@ -189,19 +200,23 @@ class TerraAITestClient:
 
         Returns {"say": [...], "notice": [...]} with responses and notices.
         """
+        logger.info("send_pm nick=%r text=%r", nick, text)
         self.bot.messages.clear()
         self.bot.notices.clear()
         trigger = FakeTrigger(nick, self.channel, text, is_pm=True)
 
         # Send "Thinking..." notice to noisy users before AI calls
         def notify_thinking():
+            logger.info("notify_thinking is_noisy=%s", self.terra.user.is_noisy(self.server, nick))
             if self.terra.user.is_noisy(self.server, nick):
                 self.bot.notice(nick, "Thinking...")
 
         # Check for command dispatch (cmd_<name>)
         cmd_word = text.split()[0].lstrip(".-") if text.split() else ""
+        logger.info("send_pm cmd_word=%r", cmd_word)
         if cmd_word:
             handler = getattr(terra_plugin, f"cmd_{cmd_word}", None)
+            logger.info("send_pm handler=%s", handler)
             if handler:
                 notify_thinking()
                 handler(self.bot, trigger)
@@ -222,6 +237,8 @@ def run_interactive():
     client = TerraAITestClient()
 
     def main(stdscr):
+        # Set plugin global so handlers can find the TerraAI instance
+        terra_plugin._terrai = client.terra
         botnick = client.terra.config.bot.get("bot_nick", "")
         # Note: curses.wrapper() already called cbreak(), noecho(), etc.
         # Don't call them again or they'll error.
@@ -441,13 +458,16 @@ def run_interactive():
 
         def do_ai_call(text, is_pm):
             """Run the AI call in a thread. Stores result when done."""
+            logger.info("do_ai_call START text=%r is_pm=%s", text, is_pm)
             try:
                 if is_pm:
                     result = client.send_pm(client.nick, text)
                 else:
                     result = client.send_message(text)
                 pending_call["result"] = result
+                logger.info("do_ai_call DONE result=%r", result)
             except Exception as e:
+                logger.exception("do_ai_call FAILED")
                 pending_call["result"] = [f"Error: {e}"]
             finally:
                 pending_call["done"] = True
@@ -456,6 +476,7 @@ def run_interactive():
             """If a background AI call finished, render its result."""
             if not pending_call["done"]:
                 return
+            logger.info("maybe_finish_call pending_call=%r", pending_call)
             pending_call["done"] = False
             result = pending_call["result"]
             is_pm = pending_call.get("is_pm", False)

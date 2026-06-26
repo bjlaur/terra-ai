@@ -112,7 +112,7 @@ terra_ai/               # SOPEL plugin package (loaded from repo root)
 │   └── web_search.py   # DuckDuckGo instant-answer search (no key)
 ├── prompts/            # Prompt management + defaults
 ├── context/            # Conversation context / compaction
-└── commands/           # Command handlers (user.py, admin.py)
+└── commands/           # Command handlers (user.py, management.py)
 ```
 
 ## License

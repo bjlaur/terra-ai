@@ -1,8 +1,8 @@
 # TerraAI — Implementation Plan
 
-> **Status:** 0.0.1 released, 0.0.2 substantially complete (carry-over done: SOPEL dispatch fixed, bot e2e unblocked). 0.0.3 planned
+> **Status:** 0.0.1 released, 0.0.2 substantially complete (carry-over + SOPEL-native cleanup done). 0.0.3 planned
 > **Agent:** OWL
-> **Last updated:** 2026-06-25
+> **Last updated:** 2026-06-26
 
 ---
 
@@ -25,7 +25,7 @@ Class / module name: **TerraAI**
 - **Python:** 3.14.6 system-wide. **Do not `pip install` into system Python.** Dependencies managed via `Containerfile` for deployment. If a dep is missing locally, tell the user — do not install.
 - **SOPEL:** Only available in AUR (chaotic-aur). Will be built from `yay` as the first container build step.
 - **AUR:** chaotic-aur is configured and available.
-- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/carry-over-0.0.2`.
+- **Git:** Repo at `/home/agent/git/terra-ai`. Default branch: `main`. Branches: `release-0.0.1` (merged), `release-0.0.2` (current), `agent1/sopeL-native-cleanup` (done, needs merge).
 - **Agent name:** OWL
 - **Container user:** `terra-ai` (UID 1000, non-root, with NOPASSWD sudo for initial yay build, then NOPASSWD removed)
 
@@ -46,7 +46,7 @@ Class / module name: **TerraAI**
 
 ## 2. Project Structure
 
---doesn't have where we moved stuff to .agentic
+-- .agentic/ directory holds agent workflow docs
 
 ```
 terra-ai/
@@ -77,8 +77,8 @@ terra-ai/
 │   │   └── manager.py                        # Context assembly + history save
 │   ├── commands/
 │   │   ├── __init__.py                       # Re-exports command handlers
-│   │   ├── admin.py                          # .listprompts, .rmprompt, .addprompt
-│   │   └── user.py                           # .optin, .optout, .ai
+│   │   ├── management.py                     # .listprompts, .rmprompt, .addprompt, .compact, .clear, .stats, .help
+│   │   └── user.py                           # .optin, .optout, .noisy, .effort
 │   └── tools/
 │       └── __init__.py                       # Tool registry (web_search, etc.)
 ├── data/                                     # Runtime: terraai.db, logs. Gitignored.
@@ -106,6 +106,9 @@ terra-ai/
 │   ├── TODO.md                               # Active roadmap / task tracking
 │   ├── DEVELOPMENT.md                        # Development guide and rules
 │   ├── AGENTS.md                             # Agent notes and conventions
+│   ├── plan.md                               # This file (long-term plan)
+│   ├── agent1-handoff.md                     # OWL handoff notes
+│   ├── agent2-handoff.md                     # agent2 handoff notes
 │   └── parallel-work.md                      # Multi-agent workflow
 ├── CHANGELOG.md                              # Release history
 ├── Containerfile                             # Arch Linux base + chaotic-aur + yay + sopel + requirements
@@ -286,7 +289,7 @@ CREATE INDEX IF NOT EXISTS idx_stats_server_command
 
 These commands **create or modify custom prompts**. The scope depends on who sends them:
 
-- If sent from a nick in `config.admin_nicks` → **global/setup prompt** (no `<nick>` prefix, applies to everyone, paramount)
+- If sent from a SOPEL admin (trigger.admin) → **global/setup prompt** (no `<nick>` prefix, applies to everyone, paramount)
 - If sent from any other nick → **user prompt** (treated as a `<nick>` prompt, only that user can trigger it)
 
 | Command | Syntax | Behavior | Replies |
@@ -734,16 +737,16 @@ ENTRYPOINT ["sopel", "-c", "config/terraai.yaml"]
 ### 13.1 Compile Checks
 
 ```bash
-python -m py_compile terraai/__init__.py
-python -m py_compile terraai/config.py
-python -m py_compile terraai/database.py
-python -m py_compile terraai/providers/base.py
-python -m py_compile terraai/providers/registry.py
-python -m py_compile terraai/prompts/manager.py
-python -m py_compile terraai/context/manager.py
-python -m py_compile terraai/commands/admin.py
-python -m py_compile terraai/commands/user.py
-python -m py_compile terraai/bot.py
+python -m py_compile terra_ai/__init__.py
+python -m py_compile terra_ai/config.py
+python -m py_compile terra_ai/database.py
+python -m py_compile terra_ai/providers/base.py
+python -m py_compile terra_ai/providers/registry.py
+python -m py_compile terra_ai/prompts/manager.py
+python -m py_compile terra_ai/context/manager.py
+python -m py_compile terra_ai/commands/management.py
+python -m py_compile terra_ai/commands/user.py
+python -m py_compile terra_ai/bot.py
 ```
 
 All must pass before any commit.

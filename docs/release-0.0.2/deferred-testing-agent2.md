@@ -43,5 +43,6 @@ See [TODO.md](../../.agentic/TODO.md) item: "Write DB-based tests for .addprompt
 
 ## Admin gating decision (#31, #32)
 
-- **`.compact`** — **RESOLVED** — gated to admin only (Round 4 #33)
+- **`.compact`** — **RESOLVED** — gated to admin only via `@plugin.require_admin` decorator (SOPEL-native)
 - **`.stats`** — still needs decision (any user can currently run it)
+- **`.optout <nick>`** — **RESOLVED** — checks `trigger.admin` in handler to gate opting out other users

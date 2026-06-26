@@ -66,11 +66,11 @@ No SOPEL built-in `help` — TerraAI has its own `.help`.
 
 Test counts: 83 → 107+
 
-### Rework in progress
-- `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture (drafted, not started)
-  - Extract `dispatch()` into `bot.py` (single routing entry point)
-  - Slim `plugin.py` to thin `@plugin.command()` / `@plugin.rule()` wrapper
-  - Test tool calls `dispatch()` directly — no duplicated routing
-  - Remove `MANAGEMENT_COMMANDS` set (SOPEL tracks via decorators)
-  - **Status:** Drafted, awaiting merge before execution
-- Custom prompts (`.addprompt`, `.rmprompt`, `match_prompt()`) — TBD, needs discussion
+### Rework complete (2026-06-26)
+- `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture — **COMPLETE**
+  - Deleted `handle_management()` routing layer — plugin handlers call `user.*`/`management.*` directly
+  - Renamed `AdminCommands` → `ManagementCommands`
+  - Removed dead code: `is_management_command()`, `match_prompt()`, `MANAGEMENT_COMMANDS` set
+  - Admin gating → SOPEL's `trigger.admin` / `@plugin.require_admin`; removed `TerraAI.is_admin()` and `admin_nicks`
+  - Test tool → `getattr(terra_plugin, f"cmd_{name}")` dispatch
+- Custom prompts (`.addprompt`, `.rmprompt`, `match_prompt()`) — TBD, needs discussion (next task)

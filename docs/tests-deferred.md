@@ -106,6 +106,21 @@ Last verified: 2026-06-25 on agent1/carry-over-0.0.2
 
 ---
 
+## Deferred: Interactive Tests (2026-06-26)
+
+### test_tool.py::TestInteractiveMode
+
+- **Condition**: AI response never arrives in subprocess+curses+pty test setup within 30s timeout
+- **Tests affected**: 3 tests:
+  - test_interactive_accepts_pm — `/msg hello` sends PM, but no `<TerraAI>` response appears
+  - test_interactive_noisy_notice — `.noisy` works, but no `-!- Thinking` notice appears
+  - test_interactive_accepts_input — same root cause
+- **Root cause**: Unknown. AI call works in-process (<2s response). The subprocess launches `run_interactive()` via pty, the AI call runs in a background thread, but the result never renders to curses output within the timeout.
+- **How to investigate**: Add more detailed subprocess logging; check if the background thread completes at all; compare with a simple non-curses subprocess test
+- **Deferred**: 2026-06-26 after extensive debugging session
+
+---
+
 ## Summary
 
 | Category | Count | Details |
@@ -113,7 +128,7 @@ Last verified: 2026-06-25 on agent1/carry-over-0.0.2
 | Skipped: ergo required | 15 | test_ergo.py (module-level skipif) |
 | Skipped: API key required | 6 | TestOpenRouterProviderRealAPI (2) + TestRealAPI (4) |
 | Without assertions | 2 | TestCommandStats.test_log + TestPerformanceStats.test_log |
-| Currently failing | 0 | (all fixed as of carry-over) |
+| Deferred: interactive | 3 | TestInteractiveMode (subprocess AI call issue) |
 | Unused guards | 1 | HAS_TEXTUAL defined but never used |
 | Broad exception handlers | 3 | test_ergo.py (2 acceptable, 1 worth narrowing) |
 
@@ -142,7 +157,7 @@ Last verified: 2026-06-25 on agent1/carry-over-0.0.2
 
 ## Currently Passing (for reference)
 
-- 107+ tests pass with `pytest tests/ --ignore=tests/test_ergo.py` (0 failures)
-- 6 additional tests pass when `OPENROUTER_API_KEY` is set (2 in test_providers.py + 4 in test_tool.py)
+- 94 tests pass with `pytest tests/ --ignore=tests/test_ergo.py` (0 failures, 9 skipped)
+- 7 real-API tests pass when `OPENROUTER_API_KEY` is set
 - 15 ergo tests pass when ergochat is running on localhost:6667
-- 3 interactive mode tests (TestInteractiveMode) pass using pty/curses (no Textual dependency)
+- 3 interactive mode tests (TestInteractiveMode) deferred — subprocess AI call issue

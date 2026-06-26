@@ -83,7 +83,9 @@ class TerraAI:
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
+            logger.info("handle_ai_message: calling provider.chat model=%s effort=%s", provider._model, self._effort)
             response = provider.chat(msg_objs, effort=self._effort)
+            logger.info("handle_ai_message: provider.chat returned %r", response[:80] if response else None)
 
             elapsed_ms = int((time.time() - start) * 1000)
 

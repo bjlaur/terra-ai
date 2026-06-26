@@ -58,11 +58,13 @@ pytest tests/
 
 ## Architecture
 
-- **Plugin entry point:** `terraai/plugin.py` — currently uses deprecated `@sopel.module.rule` (rework planned)
-- **Routing:** `TerraAI.handle_management()` + `handle_ai_message()` in `terraai/bot.py` — if/elif dispatch (rework planned to use SOPEL-native routing)
-- **Core class:** `TerraAI` — holds all logic (DB, providers, context, prompts)
-- **Providers:** `terraai/providers/` — OpenRouter (default), Gemini, OpenAI, Ollama
-- **Database:** `terraai/database.py` — 7 tables, WAL mode, `check_same_thread=False` for async
-- **Context:** `terraai/context/` — history assembly, session_id, compactions
-- **Test tool:** `test_tool/chat.py` — duplicates routing (rework plan will use single dispatch)
-- **Rework plan:** `docs/release-0.0.2/rework-plan.md` — SOPEL-native plugin architecture (drafted, not started)
+- **Plugin entry point:** `terra_ai/plugin.py` — `@sopel_plugin.command()` for management, `@sopel_plugin.rule(r'$nick (.+)')` for freeform
+- **Routing:** plugin handlers call `user.*`/`management.*` directly — no `handle_management()` middleman
+- **Admin gating:** SOPEL's `@plugin.require_admin` decorator and `trigger.admin` (not config-driven `admin_nicks`) — `.compact` uses the decorator; `.optout <nick>` checks `trigger.admin` in the handler
+- **Interactive tests:** 3 deferred (subprocess AI call issue) — see `.agentic/TODO.md`
+- **Core class:** `TerraAI` — holds state + `handle_ai_message()`
+- **Providers:** `terra_ai/providers/` — OpenRouter (default), Gemini, OpenAI, Ollama
+- **Database:** `terra_ai/database.py` — 7 tables, WAL mode, `check_same_thread=False` for async
+- **Context:** `terra_ai/context/` — history assembly, session_id, compactions
+- **Test tool:** `test_tool/chat.py` — calls real plugin handlers via `getattr(terra_plugin, f"cmd_{name}")` dispatch
+- **Rework plan:** `docs/release-0.0.2/rework-plan.md` — cleanup complete
