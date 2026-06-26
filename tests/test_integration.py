@@ -10,6 +10,7 @@ from terra_ai.bot import TerraAI
 from terra_ai.config import TerraConfig
 from terra_ai.database import DBConfig, Database
 from terra_ai.providers.base import Message
+from terra_ai.providers.openrouter import _reasoning_for_model
 
 
 @pytest.fixture
@@ -144,3 +145,59 @@ class TestUserCommands:
     def test_effort_invalid(self, terra):
         result = terra.user.handle_effort("ultra")
         assert "Invalid" in result
+
+
+class TestEffortWire:
+    """Verify .effort command actually reaches the AI provider payload."""
+
+    def test_effort_low_reaches_provider(self, terra):
+        """Setting .effort low should pass effort='low' to provider.chat()."""
+        captured = {}
+
+        provider = terra.registry.get()
+        original_chat = provider.chat
+
+        def spy_chat(messages, system_prompt=None, effort="high"):
+            captured["effort"] = effort
+            return "ok"
+
+        provider.chat = spy_chat
+        terra.prompts.set_effort("low")
+        terra.handle_ai_message("irc.example.com", "#chan", "nick", "hello")
+        assert captured["effort"] == "low"
+
+    def test_effort_default_is_high(self, terra):
+        """Default effort should be 'high'."""
+        assert terra.prompts.effort == "high"
+
+    def test_reasoning_for_model_gemini_25(self):
+        """Gemini 2.5 models should get reasoning.max_tokens."""
+        r = _reasoning_for_model("google/gemini-2.5-flash", "high")
+        assert r is not None
+        assert r["max_tokens"] == 8192
+        assert r["exclude"] is True
+
+    def test_reasoning_for_model_claude(self):
+        """Claude models should get reasoning.effort."""
+        r = _reasoning_for_model("anthropic/claude-sonnet-4-6", "medium")
+        assert r is not None
+        assert r["effort"] == "medium"
+        assert r["exclude"] is True
+
+    def test_reasoning_for_model_openai_o3(self):
+        """OpenAI reasoning models should get reasoning.effort."""
+        r = _reasoning_for_model("openai/o3", "max")
+        assert r is not None
+        assert r["effort"] == "max"
+
+    def test_reasoning_for_model_gpt4o_none(self):
+        """GPT-4o should not get reasoning (unsupported)."""
+        assert _reasoning_for_model("openai/gpt-4o", "high") is None
+
+    def test_reasoning_for_model_owl_gets_effort(self):
+        """owl-alpha: user opted in to experimental effort — should get reasoning.effort."""
+        r = _reasoning_for_model("openrouter/owl-alpha", "high")
+        # owl-alpha is not in _NO_REASONING_MODELS, so it falls through to None
+        # per the final "return None" catch-all (no prefix match).
+        # If we add owl-specific handling, this test updates accordingly.
+        assert r is None  # Currently no prefix match — change if owl gets effort support

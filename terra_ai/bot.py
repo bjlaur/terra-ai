@@ -40,7 +40,6 @@ class TerraAI:
             timeout=config.provider.timeout,
         )
         self.registry = ProviderRegistry(provider)
-        self._effort = config.bot.get("effort", "high")
 
     def is_admin(self, nick: str) -> bool:
         """Check if a nick is in the admin list."""
@@ -137,7 +136,7 @@ class TerraAI:
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
-            response = provider.chat(msg_objs, effort=self._effort)
+            response = provider.chat(msg_objs, effort=self.prompts.effort)
 
             elapsed_ms = int((time.time() - start) * 1000)
 
