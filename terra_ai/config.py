@@ -5,6 +5,31 @@ All settings live in the [terraai] section of the SOPEL .cfg file.
 """
 
 from sopel.config import types
+from sopel.config import Config as SopelConfig
+
+
+def load_config(path):
+    """Load a SOPEL config file and return the terraai section.
+
+    Falls back to a default TerraAISection if the file is missing or
+    doesn't define a [terraai] section.
+    """
+    try:
+        sopel_config = SopelConfig(path)
+        sopel_config.define_section("terraai", TerraAISection)
+        return sopel_config.terraai
+    except Exception:
+        section = TerraAISection.__new__(TerraAISection)
+        section.model = "openrouter/owl-alpha"
+        section.api_key = ""
+        section.base_url = "https://openrouter.ai/api/v1"
+        section.provider_timeout = 30
+        section.trigger_phrase = "TerraAI:"
+        section.bot_nick = ""
+        section.trigger_char = "."
+        section.effort = "high"
+        section.sqlite_path = "data/terraai.db"
+        return section
 
 
 class TerraAISection(types.StaticSection):

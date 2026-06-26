@@ -51,10 +51,10 @@ From `.agentic/plan.md` §7.2, adapted for Textual widgets:
 ┌─────────────────────────────────────────────────────────┐
 │ #terra-ai                                    12:34     │  ← Header (Static)
 │─────────────────────────────────────────────────────────│
+│ [Channel]                                      [PM]     │  ← Tab bar (Ctrl+X to switch)
+│─────────────────────────────────────────────────────────│
 │ [12:34] <nick1> hey TerraAI                             │
 │ [12:34] <TerraAI> hi there                              │
-│ [12:35] [PM] <nick1> hello                              │  ← Chat (Static, scrollable)
-│ [12:35] [PM] <TerraAI> response                         │
 │ [12:36] -!- Thinking...                                 │
 │                                                         │
 │─────────────────────────────────────────────────────────│
@@ -64,10 +64,17 @@ From `.agentic/plan.md` §7.2, adapted for Textual widgets:
 
 Textual widget tree:
 - `Header` (Static) — channel name + clock, bold
-- `Chat` (Static) — message history, scrollable, grows as messages arrive
+- `TabbedContent` — two `TabPane`s: "Channel" and "PM"
+  - Each tab contains its own `Static` (chat history for that context)
 - `Input` (Input) — single-line input with placeholder
 
-Single channel view — no window list, no split panes, no nick list.
+**Two tabs (using Textual's native `TabbedContent`):**
+- **Channel tab** — shows channel messages (`<nick> message`, `<TerraAI> response`, `-!- notice`)
+- **PM tab** — shows PM history (`[PM] <nick> message`, `[PM] <TerraAI> response`)
+- `Ctrl+X` switches between tabs
+- The input line is shared — what you type goes to whichever tab is active
+- `/msg <text>` automatically switches to the PM tab and sends as a PM
+- Regular messages go to the Channel tab
 
 ---
 
