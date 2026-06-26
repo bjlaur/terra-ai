@@ -54,15 +54,38 @@
 
 ---
 
-## Interactive Tests — DEFERRED
+## Interactive Tests — RESOLVED
 
-Three interactive tests fail because the AI response never arrives within the subprocess+curses+pty test setup's 30-second timeout:
+Previously deferred (subprocess+curses+pty deadlock). Resolved by rewriting to Textual — the test pilot (`app.run_test()`) drives the UI headlessly without pty. All 5 interactive tests pass in mock mode, 8 real tests added.
 
-- `test_interactive_accepts_pm`
-- `test_interactive_noisy_notice`
-- `test_interactive_accepts_input`
+---
 
-The AI call works fine in-process (returns in <2s). The issue is specific to the subprocess launched by pty. Deferred 2026-06-26 after extensive debugging.
+## Real/Mock Test Split — IMPLEMENTED
+
+All tests that can hit the API have both `@pytest.mark.mock` and `@pytest.mark.real` versions. See `docs/release-0.0.2/real-test-plan.md`.
+
+**Rules:**
+- `@pytest.mark.mock` → always mock (even with `--real`)
+- `@pytest.mark.real` → requires `--real` + `OPENROUTER_API_KEY`
+- No marker → defaults to mock
+
+**Run commands:**
+- `pytest` — all mock tests
+- `pytest --real -m real` — only real API tests
+- `pytest --real` — everything
+
+**Counts:** 110 mock tests pass, 12 real tests available (7 skipped without `--real`).
+
+---
+
+## Console Rewrite — IMPLEMENTED
+
+Rewritten from curses to Textual. See `docs/release-0.0.2/console-feature.md` and `docs/release-0.0.2/console-plan.md`.
+
+- `test_tool/console.py` — Textual TUI (was `chat.py` + curses)
+- `tests/test_console.py` — 22 tests (mock + interactive)
+- `tests/test_console_screenshots.py` — 9 tests (pilot-driven, asserts `app.messages`)
+- Screenshots tests use `app.messages` directly, NOT SVG parsing (see `~/textual-richlog-svg-export-report.md`)
 
 ---
 
@@ -75,21 +98,23 @@ The AI call works fine in-process (returns in <2s). The issue is specific to the
 5. **Opt-in/opt-out is core bot concern** — test tool should not enforce it
 6. **`MANAGEMENT_COMMANDS` set removed** — SOPEL tracks via decorators
 7. **Admin gating uses SOPEL native** — `trigger.admin` / `@plugin.require_admin`, not custom `admin_nicks`
+8. **Textual (not curses)** — gives SVG export + test pilot for headless automation
+9. **Phase 2 async worker not needed** — Textual's event loop doesn't have the httpx+pty deadlock
 
 ---
 
 ## What Needs Doing
 
 1. **Custom prompts discussion** — decide what happens to `.addprompt`/`.rmprompt`
-2. **Interactive test failures** — deferred, investigate subprocess AI call issue
-3. **Manual testing** — human needs to fill in "Mine" column in testing-agent2-v2.md
+2. **Manual testing** — human needs to fill in "Mine" column in testing-agent2-v2.md
+3. **Phase 2** — PM tabs via `TabbedContent`, drop `[PM]` prefix, SVG screenshot tests
+4. **Update main repo** — merge `agent2/redo-console-and-tests` to `release-0.0.2`
 
 ---
 
 ## How to Continue
 
-1. Check out `agent1/sopeL-native-cleanup` branch (or merge to release-0.0.2)
-2. Run tests: `source ~/.terra-ai/.env && python -m pytest tests/ -v --ignore=tests/test_ergo.py`
-3. Run interactive: `python test_tool/chat.py`
-4. Run screenshots: `python test_tool/screenshot_test.py`
-5. See `docs/release-0.0.2/testing-agent2-v2.md` for full checklist
+1. Preview mock tests: `cd ~/agentic-repos/terra-ai-agent2 && python -m pytest tests/test_console.py tests/test_console_screenshots.py -v`
+2. Run real API tests: `source ~/.terra-ai/.env && python -m pytest tests/test_console.py -v --real -m real`
+3. Run interactive console: `python test_tool/console.py`
+4. See `docs/release-0.0.2/testing-agent2-v2.md` for full checklist

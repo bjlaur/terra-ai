@@ -89,6 +89,54 @@ class TestMessage:
         assert "assistant" in repr(msg)
 
 
+@pytest.mark.mock
+class TestOpenRouterProviderMockAPI:
+    """Mock tests for OpenRouterProvider."""
+
+    def test_mock_chat(self):
+        """Test that provider.chat() works with mocked httpx."""
+        from unittest.mock import patch, MagicMock
+
+        provider = OpenRouterProvider(
+            model="openrouter/owl-alpha",
+            api_key="test-key",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "mocked response"}}]
+        }
+
+        with patch("httpx.Client.post", return_value=mock_response):
+            messages = [Message("user", "hello")]
+            result = provider.chat(messages)
+            assert result == "mocked response"
+
+    def test_mock_chat_with_system_prompt(self):
+        """Test that provider.chat() passes system prompt with mocked httpx."""
+        from unittest.mock import patch, MagicMock
+
+        provider = OpenRouterProvider(
+            model="openrouter/owl-alpha",
+            api_key="test-key",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "mocked with system"}}]
+        }
+
+        with patch("httpx.Client.post", return_value=mock_response) as mock_post:
+            messages = [Message("user", "hello")]
+            result = provider.chat(messages, system_prompt="Be helpful.")
+            assert result == "mocked with system"
+            # Verify system prompt was sent
+            call_kwargs = mock_post.call_args[1]
+            body = call_kwargs.get("json", {})
+            assert any(m.get("role") == "system" for m in body.get("messages", []))
+
+
+@pytest.mark.real
 @pytest.mark.skipif(not HAS_API_KEY, reason="OPENROUTER_API_KEY not set")
 class TestOpenRouterProviderRealAPI:
     """Integration tests that hit the real OpenRouter API.
