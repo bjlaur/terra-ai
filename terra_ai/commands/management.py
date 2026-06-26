@@ -1,7 +1,11 @@
 """Management commands for TerraAI."""
 
+import logging
+
 from terra_ai.database import Database
 from terra_ai.prompts.manager import PromptManager
+
+logger = logging.getLogger("terraai")
 
 
 class ManagementCommands:
@@ -43,9 +47,13 @@ class ManagementCommands:
             return "Usage: .addprompt <trigger> <text>"
 
         trigger, response = parts
-        if self.prompts.add_prompt(server, trigger, response, nick):
-            return f"Added {trigger}."
-        return "Trigger already exists."
+        try:
+            if self.prompts.add_prompt(server, trigger, response, nick):
+                return f"Added {trigger}."
+            return "Trigger already exists."
+        except Exception as e:
+            logger.error("addprompt failed for %r on %s: %s", trigger, server, e)
+            return f"Error: Failed to add prompt: {e}"
 
     def handle_compact(self, server: str, channel: str, nick: str) -> str:
         """Handle .compact command."""

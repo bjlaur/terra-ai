@@ -1,6 +1,10 @@
 """Prompt manager for TerraAI."""
 
+import logging
+
 from terra_ai.database import Database, PromptStore
+
+logger = logging.getLogger("terraai")
 from terra_ai.prompts.defaults import (
     DEFAULT_EFFORT,
     EFFORT_LEVELS,
@@ -64,7 +68,8 @@ class PromptManager:
         try:
             self.store.add(server, trigger, response, created_by)
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to add prompt %r on %s: %s", trigger, server, e)
             return False
 
     def remove_prompt(self, server: str, trigger: str) -> bool:

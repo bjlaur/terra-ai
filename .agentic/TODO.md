@@ -66,16 +66,22 @@ Only pending/unfinished work stays in the active sections below.
 - [x] Sub-timing instrumentation in `_run_interactive` (`TEST_TIMING_VERBOSE=1`)
 
 ### Done (Ergo Test Profiling) ✅
-- [x] Ergo smoke tests (3), IRC protocol tests (4), SOPEL bot tests (6/8 pass) — 13/15 passing
+- [x] Ergo smoke tests (3), IRC protocol tests (4), SOPEL bot tests (9/9 pass) — 16/16 passing
 - [x] Session-scoped SOPEL fixture — saves 60s+ vs starting SOPEL per test
 - [x] Removed `admin_nicks` from test config (was breaking SOPEL plugin load after rework)
 - [x] Fixed SOPEL `shutdown()` signature (SOPEL 8.0 calls with arg)
-- [x] Total suite time: 305s → 164s (session scope), single-pass ~165s
-- [x] `test_send_and_receive_message` + `test_private_message` slow (20-40s each, socket timeouts)
+- [x] Total suite time: 305s → 122s (session scope)
+- [x] Fixed IRC test client handshake (wait for 001/366 instead of sleeping)
+- [x] Added unknown-command fallback handler (`prefixed_freeform_fallback`) using `@plugin.rule_lazy`
+- [x] Added `test_bot_reports_error_on_ai_failure` — verifies bot sends `Error:` when AI provider fails
+- [x] Fixed `cmd_optin` guard bug — removed `_guard` from all management commands
+- [x] Added `_irc_error_handler` decorator — all plugin handlers log + send `Error:` on crash
+- [x] Added `logger.error` to prompts/manager.py, web_search.py, providers/ollama.py
+- [x] Fixed `"AI provider not configured."` → `"Error: AI provider not configured."` in bot.py
+- [x] Documented ergo test setup in `docs/misc/ergo-test-guide.md`
 
 ### Deferred
-- [ ] Fix interactive test failures (test_interactive_accepts_pm, test_interactive_noisy_notice) — AI response never arrives in subprocess+curses+pty within 30s timeout. Works in-process. Deferred.
-- [ ] Fix ergo `451 ERR_NOTREGISTERED` — test_bot_responds_to_unknown_command + test_bot_optin_optout fail because ergo rejects PRIVMSG before NICK/USER completes. May need unregistered users allowed, or test client needs to wait for 001.
+- [ ] Fix interactive test failures (test_interactive_accepts_pm, test_interactive_noisy_notice) — AI response never arrives in subprocess+curses+pty within 30s timeout. Works in-process. Marked `@pytest.mark.broken`.
 - [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts) — needs discussion
 
 ### In Progress

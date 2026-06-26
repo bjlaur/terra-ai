@@ -1,10 +1,13 @@
 """Ollama provider for TerraAI."""
 
+import logging
 import os
 
 import httpx
 
 from terra_ai.providers.base import AIProvider, Message
+
+logger = logging.getLogger("terraai")
 
 
 class OllamaProvider(AIProvider):
@@ -55,5 +58,6 @@ class OllamaProvider(AIProvider):
             with httpx.Client(timeout=5) as client:
                 response = client.get(f"{self._base_url}/api/tags")
                 return response.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.error("Ollama availability check failed: %s", e)
             return False
