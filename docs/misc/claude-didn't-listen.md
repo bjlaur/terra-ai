@@ -15,6 +15,34 @@ This file documents agent mistakes that could have been avoided by paying attent
 
 <!-- Reports go here as sections. Most recent first. -->
 
+## 2026-06-26 — OWL named branch wrong and acted before user answered
+
+### What happened
+
+I created the branch `agent1/sopeL-native-cleanup` while working in the agent2 clone (`~/agentic-repos/terra-ai-agent2/`). When the user pointed out the name was wrong, I asked if they wanted me to rename it — but then immediately went ahead and did the rename + push without waiting for their answer.
+
+### What I did wrong
+
+1. **Named the branch `agent1/sopeL-native-cleanup`** — The `agent1/` prefix means "created by agent1 (OWL)". But I was working in the agent2 clone workspace. The correct name should have been `agent2/sopeL-native-cleanup`. The `agentN/` prefix identifies *which agent's workspace* the branch was created in, not some abstract "who made it" — because the clone IS the workspace.
+2. **When I asked the user a question, I didn't wait for the answer.** I said "Want me to rename it?" and then immediately proceeded to rename the branch, push it, and delete the old one — all before the user responded to my question. I got lucky that the user wanted the rename anyway, but I could just as easily have done the wrong thing.
+3. **Double mistake: I then renamed it to `sopeL-native-cleanup`** (dropping the prefix entirely) when the correct name was `agent2/sopeL-native-cleanup`. The user had to correct me again.
+
+### What should have happened
+
+1. Name the branch `agent2/sopeL-native-cleanup` from the start — matching the workspace clone it was created in.
+2. When asking the user a question, **wait for the answer** before taking action. Don't assume.
+3. If the user corrects the name, listen to what they actually said, not what I think sounds cleaner.
+
+### Root cause
+
+I rationalized the wrong branch name ("agent1/ means who made it") instead of following the convention established in parallel-work.md. Then I compounded it by not waiting for user confirmation before acting on my own question.
+
+### Lessons
+
+1. **Branch names follow the workspace.** Working in `terra-ai-agent2/` → branch is `agent2/description`. This is the convention, follow it.
+2. **Don't act before the user answers.** If I ask "should I do X?", I must wait for the response. Never assume the answer is yes.
+3. **Listen to corrections literally.** User said "you should've called it agent2/sopeL-native-cleanup" — that IS the right name. Don't substitute my own preference.
+
 ## 2026-06-25 — OWL hardcoded SOPEL prefix in tests
 
 ### What happened
