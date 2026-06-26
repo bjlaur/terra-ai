@@ -65,19 +65,21 @@ Only pending/unfinished work stays in the active sections below.
 - [x] Deleted `test_send_as_different_nick` (not mimicking real IRC)
 - [x] Sub-timing instrumentation in `_run_interactive` (`TEST_TIMING_VERBOSE=1`)
 
+### Done (Ergo Test Profiling) ✅
+- [x] Ergo smoke tests (3), IRC protocol tests (4), SOPEL bot tests (6/8 pass) — 13/15 passing
+- [x] Session-scoped SOPEL fixture — saves 60s+ vs starting SOPEL per test
+- [x] Removed `admin_nicks` from test config (was breaking SOPEL plugin load after rework)
+- [x] Fixed SOPEL `shutdown()` signature (SOPEL 8.0 calls with arg)
+- [x] Total suite time: 305s → 164s (session scope), single-pass ~165s
+- [x] `test_send_and_receive_message` + `test_private_message` slow (20-40s each, socket timeouts)
+
 ### Deferred
-- [ ] Fix interactive test failures (test_interactive_accepts_pm, test_interactive_noisy_notice, test_interactive_accepts_input) — AI response never arrives in subprocess+curses+pty within 30s timeout. Root cause unknown. Works in-process. Deferred 2026-06-26 after extensive debugging.
-- [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts) — needs discussion (separate task after cleanup)
+- [ ] Fix interactive test failures (test_interactive_accepts_pm, test_interactive_noisy_notice) — AI response never arrives in subprocess+curses+pty within 30s timeout. Works in-process. Deferred.
+- [ ] Fix ergo `451 ERR_NOTREGISTERED` — test_bot_responds_to_unknown_command + test_bot_optin_optout fail because ergo rejects PRIVMSG before NICK/USER completes. May need unregistered users allowed, or test client needs to wait for 001.
+- [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts) — needs discussion
 
 ### In Progress
-- [ ] Rework plan — `docs/release-0.0.2/rework-plan.md`
-  - Extract `dispatch()` into `bot.py`
-  - Slim `plugin.py` to thin wrapper
-  - Test tool calls `dispatch()` directly
-  - Remove MANAGEMENT_COMMANDS set
-  - **Status:** Drafted, not started — awaiting merge
-- [ ] Fix `test_interactive_accepts_pm` — subprocess doesn't mock provider (deferred)
-- [ ] Fix `test_interactive_noisy_notice` — same subprocess issue (deferred)
+- [ ] Rework plan — `docs/release-0.0.2/rework-plan.md` — drafted, not started
 
 ### Pending (0.0.2)
 - [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)

@@ -7,7 +7,7 @@ from sopel import bot as sopel_bot
 from sopel.trigger import Trigger
 
 from terra_ai.bot import TerraAI
-from terra_ai.config import TerraAISection
+from terra_ai.config import load_config
 
 logger = logging.getLogger("terraai")
 
@@ -25,26 +25,17 @@ def setup(bot):
     """Called by Sopel when the plugin is loaded."""
     global _terrai
 
-    bot.settings.define_section('terraai', TerraAISection)
-    config = bot.settings.terraai
-    logger.info("TerraAI setup starting; model=%s", config.model)
+    config_path = (
+        getattr(getattr(bot.config, "terraai", None), "config_path", None)
+        or "config/terraai.yaml"
+    )
+    logger.info("TerraAI setup starting; config_path=%r", config_path)
+    config = load_config(config_path)
     _terrai = TerraAI(config)
     logger.info("TerraAI setup complete")
 
 
-def configure(config):
-    """Called by `sopel configure` — interactive config wizard."""
-    config.define_section('terraai', TerraAISection, validate=False)
-    config.terraai.configure_setting('model', 'AI model (default: openrouter/owl-alpha):')
-    config.terraai.configure_setting('api_key', 'OpenRouter API key:')
-    config.terraai.configure_setting('base_url', 'API base URL (default: https://openrouter.ai/api/v1):')
-    config.terraai.configure_setting('trigger_phrase', 'Trigger phrase (default: TerraAI:):')
-    config.terraai.configure_setting('trigger_char', 'Command prefix (default: .):')
-    config.terraai.configure_setting('effort', 'Reasoning effort low/medium/high/xhigh/max (default: high):')
-    config.terraai.configure_setting('sqlite_path', 'SQLite DB path (default: data/terraai.db):')
-
-
-def shutdown():
+def shutdown(bot=None):
     """Called by Sopel when the plugin is unloaded."""
     global _terrai
     _terrai = None

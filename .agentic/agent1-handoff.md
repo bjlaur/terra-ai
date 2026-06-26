@@ -147,8 +147,32 @@ pytest -m ""
 ```bash
 cd ~/agentic-repos/terra-ai-agent1
 source ~/.terra-ai/.env && export OPENROUTER_API_KEY
-ERGO_TEST=1 pytest tests/test_ergo.py -v
+
+# Start ergo (if not running):
+cd ~/.ircd && ergochat run --conf ircd.yaml --quiet &
+
+# Run all ergo tests:
+pytest tests/test_ergo.py -v
+
+# Results: 13 passed, 2 failed in ~165s
 ```
+
+### Ergo Test Status
+
+| Test | Status | Notes |
+|------|--------|-------|
+| TestErgoSmoke (3) | ✅ All pass | 0.02s |
+| TestErgoIRCProtocol (4) | ✅ All pass | 10-42s each (socket timeouts) |
+| TestErgoSopelBot (8) | ⚠️ 6 pass, 2 fail | Session-scoped SOPEL (~10s once) |
+| `test_bot_responds_to_unknown_command` | ❌ FAIL | 451 ERR_NOTREGISTERED — ergo rejects PRIVMSG before NICK completes |
+| `test_bot_optin_optout` | ❌ FAIL | Same 451 issue |
+
+### Ergo Optimization
+
+- Session-scoped `sopel_bot_process` fixture (was function-scoped, started SOPEL per test)
+- Removed `admin_nicks` from test yaml config (broke plugin load after rework)
+- Fixed `shutdown()` signature for SOPEL 8.0
+- Saved: 305s → 164s
 ```
 
 ## Git Identity

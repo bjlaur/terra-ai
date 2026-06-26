@@ -206,8 +206,8 @@ class TestErgoIRCProtocol:
         sender = self._connect_and_register("TerraAISend")
         self._join_channel(sender, "#terra-ai-msg")
 
-        # Give sender time to join
-        time.sleep(1)
+        # Give sender time to join and ergo to relay NAMES
+        time.sleep(2)
 
         # Sender sends a message
         sender.sendall(b"PRIVMSG #terra-ai-msg :hello from sender\r\n")
@@ -268,10 +268,11 @@ class TestErgoSopelBot:
     COMMAND_PREFIX = "-"  # Must match [core] prefix in sopel_config
     BOT_NICK = "TerraAI"  # Must match [core] nick in sopel_config
 
-    @pytest.fixture
-    def sopel_config(self, tmp_path):
+    @pytest.fixture(scope="session")
+    def sopel_config(self, tmp_path_factory):
         """Create a minimal SOPEL config file for testing."""
-        db_path = tmp_path / "terra_ai.db"
+        tmp = tmp_path_factory.mktemp("sopel")
+        db_path = tmp / "terra_ai.db"
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         plugins_lines = "\n    ".join(self.PLUGIN_LIST)
@@ -289,13 +290,13 @@ enable =
     {plugins_lines}
 
 [terraai]
-config_path = {tmp_path / "terra_ai.yaml"}
+config_path = {tmp / "terra_ai.yaml"}
 """
-        config_file = tmp_path / "sopel.cfg"
+        config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
 
         # TerraAI yaml config
-        terraai_yaml = tmp_path / "terra_ai.yaml"
+        terraai_yaml = tmp / "terra_ai.yaml"
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         terraai_yaml.write_text(f"""bot:
   trigger_phrase: "TerraAI:"
@@ -305,16 +306,17 @@ provider:
   model: openrouter/owl-alpha
   api_key: "{api_key}"
 sqlite_path: "{db_path}"
-admin_nicks:
-  - agent1
 default_optin: true
 """)
 
         return config_file
 
-    @pytest.fixture
+    @pytest.fixture(scope="session")
     def sopel_bot_process(self, sopel_config):
-        """Start a SOPEL bot subprocess and yield its handle."""
+        """Start a SOPEL bot subprocess and yield its handle.
+
+        Session-scoped: one SOPEL instance shared across all TestErgoSopelBot tests.
+        """
         import subprocess
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = os.environ.copy()
