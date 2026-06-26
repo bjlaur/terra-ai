@@ -14,7 +14,7 @@
 
 Add `server` column to all tables. Scope all queries by server. Schema already includes `server` columns — queries need updating.
 
-**Files**: `terraai/database.py`, all managers
+**Files**: `terra_ai/database.py`, all managers
 
 ---
 
@@ -24,7 +24,7 @@ Add `server` column to all tables. Scope all queries by server. Schema already i
 
 Configurable per-nick sliding window. Default off. Already in config schema (`rate_limit_enabled`, etc.) — needs enforcement in `bot.py`.
 
-**Files**: `terraai/bot.py`
+**Files**: `terra_ai/bot.py`
 
 ---
 
@@ -34,7 +34,7 @@ Configurable per-nick sliding window. Default off. Already in config schema (`ra
 
 Different channels use different providers. Useful for testing vs. prod channels.
 
-**Files**: `terraai/config.py`, `terraai/providers/registry.py`
+**Files**: `terra_ai/config.py`, `terra_ai/providers/registry.py`
 
 ---
 
@@ -54,7 +54,7 @@ Read-only SQLite viewer for stats. Defer until actually needed.
 
 Dump history as JSON/text for debugging or archiving. Implement when needed.
 
-**Files**: `terraai/database.py`, new command or script
+**Files**: `terra_ai/database.py`, new command or script
 
 ---
 
@@ -72,9 +72,11 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 - Additional providers (Gemini, OpenAI, Ollama) + fallback chain
 - Web search (provider-native + DuckDuckGo fallback)
 - ergo integration testing
+- SOPEL bot message dispatch fix (IRCv3)
 - Context compaction (.compact) with session rotation
 - UX commands: .noisy, .setlocation, .help, .effort, .clear
 - Performance stats (.stats)
+- Opt-in default config flag (`default_optin: true`)
 - 107+ unit tests
 
 ## Done (moved to 0.0.1)
@@ -103,7 +105,6 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 
 ## Done (carried from 0.0.2, unblocked by other agent)
 
-- SOPEL bot message dispatch fix (IRCv3)
 - SSL/TLS for ergo
 - Context compaction (.compact command)
 - Package rename: `terraai/` → `terra_ai/`
@@ -115,6 +116,5 @@ Dump history as JSON/text for debugging or archiving. Implement when needed.
 ## Done (moved to 0.0.3)
 
 - Conversation TTL (auto-prune history older than N days)
-- Opt-in default config flag
 - Better provider error handling (retries, clearer messages)
 - Automated dogfooding (e2e test sequences)

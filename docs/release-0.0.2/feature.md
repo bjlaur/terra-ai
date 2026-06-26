@@ -19,17 +19,17 @@ OWL — Updated 2026-06-25
   - IRC protocol tests: register, join, channel messages, private messages
   - SOPEL bot tests: real SOPEL process with TerraAI plugin, SSL/TLS to ergo
 - **SOPEL + TerraAI test configs** — committed .example files for deployment
-  - `config/sopel-test.cfg.example` — minimal plugin set (admin, adminchannel, ping, reload, safety, tell, coretasks, terraai)
-  - `config/terraai-test.yaml.example` — test TerraAI config (separate DB path)
+  - `config/sopel-test.cfg.example` — minimal plugin set (admin, adminchannel, ping, reload, safety, tell, coretasks, terra_ai)
+  - `config/terra_ai-test.yaml.example` — test TerraAI config (separate DB path)
   - `.agentic/ircd.yaml.example` — ergo IRC server config example
 - **Missing 0.0.1 commands** — `.noisy`, `.setlocation`, `.help`, `.effort`, `.compact`, `.stats`
 
 ### Architecture additions
 - Test tool: `test_tool/chat.py`
-- New providers: `terraai/providers/gemini.py`, `openai.py`, `ollama.py`
-- Web search: `terraai/tools/web_search.py`
+- New providers: `terra_ai/providers/gemini.py`, `openai.py`, `ollama.py`
+- Web search: `terra_ai/tools/web_search.py`
 - Integration tests: `tests/test_ergo.py`
-- Config examples: `config/sopel-test.cfg.example`, `config/terraai-test.yaml.example`
+- Config examples: `config/sopel-test.cfg.example`, `config/terra_ai-test.yaml.example`
 
 ### SOPEL Plugin Selection
 Only admin-essential plugins loaded (no games/bloat):
@@ -40,7 +40,7 @@ Only admin-essential plugins loaded (no games/bloat):
 - `safety` — URL safety
 - `tell` — message relay
 - `coretasks` — SOPEL core (required)
-- `terraai` — our plugin
+- `terra_ai` — our plugin
 
 No SOPEL built-in `help` — TerraAI has its own `.help`.
 

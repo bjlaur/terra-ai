@@ -416,7 +416,7 @@ class TestPM:
     def test_pm_direct_message(self, terra):
         """Test PM with plain text (no trigger, no dot) → AI with history."""
         from test_tool.chat import TerraAITestClient
-        client = TerraformAITestClient()
+        client = TerraAITestClient()
         client.terra = terra
         # Plain text PM — no trigger phrase, no dot prefix
         result = client.send_pm("tester", "hello there")

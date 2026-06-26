@@ -29,7 +29,7 @@
 - Test tool reads both values from config instead of hardcoding
 
 #### Testing
-- 107+ unit tests passing
+- 127 unit tests passing
 - All non-ergo tests passing
 - Package renamed throughout all imports and references
 
@@ -37,7 +37,7 @@
 
 #### Features
 - Test tool (`test_tool/chat.py`, formerly `irc_client.py`) — irssi-like terminal UI via Textual
-- Screenshot tests (`test_tool/screenshot_test.py`) — 3 SVGs, visual inspection
+- Screenshot tests (`test_tool/screenshot_test.py`) — 8 SVGs, visual inspection
 - Additional providers: Gemini, OpenAI, Ollama
 - Provider fallback chain in registry
 - Web search via DuckDuckGo (free, no API key)
@@ -46,11 +46,8 @@
 - `python-textual` added to PACKAGES.md
 
 #### Testing
-- 83 unit tests passing (database, providers, prompts, context, bot, providers_extended, test_tool)
-- 3 ergo smoke tests (port open, config exists, socket connect)
-- 4 ergo IRC protocol tests (register, join, channel message, private message)
-- 2 ergo SOPEL bot tests passing (connects, joins channel)
-- 2 ergo SOPEL bot tests failing (responds to .help, responds to TerraAI: trigger) — IRCv3 message dispatch blocked
+- 127 unit tests passing (database, providers, prompts, context, bot, providers_extended, test_tool)
+- 15 ergo integration tests (require live ergochat server)
 
 ### Agent 2 — Routing fixes, new commands, PM support, manual testing
 
@@ -81,7 +78,7 @@
 - Test tool duplicated routing — rework plan drafted to use single `dispatch()`
 
 #### Testing
-- 100+ unit tests passing
+- 127 unit tests passing
 - `--real` API tests passing (7/7): effort, unknown command, noisy, setlocation, PM trigger, PM effort, noisy notice
 - Screenshot tests passing (8 SVGs): resize, wrap, PM, noisy
 - 68 manual tests documented in `docs/release-0.0.2/testing-agent2-v2.md`

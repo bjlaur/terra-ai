@@ -5,13 +5,16 @@ A SOPEL plugin that turns an IRC bot into a provider-agnostic AI assistant.
 ## Features
 
 - Responds to addressed queries (`TerraAI: <text>`) and `-` command shorthand
+- Direct messages via `/msg <botnick> <text>` (no trigger phrase needed)
 - Provider-agnostic with fallback chain: OpenRouter (default) → Gemini, OpenAI, Ollama
 - Web search via DuckDuckGo instant answer API (no API key required)
 - SQLite persistence for conversation history, prompts, and user preferences
 - Custom prompts via `.addprompt`, `.rmprompt`, `.listprompts`
 - Configurable bot nick via `{botnick}` variable in prompts (no hardcoded name)
 - User opt-in/opt-out; admin opt-out of other nicks
+- Context-free AI prompts (`.ai <prompt>`)
 - Context compaction with AI-driven pruning, history `.clear`
+- Noisy mode (`.noisy`) — shows a "Thinking..." notice before AI responses
 - Test tool (`test_tool/chat.py`) — irssi-style Textual terminal UI
 - Screenshot regression tests (`test_tool/screenshot_test.py`) outputting SVGs
 - Performance stats tracking

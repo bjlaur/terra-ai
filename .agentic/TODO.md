@@ -17,7 +17,7 @@ Only pending/unfinished work stays in the active sections below.
 - [x] Ergo smoke tests (port, config, socket) — 3 passing
 - [x] Ergo IRC protocol tests (register, join, channel msg, private msg) — 4 passing
 - [x] SOPEL bot integration tests (connects, joins channel) — 2 passing
-- [x] 0.0.2 docs: CHANGELOG.md, feature.md, testing-agent2.md
+- [x] 0.0.2 docs: CHANGELOG.md, feature.md, testing-agent2.md, testing-results.md
 - [x] Routing: .setlocation hybrid, unknown .command fallback, .effort in MANAGEMENT_COMMANDS, tab completion
 - [x] .clear command — wipe conversation history
 - [x] PM support — send_pm() with is_pm=True, trigger phrase not needed
@@ -37,7 +37,6 @@ Only pending/unfinished work stays in the active sections below.
 - [x] Fix terraai/plugin.py setup() to read config from bot.config.terraai
 - [x] SOPEL test config examples committed (sopel-test.cfg.example, terraai-test.yaml.example)
 - [x] Minimal plugin set: admin, adminchannel, ping, reload, safety, tell, terraai
-- [x] 0.0.2 docs: CHANGELOG.md, feature.md, testing-results.md
 - [x] SOPEL dispatch fix (module visibility, allow_bots, thread safety) — IRCv3 capability issue resolved
 - [x] Bot connects, joins, and responds to PRIVMSG (SOPEL bot message dispatch)
 - [x] Unit tests for SOPEL bot end-to-end pass (ergo integration tests gated behind running server)
@@ -56,7 +55,6 @@ Only pending/unfinished work stays in the active sections below.
 - [ ] Fix test_interactive_noisy_notice — AI not responding in test harness (works live)
 
 ### Pending (0.0.2)
-- [ ] Verify SOPEL bot end-to-end (responds to .help, TerraAI: trigger) on a running server
 - [ ] SSL/TLS support for ergo (broken with self-signed cert + CAP negotiation)
 - [ ] Custom prompts rework (.addprompt, .rmprompt, .listprompts, match_prompt) — needs discussion
 
@@ -76,7 +74,7 @@ All phases 1-5 complete.
 See `docs/future-release/release-plan.md` for the full deferred features list.
 
 High priority:
-- SOPEL IRCv3 message dispatch fix merged (end-to-end verification still pending)
+- SOPEL bot end-to-end verification on a running server (responds to .help, TerraAI: trigger)
 - Context compaction (.compact) — fully working
 - Multi-server support
 - Rate limiting
