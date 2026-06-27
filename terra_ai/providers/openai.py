@@ -20,14 +20,14 @@ class OpenAIProvider(AIProvider):
         self._model = model
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self._base_url = base_url
-        self._timeout = timeout
+        self._timeout = int(timeout)
 
     @property
     def name(self) -> str:
         return "openai"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high", tools=None, max_tool_rounds=5) -> str:
+             effort: str = "high") -> str:
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",

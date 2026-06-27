@@ -18,14 +18,14 @@ class GeminiProvider(AIProvider):
                  timeout: int = 30):
         self._model = model
         self._api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        self._timeout = timeout
+        self._timeout = int(timeout)
 
     @property
     def name(self) -> str:
         return "gemini"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high", tools=None, max_tool_rounds=5) -> str:
+             effort: str = "high") -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
 
         # Convert OpenAI-format messages to Gemini format

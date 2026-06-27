@@ -1,19 +1,22 @@
-"""Tool executor — maps tool name to callable."""
+"""Tool executor — maps tool name to callable.
+
+Note: OpenRouter server-side web_search (type: "openrouter:web_search")
+is handled by OpenRouter, not routed through this executor. Only local
+function tools are executed here.
+"""
 
 import json
 import logging
 
-from terra_ai.tools.web_search import web_search
-
 logger = logging.getLogger("terraai")
 
-TOOL_FUNCTIONS = {
-    "web_search": web_search,
-}
+# Only local function tools go here.
+# OpenRouter server tools (like web_search) are executed server-side.
+TOOL_FUNCTIONS = {}
 
 
 def execute_tool(name: str, arguments: str | dict) -> str:
-    """Execute a tool by name and return its result as a string.
+    """Execute a local tool by name and return its result as a string.
 
     *arguments* can be a dict (already parsed) or a JSON string
     (as returned by the OpenAI tool_calls response).

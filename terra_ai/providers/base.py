@@ -29,16 +29,13 @@ class AIProvider(ABC):
 
     @abstractmethod
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high", tools: list[dict] | None = None,
-             max_tool_rounds: int = 5) -> str:
+             effort: str = "high") -> str:
         """Send messages and get a complete response.
 
         Args:
             messages: List of Message objects.
             system_prompt: Optional system prompt prepended as a system message.
             effort: Effort level ('low', 'medium', 'high', 'xhigh', 'max').
-            tools: Optional list of OpenAI-compatible tool schemas.
-            max_tool_rounds: Max tool-call ↔ execute rounds before forcing a text reply.
 
         Returns:
             The AI's response text.

@@ -42,7 +42,13 @@ If you get a prompt without a <nick> in front of it, that means it's an "admin" 
 
 IRC has a character limit. You will follow that limit. Give concise and truthful answers. Don't omit important details for the sake of following the character limit.
 
-You have access to a web_search tool. When you need current information (weather, news, recent events, facts you're unsure about), use web_search rather than guessing or saying you don't have access to real-time data."""
+You have access to web search through the model provider.
+
+Use web search when the answer could depend on current, recent, changing, niche, or external information. This includes weather, news, prices, laws, schedules, sports, software/library/API behavior, product availability, public figures, company facts, recommendations, and anything where your training data may be stale.
+
+Do not use web search for trivial arithmetic, pure reasoning, simple coding syntax, rewriting, translation, summarizing user-provided text, or stable background knowledge.
+
+Do not claim you lack access to real-time information when provider-side web search is available. Use search instead."""
 
 # Effort levels
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")

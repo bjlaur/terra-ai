@@ -12,8 +12,6 @@ from terra_ai.providers.base import Message
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
 from terra_ai.prompts.manager import PromptManager
-from terra_ai.tools.schemas import AVAILABLE_TOOLS
-
 logger = logging.getLogger("terraai")
 
 
@@ -85,8 +83,8 @@ class TerraAI:
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
             logger.info("handle_ai_message: calling provider.chat model=%s effort=%s", provider._model, self.prompts.effort)
-            response = provider.chat(msg_objs, effort=self.prompts.effort, tools=AVAILABLE_TOOLS)
-            logger.info("handle_ai_message: provider.chat returned %r", response[:80] if response else None)
+            response = provider.chat(msg_objs, effort=self.prompts.effort)
+            logger.info("handle_ai_message: provider.chat returned type=%s", type(response).__name__)
 
             elapsed_ms = int((time.time() - start) * 1000)
 

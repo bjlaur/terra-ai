@@ -1,4 +1,4 @@
-"""Tests for extended providers (OpenAI, Ollama) and web search."""
+"""Tests for extended providers (OpenAI, Ollama)."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -8,7 +8,6 @@ import pytest
 from terra_ai.providers.openai import OpenAIProvider
 from terra_ai.providers.ollama import OllamaProvider
 from terra_ai.providers.registry import ProviderRegistry
-from terra_ai.tools.web_search import web_search
 
 
 class TestOpenAIProvider:
@@ -111,22 +110,3 @@ class TestProviderRegistry:
         assert registry.get() is None
 
 
-class TestWebSearch:
-    @patch("terra_ai.tools.web_search.httpx.Client")
-    def test_search_with_abstract(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = '{"AbstractText": "Python is a programming language."}'
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-        result = web_search("what is python")
-        assert "Python" in result
-
-    @patch("terra_ai.tools.web_search.httpx.Client")
-    def test_search_failure(self, mock_client_cls):
-        mock_client_cls.side_effect = Exception("Connection error")
-        result = web_search("test")
-        assert "Search failed" in result
