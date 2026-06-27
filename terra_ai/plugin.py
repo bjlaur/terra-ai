@@ -9,7 +9,6 @@ from sopel import bot as sopel_bot
 from sopel.trigger import Trigger
 
 from terra_ai.bot import TerraAI
-from terra_ai.config import load_config
 
 logger = logging.getLogger("terraai")
 
@@ -43,12 +42,10 @@ def setup(bot):
     """Called by Sopel when the plugin is loaded."""
     global _terrai
 
-    config_path = (
-        getattr(getattr(bot.config, "terraai", None), "config_path", None)
-        or "config/terraai.yaml"
-    )
-    logger.info("TerraAI setup starting; config_path=%r", config_path)
-    config = load_config(config_path)
+    # SOPEL already parsed the [terraai] section into bot.config.terraai
+    # (a TerraAISection instance). Use it directly — no separate YAML needed.
+    config = bot.config.terraai
+    logger.info("TerraAI setup starting; model=%r", config.model)
     _terrai = TerraAI(config)
     logger.info("TerraAI setup complete")
 
@@ -230,10 +227,10 @@ def cmd_setlocation(bot, trigger):
     channel = _channel_name(trigger)
     nick = _nick(trigger)
     args = (trigger.group(2) or "").strip()
-    # Store locally as custom prompt
-    terra.prompts.add_prompt(server, ".setlocation", args, nick)
+    # Store locally as custom prompt — no prefix, SOPEL already stripped it
+    terra.prompts.add_prompt(server, "setlocation", args, nick)
     # Forward to AI for the response (hybrid behavior)
-    text = f"{nick} .setlocation {args}"
+    text = f"{nick} setlocation {args}"
     response = terra.handle_ai_message(server, channel, nick, text)
     if response:
         bot.say(response)
@@ -308,6 +305,10 @@ def unknown_prefixed_command_to_ai(bot, trigger):
     if not terra.should_respond(server, nick):
         return
 
+    # Notify noisy users that the AI is thinking
+    if terra.user.is_noisy(server, nick):
+        bot.notice("Thinking...", nick)
+
     response = terra.handle_ai_message(server, channel, nick, text)
     if response:
         bot.say(response)
@@ -338,8 +339,52 @@ def addressed_freeform(bot, trigger):
         logger.info("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
         return
 
+    # Notify noisy users that the AI is thinking
+    if terra.user.is_noisy(server, nick):
+        bot.notice("Thinking...", nick)
+
     logger.info("addressed_freeform: calling handle_ai_message text=%r", text)
     response = terra.handle_ai_message(server, channel, nick, text)
     logger.info("addressed_freeform: response=%r", response)
     if response:
         bot.say(response)
+
+
+# ── Test-console routing entry point ─────────────────────────────────────────
+#
+# The test console (test_tool/console.py) routes through SOPEL's real rule
+# dispatcher via ``dispatch_line``.  The legacy manual-routing shims
+# (``handle_channel_message``, ``handle_pm_message``, ``_cmd_word``,
+# ``_notify_thinking``) have been removed — SOPEL's decorators now handle
+# all routing.
+
+
+def dispatch_line(bot, nick, line, is_pm=False):
+    """Route a user line through SOPEL's rule dispatcher (test-console entry point).
+
+    *bot* must have ``settings`` (with ``core.nick`` / ``core.prefix``) and
+    ``rules`` (a populated :class:`sopel.plugins.rules.Manager``).  *line* is
+    the plain text the user typed — this function wraps it in a minimal IRC
+    ``PRIVMSG`` before feeding it to :class:`~sopel.trigger.PreTrigger`.
+
+    Returns ``{"say": [...], "notice": [...]}`` with everything the handlers
+    produced via ``bot.say()`` / ``bot.notice()``.
+    """
+    from sopel.trigger import PreTrigger, Trigger
+    from sopel.bot import SopelWrapper
+
+    target = nick if is_pm else "#terra-ai"
+    # Build a minimal IRC PRIVMSG line that PreTrigger can parse.
+    # Format: :nick!user@host PRIVMSG <target> :<text>
+    irc_line = f":{nick}!user@host PRIVMSG {target} :{line}"
+    pretrigger = PreTrigger(bot.settings.core.nick, irc_line)
+
+    bot.messages.clear()
+    bot.notices.clear()
+
+    for rule, match in bot.rules.get_triggered_rules(bot, pretrigger):
+        trigger = Trigger(bot.settings, pretrigger, match, account=None)
+        wrapper = SopelWrapper(bot, trigger)
+        rule.execute(wrapper, trigger)
+
+    return {"say": list(bot.messages), "notice": list(bot.notices)}

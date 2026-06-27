@@ -1,8 +1,13 @@
 """Tests for the TerraAI console (Textual TUI + TerraAITestClient).
 
 These tests verify:
-1. The test client routes messages correctly (unit tests, no UI).
+1. The test client routes messages correctly via SOPEL's dispatcher.
 2. The Textual TUI can be driven headlessly via the test pilot.
+
+Routing:
+- Management commands: ``-optin``, ``-help``, etc. (SOPEL's core.prefix = ``-``)
+- Addressed freeform: ``TerraAI: hello`` (SOPEL's ``$nick`` rule)
+- Unknown prefixed: ``-whatever ...`` (lazy prefix fallback rule → AI)
 
 Mock vs Real:
 - Tests marked @pytest.mark.mock always use the mocked provider.
@@ -23,6 +28,10 @@ from terra_ai import plugin as terra_plugin
 
 # db and terra fixtures live in conftest.py
 
+# The command prefix configured in FakeBot's settings.core.prefix.
+# The regex r"\-" matches the literal character "-".
+PREFIX = "-"
+
 
 async def _type_text(pilot, selector, text):
     """Type text into a widget character-by-character via pilot.press().
@@ -36,7 +45,11 @@ async def _type_text(pilot, selector, text):
 
 
 class TestTestTool:
-    """Test the test tool's core routing functionality."""
+    """Test the test tool's core routing functionality.
+
+    send_message() and send_pm() route through SOPEL's real rule dispatcher
+    via ``dispatch_line``. These tests verify end-to-end routing.
+    """
 
     @pytest.mark.mock
     def test_send_message(self, terra):
@@ -44,58 +57,58 @@ class TestTestTool:
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        responses = client.send_message(".optin")
-        assert len(responses) > 0
-        assert "opted in" in responses[0]
+        result = client.send_message(f"{PREFIX}optin")
+        assert len(result["say"]) > 0
+        assert "opted in" in result["say"][0]
 
     @pytest.mark.mock
     def test_regular_message_ignored(self, terra):
-        """Test that regular messages (no trigger) are ignored by the bot."""
+        """Test that regular messages (no prefix) are ignored by the bot."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        responses = client.send_message("hello")
-        assert len(responses) == 0, "Regular message should not produce a response"
+        result = client.send_message("hello")
+        assert len(result["say"]) == 0, "Regular message should not produce a response"
 
     @pytest.mark.mock
-    def test_async_ai_call_mock(self, terra):
-        """Mock version: AI call returns mocked response."""
+    def test_addressed_freeform_routes_to_ai_mock(self, terra):
+        """Mock version: addressing the bot by nick routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        responses = client.send_message("TerraAI: hello")
-        assert len(responses) > 0
-        assert "mocked AI response" in responses[0]
+        result = client.send_message("TerraAI: hello")
+        assert len(result["say"]) > 0
+        assert "mocked AI response" in result["say"][0]
 
     @pytest.mark.real
-    def test_async_ai_call_real(self, terra):
-        """Real version: AI call hits the real provider."""
+    def test_addressed_freeform_routes_to_ai_real(self, terra):
+        """Real version: addressing the bot by nick routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        responses = client.send_message("TerraAI: hello")
-        assert len(responses) > 0
-        assert responses[0].strip() != ""
+        result = client.send_message("TerraAI: hello")
+        assert len(result["say"]) > 0
+        assert result["say"][0].strip() != ""
 
     @pytest.mark.mock
     def test_unknown_command_routes_to_ai_mock(self, terra):
-        """Mock version: unknown .command forwarded to AI."""
+        """Mock version: unknown -command forwarded to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        response = client.send_message(".what's 2+2")
-        assert len(response) > 0
-        assert "mocked" in response[0].lower()
+        result = client.send_message(f"{PREFIX}whats 2+2")
+        assert len(result["say"]) > 0
+        assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
     def test_unknown_command_routes_to_ai_real(self, terra):
-        """Real version: unknown .command forwarded to AI."""
+        """Real version: unknown -command forwarded to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        response = client.send_message(".what's 2+2")
-        assert len(response) > 0
-        assert response[0].strip() != ""
+        result = client.send_message(f"{PREFIX}whats 2+2")
+        assert len(result["say"]) > 0
+        assert result["say"][0].strip() != ""
 
     @pytest.mark.mock
     def test_help_command(self, terra):
@@ -103,17 +116,17 @@ class TestTestTool:
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        responses = client.send_message(".help")
-        assert len(responses) > 0
-        assert ".optin" in responses[0]
+        result = client.send_message(f"{PREFIX}help")
+        assert len(result["say"]) > 0
+        assert "optin" in result["say"][0].lower()
 
 
 class TestPM:
     """Test PM (private message) routing."""
 
     @pytest.mark.mock
-    def test_pm_trigger_routes_to_ai_mock(self, terra):
-        """Mock version: PM with trigger phrase routes to AI."""
+    def test_pm_addressed_routes_to_ai_mock(self, terra):
+        """Mock version: PM addressed to the bot routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
@@ -122,8 +135,8 @@ class TestPM:
         assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
-    def test_pm_trigger_routes_to_ai_real(self, terra):
-        """Real version: PM with trigger phrase routes to AI."""
+    def test_pm_addressed_routes_to_ai_real(self, terra):
+        """Real version: PM addressed to the bot routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
@@ -132,120 +145,120 @@ class TestPM:
 
     @pytest.mark.mock
     def test_pm_management_command(self, terra):
-        """PM with management command should work (e.g. .optin)."""
+        """PM with management command should work (e.g. -optin)."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".optin")
+        result = client.send_pm("tester", f"{PREFIX}optin")
         assert len(result["say"]) > 0
         assert "opted in" in result["say"][0]
 
     @pytest.mark.mock
     def test_pm_help_command(self, terra):
-        """PM with .help should return command list."""
+        """PM with -help should return command list."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".help")
+        result = client.send_pm("tester", f"{PREFIX}help")
         assert len(result["say"]) > 0
-        assert ".optin" in result["say"][0]
+        assert "optin" in result["say"][0].lower()
 
     @pytest.mark.mock
     def test_pm_unknown_command_routes_to_ai_mock(self, terra):
-        """Mock version: PM with unknown .command routes to AI."""
+        """Mock version: PM with unknown -command routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".what's 2+2")
+        result = client.send_pm("tester", f"{PREFIX}whats 2+2")
         assert len(result["say"]) > 0
         assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
     def test_pm_unknown_command_routes_to_ai_real(self, terra):
-        """Real version: PM with unknown .command routes to AI."""
+        """Real version: PM with unknown -command routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".what's 2+2")
+        result = client.send_pm("tester", f"{PREFIX}whats 2+2")
         assert len(result["say"]) > 0
 
     @pytest.mark.mock
     def test_ai_command_context_free_mock(self, terra):
-        """Mock version: .ai command in PM — context-free prompt."""
+        """Mock version: -ai command in PM — context-free prompt."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".ai hello")
+        result = client.send_pm("tester", f"{PREFIX}ai hello")
         assert len(result["say"]) > 0
         assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
     def test_ai_command_context_free_real(self, terra):
-        """Real version: .ai command in PM — context-free prompt."""
+        """Real version: -ai command in PM — context-free prompt."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".ai hello")
+        result = client.send_pm("tester", f"{PREFIX}ai hello")
         assert len(result["say"]) > 0
 
     @pytest.mark.mock
-    def test_pm_direct_message_mock(self, terra):
-        """Mock version: PM with plain text → AI with history."""
+    def test_pm_unknown_prefixed_message_mock(self, terra):
+        """Mock version: PM with unknown prefixed message routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", "hello there")
+        result = client.send_pm("tester", f"{PREFIX}hello there")
         assert len(result["say"]) > 0
         assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
-    def test_pm_direct_message_real(self, terra):
-        """Real version: PM with plain text → AI with history."""
+    def test_pm_unknown_prefixed_message_real(self, terra):
+        """Real version: PM with unknown prefixed message routes to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", "hello there")
+        result = client.send_pm("tester", f"{PREFIX}hello there")
         assert len(result["say"]) > 0
 
     @pytest.mark.mock
     def test_pm_setlocation_forwards_to_ai_mock(self, terra):
-        """Mock version: PM .setlocation forwards to AI."""
+        """Mock version: PM -setlocation forwards to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".setlocation Portland, OR")
+        result = client.send_pm("tester", f"{PREFIX}setlocation Portland, OR")
         assert len(result["say"]) > 0
         assert "mocked" in result["say"][0].lower()
 
     @pytest.mark.real
     def test_pm_setlocation_forwards_to_ai_real(self, terra):
-        """Real version: PM .setlocation forwards to AI."""
+        """Real version: PM -setlocation forwards to AI."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".setlocation Portland, OR")
+        result = client.send_pm("tester", f"{PREFIX}setlocation Portland, OR")
         assert len(result["say"]) > 0
 
     @pytest.mark.mock
     def test_clear_command(self, terra):
-        """Test .clear command — wipes session, starts fresh."""
+        """Test -clear command — wipes session, starts fresh."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        client.send_pm("tester", ".optin")
-        client.send_pm("tester", "TerraAI:hello")
-        result = client.send_pm("tester", ".clear")
+        client.send_pm("tester", f"{PREFIX}optin")
+        client.send_pm("tester", "TerraAI: hello")
+        result = client.send_pm("tester", f"{PREFIX}clear")
         assert len(result["say"]) > 0
         assert "cleared" in result["say"][0].lower()
 
     @pytest.mark.mock
     def test_compact_admin_only_for_non_admin(self, terra):
-        """Test .compact is gated to admin via @plugin.require_admin."""
+        """Test -compact is gated to admin via @plugin.require_admin."""
         from test_tool.console import TerraAITestClient
         terra_plugin._terrai = terra
         client = TerraAITestClient()
         client.terra = terra
-        result = client.send_pm("tester", ".compact")
+        result = client.send_pm("tester", f"{PREFIX}compact")
         assert len(result["say"]) > 0
         assert "denied" in result["say"][0].lower()
 
@@ -255,14 +268,14 @@ class TestNoisy:
 
     @pytest.mark.mock
     def test_noisy_toggle(self, terra):
-        """Test .noisy toggles ON then OFF."""
+        """Test -noisy toggles ON then OFF."""
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        on = client.send_message(".noisy")
-        assert "ON" in on[0].upper()
-        off = client.send_message(".noisy")
-        assert "OFF" in off[0].upper()
+        on = client.send_message(f"{PREFIX}noisy")
+        assert "ON" in on["say"][0].upper()
+        off = client.send_message(f"{PREFIX}noisy")
+        assert "OFF" in off["say"][0].upper()
 
     @pytest.mark.mock
     def test_noisy_off_no_notice(self, terra):
@@ -270,11 +283,11 @@ class TestNoisy:
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        client.send_message(".optin")
-        client.send_message(".noisy")  # toggle ON
-        client.send_message(".noisy")  # toggle back OFF
+        client.send_message(f"{PREFIX}optin")
+        client.send_message(f"{PREFIX}noisy")  # toggle ON
+        client.send_message(f"{PREFIX}noisy")  # toggle back OFF
         client.bot.notices.clear()
-        client.send_message(".optin")
+        client.send_message(f"{PREFIX}optin")
         assert len(client.bot.notices) == 0
 
     @pytest.mark.mock
@@ -283,20 +296,8 @@ class TestNoisy:
         from test_tool.console import TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
-        client.send_message(".optin")
-        client.send_message(".noisy")  # toggle ON
-        client.send_message("TerraAI: hello")
-        assert len(client.bot.notices) > 0
-        assert any("Thinking" in msg for _, msg in client.bot.notices)
-
-    @pytest.mark.real
-    def test_noisy_on_sends_notice_real(self, terra):
-        """Real version: noisy ON sends 'Thinking...' notice."""
-        from test_tool.console import TerraAITestClient
-        client = TerraAITestClient()
-        client.terra = terra
-        client.send_message(".optin")
-        client.send_message(".noisy")  # toggle ON
+        client.send_message(f"{PREFIX}optin")
+        client.send_message(f"{PREFIX}noisy")  # toggle ON
         client.send_message("TerraAI: hello")
         assert len(client.bot.notices) > 0
         assert any("Thinking" in msg for _, msg in client.bot.notices)
@@ -331,7 +332,7 @@ class TestInteractiveMode:
         client.terra = terra
         app = TerraAIApp(client=client)
         async with app.run_test() as pilot:
-            await _type_text(pilot, "#input", ".optin")
+            await _type_text(pilot, "#input", f"{PREFIX}optin")
             await pilot.press("enter")
             await pilot.pause()
             content = "\n".join(app.messages["channel"])

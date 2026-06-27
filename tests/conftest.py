@@ -49,9 +49,7 @@ def _make_test_config(**overrides):
         api_key=os.environ.get("OPENROUTER_API_KEY", "test-key"),
         base_url="https://openrouter.ai/api/v1",
         provider_timeout=30,
-        trigger_phrase="TerraAI:",
         bot_nick="",
-        trigger_char=".",
         effort="high",
         sqlite_path="data/terraai.db",
     )

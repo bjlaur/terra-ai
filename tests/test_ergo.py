@@ -274,6 +274,7 @@ class TestErgoSopelBot:
         tmp = tmp_path_factory.mktemp("sopel")
         db_path = tmp / "terra_ai.db"
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
 
         plugins_lines = "\n    ".join(self.PLUGIN_LIST)
         config_content = f"""[core]
@@ -290,24 +291,16 @@ enable =
     {plugins_lines}
 
 [terraai]
-config_path = {tmp / "terra_ai.yaml"}
+model = openrouter/owl-alpha
+api_key = {api_key}
+base_url = https://openrouter.ai/api/v1
+provider_timeout = 30
+bot_nick = TerraAI
+effort = high
+sqlite_path = {db_path}
 """
         config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
-
-        # TerraAI yaml config
-        terraai_yaml = tmp / "terra_ai.yaml"
-        api_key = os.environ.get("OPENROUTER_API_KEY", "")
-        terraai_yaml.write_text(f"""bot:
-  trigger_phrase: "TerraAI:"
-  bot_nick: "TerraAI"
-provider:
-  name: openrouter
-  model: openrouter/owl-alpha
-  api_key: "{api_key}"
-sqlite_path: "{db_path}"
-default_optin: true
-""")
 
         return config_file
 
@@ -373,24 +366,15 @@ enable =
     {plugins_lines}
 
 [terraai]
-config_path = {tmp / "terra_ai.yaml"}
+model = openrouter/owl-alpha
+api_key = sk-or-test-key-that-exists
+base_url = http://127.0.0.1:1/nonexistent
+provider_timeout = 30
+effort = high
+sqlite_path = {db_path}
 """
         config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
-
-        # TerraAI yaml — valid key format but unreachable URL
-        terraai_yaml = tmp / "terra_ai.yaml"
-        terraai_yaml.write_text(f"""bot:
-  trigger_phrase: "TerraAI:"
-  bot_nick: "{self.BAD_PROVIDER_BOT_NICK}"
-provider:
-  name: openrouter
-  model: openrouter/owl-alpha
-  api_key: "sk-or-test-key-that-exists"
-  base_url: "http://127.0.0.1:1/nonexistent"
-sqlite_path: "{db_path}"
-default_optin: true
-""")
 
         return config_file
 

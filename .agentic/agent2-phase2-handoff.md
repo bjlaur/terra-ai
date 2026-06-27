@@ -1,77 +1,59 @@
-# Agent2 Phase 2 Handoff — Console Tabbed UI + Real/Mock Test Split
+# Agent2 Phase 2 Handoff — Console Rewrite + Routing Refactor
 
 **Date:** 2026-06-27
-**Branch:** `agent2/console-phase2` (branched from `agent2/redo-console-and-tests`)
-**Previous branch:** `agent2/redo-console-and-tests` (pushed to origin, merged work)
+**Branch:** `agent2/console-phase2`
 **Agent:** OWL
-**Status:** Phase 2 complete — all tests passing, docs updated
+**Status:** Phase 2 complete + routing refactor in progress (uncommitted)
 
 ---
 
-## What Was Done (Phase 1 — complete, pushed)
+## Phase 1 (complete, pushed to `agent2/redo-console-and-tests`)
 
-### Console Rewrite (curses → Textual)
-- Deleted: `test_tool/chat.py`, `test_tool/screenshot_test.py`, `tests/test_tool.py`, `test_tool/screenshots/`
-- Created: `test_tool/console.py` (Textual TUI), `tests/test_console.py`, `tests/test_console_screenshots.py`
-- 110 mock tests pass, 12 real tests available with `--real`
-- Tab completion (`Ter<Tab>` → `TerraAI:`) and history navigation (Up/Down) work
+- Rewrote `test_tool/chat.py` → `test_tool/console.py` using Textual (not curses)
+- Created `tests/test_console.py` (unit + interactive) and `tests/test_console_screenshots.py` (pilot-driven)
+- Mock/real test split via `@pytest.mark.mock` / `@pytest.mark.real` + `--real` flag
+- 114 mock tests pass, 12 real tests available
 
-### Real/Mock Test Split
-- `conftest.py`: `@pytest.mark.mock` always mocks, `@pytest.mark.real` requires `--real` + key
-- `pytest.ini`: added `mock` marker
-- All AI-hitting tests have both mock and real versions
-- Tests: `pytest` (mock), `pytest --real -m real` (real only), `pytest --real` (everything)
+## Phase 2 (complete, committed `cb9979e`)
 
-### Docs
-- `docs/release-0.0.2/console-feature.md` — full feature spec
-- `docs/release-0.0.2/console-plan.md` — implementation plan
-- `docs/release-0.0.2/real-test-plan.md` — mock/real test split design
-- `docs/release-0.0.2/httpx-curses-pty-hang-analysis.md` — root cause analysis
-- `.agentic/agent2-handoff.md` — updated to reflect Phase 1 completion
+- TabbedContent with Channel/PM tabs, no `[PM]` prefix
+- Per-tab `app.messages = {"channel": [], "pm": []}`
+- F1/F2 + Alt+Left/Alt+Right tab switching
+- PM tab implies `/msg` routing (no prefix needed when in PM tab)
+- Async worker (`run_worker` + `asyncio.to_thread`) so UI doesn't block on AI calls
 
----
+## Current Work — Routing Refactor (uncommitted, in progress)
 
-## What's In Progress (Phase 2 — local, uncommitted)
+**Problem found during manual testing:**
+1. `send_message()`/`send_pm()` duplicated routing that belongs in plugin.py (violates spec §5.3)
+2. Tab completion replaced entire input instead of completing word at cursor
+3. `FakeTrigger.group()` hardcoded `.` and `-` prefixes instead of using config
+4. `trigger_char` default was `.`, should be `-`
+5. No test verifying UI stays responsive during AI call
 
-### Tabbed UI Rewrite
-**File:** `test_tool/console.py` (modified)
+**Fixes applied so far:**
+- `send_message()`/`send_pm()` now delegate ALL routing to `plugin.handle_channel_message()` / `plugin.handle_pm_message()` in `terra_ai/plugin.py`
+- `FakeTrigger.group()` reads prefix from `plugin._get_terra().prompts.trigger_char` (no hardcoded chars)
+- `_default_test_config()` reads `trigger_phrase` and `bot_nick` from env vars (`TERRAI_TRIGGER_PHRASE`, `TERRAI_BOT_NICK`)
+- Tab completion rewritten: completes word at cursor, case-insensitive prefix match, `self.bell()` on no match
+- Tests updated to read `client.trigger_char` and `client.terra.config.trigger_phrase` instead of hardcoding
 
-Changes:
-- Replaced single `#chat` Static with `TabbedContent` containing two `TabPane`s:
-  - `TabPane("Channel", id="channel")` with `Static(id="channel-log")`
-  - `TabPane("PM", id="pm")` with `Static(id="pm-log")`
-- Messages tracked per-tab: `app.messages = {"channel": [], "pm": []}`
-- `/msg hello` routes to PM tab (no `[PM]` prefix — tab title provides context)
-- Normal messages route to whichever tab is active
-- Keyboard shortcuts: `F1` → Channel, `F2` → PM (Ctrl+B/Ctrl+P don't work with Input widget)
-- `_append_to_tab(tab, msg)` helper updates the correct Static widget
-
-**Tests updated:** Both `tests/test_console_screenshots.py` and `tests/test_console.py` now use per-tab assertions.
-- Screenshot tests renamed `test_pm_sends_with_prefix` → `test_pm_routes_to_pm_tab`
-- Added `test_f1_switches_to_channel` and `test_f2_switches_to_pm`
-- 112 mock tests + 12 real tests all passing
-
-### SVG Export — Confirmed Impossible
-See `~/textual-richlog-svg-export-report.md`. Textual 8.2.7's `export_screenshot()` does NOT capture dynamically-updated Static/Log/RichLog content. Tests must assert against widget state (`app.messages`) directly. SVG screenshots saved as debug artifacts only.
+**Still broken (interrupted mid-edit):**
+- `TerraAITestClient.__init__` has a broken edit — `self.trigger_char` removal left malformed code
+- `plugin.py._cmd_word()` updated to use config prefix
+- `tests/conftest.py` trigger_char changed to `-`
+- `tests/test_commands.py` trigger_char changed to `-`
+- Tests NOT yet run after these changes — likely broken
 
 ---
 
-## What Needs Doing
+## Key Architecture Decisions
 
-All Phase 2 work is done. Next steps:
-1. **Commit and push** — all changes ready
-2. **Merge to release-0.0.2** — after review
-
----
-
-## Key Decisions
-
-1. **Textual (not curses)** — gives test pilot + no pty deadlock
-2. **TabbedContent for PMs** — clean separation, no `[PM]` prefix needed
-3. **Assert against `app.messages` dict** — SVG export can't capture dynamic content; per-tab dict `{"channel": [], "pm": []}`
-4. **Phase 2 async worker not needed** — Textual's event loop avoids httpx+pty deadlock
-5. **Mock/real split via markers** — same test functions, markers decide mode
-6. **F1/F2 for tab switching** — Ctrl+B/Ctrl+P don't work because Textual's Input widget consumes Ctrl+letter keys before App bindings see them
+1. **No routing in console** — `send_message()`/`send_pm()` build `FakeTrigger`, call `plugin.handle_channel_message()`/`handle_pm_message()`. ALL routing (trigger prefix, command lookup, management vs AI, trigger phrase) lives in plugin.py via SOPEL decorators.
+2. **No hardcoded trigger char/phrase** — `FakeTrigger.group()` reads prefix from `plugin._get_terra().prompts.trigger_char`. Config defaults come from env vars.
+3. **F1/F2 for tabs** — Ctrl+B/Ctrl+P don't work (Input widget captures Ctrl+letter)
+4. **Async AI calls** — `run_worker` + `asyncio.to_thread` keeps UI responsive
+5. **Assert against `app.messages`** — SVG export can't capture dynamic Static content
 
 ---
 
@@ -79,16 +61,22 @@ All Phase 2 work is done. Next steps:
 
 | File | Status |
 |------|--------|
-| `test_tool/console.py` | MODIFIED (tabbed UI, F1/F2 shortcuts) |
-| `test_tool/__init__.py` | OK |
-| `tests/test_console.py` | UPDATED (per-tab assertions for interactive PM test) |
-| `tests/test_console_screenshots.py` | UPDATED (per-tab assertions, F1/F2 tab switch tests) |
-| `tests/conftest.py` | OK (mock/real split done) |
-| `pytest.ini` | OK |
-| `docs/release-0.0.2/console-feature.md` | UPDATED (F1/F2, no [PM] prefix, per-tab assertions) |
-| `docs/release-0.0.2/console-plan.md` | UPDATED (Phase 2 complete) |
-| `docs/release-0.0.2/real-test-plan.md` | OK |
-| `.agentic/agent2-handoff.md` | OK |
+| `test_tool/console.py` | MODIFIED — routing removed, tab completion fixed, **has broken edit in `__init__`** |
+| `terra_ai/plugin.py` | MODIFIED — `_cmd_word()` uses config prefix, added `handle_channel_message()`/`handle_pm_message()` |
+| `tests/test_console.py` | MODIFIED — reads trigger_char/phrase from client config |
+| `tests/test_console_screenshots.py` | MODIFIED — reads trigger_char/phrase from app config |
+| `tests/conftest.py` | MODIFIED — trigger_char=`-` |
+| `tests/test_commands.py` | MODIFIED — trigger_char=`-` |
+
+---
+
+## How to Continue
+
+1. **Fix the broken edit** in `TerraAITestClient.__init__` (around line 137-147) — remove `self.trigger_char` line that got mangled
+2. **Run tests:** `cd ~/agentic-repos/terra-ai-agent2 && python -m pytest --ignore=tests/test_ergo.py -q`
+3. **Fix any test failures** — tests read `client.trigger_char` but that attribute was removed; need to get it from `client.terra.prompts.trigger_char` instead
+4. **Update docs** — `console-feature.md` and `console-plan.md` need updates for the routing refactor
+5. **Commit and push**
 
 ---
 
@@ -97,13 +85,15 @@ All Phase 2 work is done. Next steps:
 ```bash
 cd ~/agentic-repos/terra-ai-agent2
 
-# Mock tests (default)
+# Mock tests
 pytest tests/test_console.py tests/test_console_screenshots.py -v
+
+# Full suite
+pytest --ignore=tests/test_ergo.py -q
 
 # Real API tests
 source ~/.terra-ai/.env && pytest tests/test_console.py -v --real -m real
 
 # Manual interactive
 python test_tool/console.py
-# Type: .optin, hello (channel), /msg hello (PM tab), Ctrl+B/Ctrl+P to switch
 ```

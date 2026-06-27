@@ -2,34 +2,13 @@
 
 Uses SOPEL's native StaticSection config system.
 All settings live in the [terraai] section of the SOPEL .cfg file.
+
+Command prefix routing is handled by SOPEL's ``settings.core.prefix`` and
+``$nick`` rules — there is no ``trigger_char`` or ``trigger_phrase`` in the
+TerraAI config section.
 """
 
 from sopel.config import types
-from sopel.config import Config as SopelConfig
-
-
-def load_config(path):
-    """Load a SOPEL config file and return the terraai section.
-
-    Falls back to a default TerraAISection if the file is missing or
-    doesn't define a [terraai] section.
-    """
-    try:
-        sopel_config = SopelConfig(path)
-        sopel_config.define_section("terraai", TerraAISection)
-        return sopel_config.terraai
-    except Exception:
-        section = TerraAISection.__new__(TerraAISection)
-        section.model = "openrouter/owl-alpha"
-        section.api_key = ""
-        section.base_url = "https://openrouter.ai/api/v1"
-        section.provider_timeout = 30
-        section.trigger_phrase = "TerraAI:"
-        section.bot_nick = ""
-        section.trigger_char = "."
-        section.effort = "high"
-        section.sqlite_path = "data/terraai.db"
-        return section
 
 
 class TerraAISection(types.StaticSection):
@@ -38,6 +17,10 @@ class TerraAISection(types.StaticSection):
     Defined in the [terraai] section of the SOPEL config file (.cfg).
     All fields have sensible defaults — the plugin works with zero
     configuration beyond enabling it.
+
+    Note: ``trigger_char`` and ``trigger_phrase`` have been removed.
+    SOPEL's ``settings.core.prefix`` handles command prefix routing,
+    and ``$nick`` rules handle addressed freeform queries.
     """
 
     # ── Provider settings ──────────────────────────────────────────────
@@ -64,20 +47,10 @@ class TerraAISection(types.StaticSection):
 
     # ── Bot behavior ───────────────────────────────────────────────────
 
-    trigger_phrase = types.ValidatedAttribute(
-        'trigger_phrase', default='TerraAI:',
-    )
-    """Trigger phrase for addressed queries (e.g. 'TerraAI: hello')."""
-
     bot_nick = types.ValidatedAttribute(
         'bot_nick', default='',
     )
     """Bot nick for prompt interpolation. Empty = use SOPEL's nick."""
-
-    trigger_char = types.ValidatedAttribute(
-        'trigger_char', default='.',
-    )
-    """Command prefix character (e.g. '.' for .optin, '-' for -optin)."""
 
     effort = types.ValidatedAttribute(
         'effort', default='high',

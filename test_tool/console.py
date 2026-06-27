@@ -31,96 +31,154 @@ from textual.app import App
 from textual.binding import Binding
 from textual.widgets import Input, Static, TabbedContent, TabPane
 
+from sopel.plugins import rules as plugin_rules, exceptions as plugin_exceptions
+from sopel.plugins.rules import Manager
+
 from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
-from terra_ai.config import TerraAISection
 
 
 def _default_test_config():
-    """Create a lightweight config object with TerraAISection defaults.
+    """Create a lightweight config object matching FakeBot's SOPEL settings.
 
-    Used when there's no SOPEL bot running (test tool, fixtures).
-    Returns a SimpleNamespace with the same attributes as TerraAISection.
+    The test console doesn't have a running SOPEL instance, so we build a
+    SimpleNamespace with the same attributes as TerraAISection.  The bot nick
+    comes from _Core.nick — no separate YAML or .cfg needed.
     """
     c = SimpleNamespace()
     c.model = os.environ.get("TERRAI_MODEL", "openrouter/owl-alpha")
     c.api_key = os.environ.get("OPENROUTER_API_KEY", "")
     c.base_url = "https://openrouter.ai/api/v1"
     c.provider_timeout = 30
-    c.trigger_phrase = "TerraAI:"
-    c.bot_nick = ""
-    c.trigger_char = "."
+    c.bot_nick = _Core.nick  # Same nick FakeBot uses via _Core
     c.effort = "high"
     c.sqlite_path = "data/test-terraai.db"
     return c
 
 
-class FakeTrigger:
-    """Mimic a SOPEL trigger object for direct handler dispatch."""
+# ── Minimal SOPEL-compatible bot for dispatch ─────────────────────────────────
+#
+# The test console routes every user line through SOPEL's real rule dispatcher.
+# FakeBot provides the bare minimum the dispatcher needs: ``settings`` (with
+# ``core.nick`` / ``core.prefix``), ``rules`` (a populated Manager), and
+# ``say``/``notice``/``isupport``.  No IRC connection is involved.
 
-    def __init__(self, nick, channel, text, is_pm=False, admin=False):
-        self.nick = nick
-        self.sender = nick if is_pm else channel
-        self.match = None
-        self.text = text
-        self.is_pm = is_pm
-        self.admin = admin
-        self._text = text
 
-    def group(self, num):
-        """group(0) = full text, group(1) = command word, group(2) = args."""
-        if num == 0:
-            return self._text
-        text = self._text
-        if text.startswith("."):
-            text = text[1:]
-        elif text.startswith("-"):
-            text = text[1:]
-        parts = text.split(None, 1)
-        if num == 1:
-            return parts[0] if parts else ""
-        if num == 2:
-            return parts[1] if len(parts) > 1 else ""
-        return None
+class _Core:
+    """Minimal SOPEL ``settings.core`` stand-in."""
+    nick = "TerraAI"
+    prefix = r"\-"
+    help_prefix = "-"
+    alias_nicks = ()
+    owner = ""
+    admins = ()
+    admin_accounts = ()
+    owner_account = ""
+
+
+class _Settings:
+    """Minimal SOPEL ``settings`` stand-in."""
+    core = _Core()
+
+
+def _build_fake_bot():
+    """Create a FakeBot with all terra_ai plugin rules registered."""
+    bot = FakeBot(_Settings())
+
+    # Scan the plugin module for SOPEL-decorated callables and register them.
+    callables = [
+        getattr(terra_plugin, name)
+        for name in dir(terra_plugin)
+        if getattr(getattr(terra_plugin, name), "_sopel_callable", False)
+    ]
+    bot.register_callables(callables)
+    return bot
 
 
 class FakeBot:
-    """Mimic a SOPEL bot object.
+    """SOPEL-compatible bot for the test console.
 
-    Tracks say() (channel messages) and notice() (PM responses) separately.
-    In SOPEL, bot.say() sends to the channel, bot.notice() sends a
-    private notice back to the user.
+    Routes through SOPEL's real rule dispatcher (``dispatch_line``) so the
+    test console follows the exact same path as production IRC.
     """
 
-    def __init__(self):
-        self.messages = []
-        self.notices = []
-        self.isupport = {"NETWORK": "test-network"}
+    def __init__(self, settings):
+        self.settings = settings
+        self.nick = settings.core.nick
+        self._rules_manager = Manager()
+        self.messages: list[str] = []
+        self.notices: list[tuple[str, str]] = []
 
-    def say(self, msg):
-        self.messages.append(msg)
-        return msg
+    @property
+    def rules(self):
+        return self._rules_manager
 
-    def reply(self, msg):
-        self.messages.append(msg)
-        return msg
+    @property
+    def isupport(self):
+        return {"NETWORK": "test-network"}
 
-    def notice(self, nick, msg):
-        self.notices.append((nick, msg))
-        return msg
+    def register_callables(self, callables):
+        """Register SOPEL-decorated callables onto the rules manager.
+
+        Mirrors :meth:`sopel.bot.Sopel.register_callables` — scans each
+        callable for ``commands``, ``nickname_commands``, ``rules`` / ``rule``,
+        ``rule_lazy_loaders``, and ``action_commands`` attributes and registers
+        them with the appropriate rule type.
+        """
+        for callbl in callables:
+            commands = getattr(callbl, "commands", [])
+            nick_commands = getattr(callbl, "nickname_commands", [])
+            lazy_rules = getattr(callbl, "rule_lazy_loaders", [])
+            # SOPEL 8.0.4 uses .rule (singular); newer versions use .rules
+            rules_attr = getattr(callbl, "rules", []) or getattr(callbl, "rule", [])
+            action_commands = getattr(callbl, "action_commands", [])
+
+            if commands:
+                self._rules_manager.register_command(
+                    plugin_rules.Command.from_callable(self.settings, callbl)
+                )
+            if nick_commands:
+                self._rules_manager.register_nick_command(
+                    plugin_rules.NickCommand.from_callable(self.settings, callbl)
+                )
+            if action_commands:
+                self._rules_manager.register_action_command(
+                    plugin_rules.ActionCommand.from_callable(self.settings, callbl)
+                )
+            if rules_attr:
+                self._rules_manager.register(
+                    plugin_rules.Rule.from_callable(self.settings, callbl)
+                )
+            if lazy_rules:
+                try:
+                    self._rules_manager.register(
+                        plugin_rules.Rule.from_callable_lazy(self.settings, callbl)
+                    )
+                except plugin_exceptions.PluginError:
+                    pass  # lazy loader may fail outside a running bot
+
+    def say(self, message, destination=None, max_messages=1, truncation="", trailing=""):
+        self.messages.append(message)
+
+    def notice(self, message, destination=None):
+        self.notices.append((destination or "", message))
 
 
 class TerraAITestClient:
-    """Test client that connects to TerraAI without a real IRC server."""
+    """Test client that connects to TerraAI without a real IRC server.
 
-    def __init__(self, config_path="config/terraai.yaml"):
+    Routes every user line through ``dispatch_line``, which uses SOPEL's real
+    rule dispatcher.  No routing logic lives here (spec §5.3).
+    """
+
+    def __init__(self):
         self._load_env()
-        self.config = self._load_config(config_path)
+        self.config = _default_test_config()
         self.terra = TerraAI(self.config)
-        self.server = "test-network"
+        self.server = "test-network"  # Matches FakeBot.isupport["NETWORK"]
         self.channel = "#terra-ai"
         self.nick = "tester"
-        self.bot = FakeBot()
+        self.bot = _build_fake_bot()
 
     def _load_env(self):
         """Load .env file if present."""
@@ -138,107 +196,26 @@ class TerraAITestClient:
                             key, value = line.split("=", 1)
                             os.environ.setdefault(key.strip(), value.strip())
 
-    def _load_config(self, path):
-        """Load config, fall back to defaults if file missing."""
-        import configparser
-        from sopel.config import Config as SopelConfig
+    def send_message(self, text: str) -> dict:
+        """Send a channel message — routes through SOPEL's dispatcher.
 
-        try:
-            sopel_config = SopelConfig(path)
-            sopel_config.define_section("terraai", TerraAISection)
-            return sopel_config.terraai
-        except Exception:
-            return _default_test_config()
-
-    def send_message(self, text):
-        """Send a message as the test user and return bot responses.
-
-        Calls plugin.py handler functions directly via getattr dispatch.
+        Returns {"say": [...], "notice": [...]}.
         """
         logger.info("send_message text=%r", text)
-        self.bot.messages.clear()
-        self.bot.notices.clear()
-        trigger = FakeTrigger(self.nick, self.channel, text)
-        trigger_char = self.terra.prompts.trigger_char if self.terra.prompts else ""
-        trigger_phrase = self.terra.config.trigger_phrase
-
-        def notify_thinking():
-            if self.terra.user.is_noisy(self.server, self.nick):
-                self.bot.notice(self.nick, "Thinking...")
-
-        cmd_word = ""
-        if text.startswith(trigger_char):
-            cmd_word = (
-                text[len(trigger_char):].split()[0].lower()
-                if text[len(trigger_char):].strip()
-                else ""
-            )
-
-        if cmd_word:
-            handler = getattr(terra_plugin, f"cmd_{cmd_word}", None)
-            if handler:
-                notify_thinking()
-                handler(self.bot, trigger)
-                return list(self.bot.messages)
-            else:
-                full_text = text[len(trigger_char):].strip()
-                trigger.group = lambda n: full_text if n == 1 else None
-                notify_thinking()
-                terra_plugin.addressed_freeform(self.bot, trigger)
-                return list(self.bot.messages)
-
-        if text.lower().startswith(trigger_phrase.lower()):
-            notify_thinking()
-            trigger.group = (
-                lambda n: text[len(trigger_phrase):].strip() if n == 1 else None
-            )
-            terra_plugin.addressed_freeform(self.bot, trigger)
-            return list(self.bot.messages)
-
-        return list(self.bot.messages)
+        return terra_plugin.dispatch_line(self.bot, self.nick, text, is_pm=False)
 
     def send_as(self, nick, text):
-        """Send a message as a specific nick."""
-        self.bot.messages.clear()
-        self.bot.notices.clear()
-        trigger = FakeTrigger(nick, self.channel, text)
-        response = self.terra.handle_ai_message(self.server, self.channel, nick, text)
-        if response:
-            self.bot.say(response)
-        return list(self.bot.messages)
+        """Send a message as a specific nick — routes through SOPEL's dispatcher."""
+        logger.info("send_as nick=%r text=%r", nick, text)
+        return terra_plugin.dispatch_line(self.bot, nick, text, is_pm=False)
 
-    def send_pm(self, nick, text):
-        """Send a PM (direct message) to the bot.
-
-        Unlike channel messages, PMs don't need a trigger phrase — everything
-        in a PM is already addressed to the bot.
+    def send_pm(self, nick, text) -> dict:
+        """Send a PM — routes through SOPEL's dispatcher.
 
         Returns {"say": [...], "notice": [...]}.
         """
         logger.info("send_pm nick=%r text=%r", nick, text)
-        self.bot.messages.clear()
-        self.bot.notices.clear()
-        trigger = FakeTrigger(nick, self.channel, text, is_pm=True)
-
-        def notify_thinking():
-            if self.terra.user.is_noisy(self.server, nick):
-                self.bot.notice(nick, "Thinking...")
-
-        cmd_word = text.split()[0].lstrip(".-") if text.split() else ""
-        if cmd_word:
-            handler = getattr(terra_plugin, f"cmd_{cmd_word}", None)
-            if handler:
-                notify_thinking()
-                handler(self.bot, trigger)
-                return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
-
-        notify_thinking()
-        response = self.terra.handle_ai_message(
-            self.server, nick, nick, text, include_history=True
-        )
-        if response:
-            self.bot.say(response)
-        return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
+        return terra_plugin.dispatch_line(self.bot, nick, text, is_pm=True)
 
 
 class TerraAIApp(App):
@@ -259,7 +236,7 @@ class TerraAIApp(App):
         height: 1fr;
     }
     Input {
-        height: 1;
+        height: auto;
         background: $surface;
     }
     """
@@ -270,6 +247,8 @@ class TerraAIApp(App):
         Binding("ctrl+c", "quit", "Quit", show=False),
         Binding("f1", "switch_tab('channel')", "Channel", show=True),
         Binding("f2", "switch_tab('pm')", "PM", show=True),
+        Binding("alt+left", "switch_tab('channel')", "← Channel", show=False),
+        Binding("alt+right", "switch_tab('pm')", "PM →", show=False),
     ]
 
     def __init__(self, client: TerraAITestClient):
@@ -278,7 +257,7 @@ class TerraAIApp(App):
         self.messages = {"channel": [], "pm": []}
         self.input_history: list[str] = []
         self.history_idx: int = -1
-        self.botnick = client.terra.config.bot_nick or "TerraAI"
+        self.botnick = client.bot.nick  # From FakeBot.nick → settings.core.nick
 
     def compose(self):
         yield Static("", id="header")
@@ -322,13 +301,7 @@ class TerraAIApp(App):
 
         key = event.key
         if key == "tab":
-            current = inp.value
-            at_start = current == current.lstrip()
-            if at_start:
-                inp.value = "TerraAI: "
-            else:
-                inp.value = current + "TerraAI " if not current.endswith(" ") else current + "TerraAI"
-            inp.cursor_position = len(inp.value)
+            self._handle_tab_completion(inp)
             event.prevent_default()
             return
 
@@ -340,7 +313,7 @@ class TerraAIApp(App):
                     self.history_idx -= 1
                 inp.value = self.input_history[self.history_idx]
                 inp.cursor_position = len(inp.value)
-                event.prevent_default()
+            event.prevent_default()
             return
 
         if key == "down":
@@ -351,8 +324,87 @@ class TerraAIApp(App):
                     self.history_idx = -1
                 inp.value = self.input_history[self.history_idx] if self.history_idx >= 0 else ""
                 inp.cursor_position = len(inp.value)
-                event.prevent_default()
+            event.prevent_default()
             return
+
+    def _handle_tab_completion(self, inp: Input):
+        """Tab-complete the word at the cursor.
+
+        Rules (spec §6.4):
+        - Start-of-line: complete bot nick with colon (IRC addressing).
+          e.g. ``Ter<Tab>`` → ``TerraAI: ``
+        - Mid-line: complete bot nick without colon.
+          e.g. ``Hello Ter<Tab>`` → ``Hello TerraAI ``
+        - If the word starts with the command prefix (``-``), complete
+          SOPEL command names. e.g. ``-op<Tab>`` → ``-optin ``
+        - Case-insensitive prefix match; replace just the partial word.
+        - No match: ring the terminal bell, leave input unchanged.
+        """
+        current = inp.value
+        cursor = inp.cursor_position
+
+        # Scan left from cursor to find start of current word
+        word_start = cursor
+        while word_start > 0 and current[word_start - 1] not in (" ", "\t"):
+            word_start -= 1
+
+        # Extract the partial word at cursor
+        partial = current[word_start:cursor]
+        if not partial:
+            self.bell()
+            return
+
+        # Derive the plain command prefix character from settings.core.prefix
+        prefix_re = self.client.bot.settings.core.prefix
+        prefix_char = prefix_re.lstrip("\\")
+
+        # Build candidate list from SOPEL command names + bot nick
+        # get_all_commands() returns [(plugin_name, {name: Command, ...}), ...]
+        command_names = []
+        for _plugin, cmds in self.client.bot.rules.get_all_commands():
+            command_names.extend(cmds.keys())
+        candidates = command_names + [self.botnick]
+
+        # If partial starts with the prefix char, strip it for matching
+        # and remember to re-add it in the completion.
+        had_prefix = False
+        match_partial = partial
+        if word_start == 0 and partial.startswith(prefix_char):
+            had_prefix = True
+            match_partial = partial[len(prefix_char):]
+
+        # Case-insensitive match against candidates
+        matches = [c for c in candidates if c.lower().startswith(match_partial.lower())]
+
+        if not matches:
+            self.bell()
+            return
+
+        # Use the first match
+        completion = matches[0]
+
+        # Determine suffix: addressing at start-of-line gets "nick: ",
+        # mid-line gets trailing space, commands get trailing space.
+        at_start = word_start == 0
+
+        if had_prefix:
+            # Command completion: re-add prefix + trailing space
+            completion = prefix_char + completion + " "
+        elif completion == self.botnick:
+            # Nick completion
+            if at_start:
+                # Start-of-line: "TerraAI: " (IRC addressing convention)
+                completion = self.botnick + ": "
+            else:
+                # Mid-line: "TerraAI " (just the nick + space)
+                completion = self.botnick + " "
+        else:
+            # Other candidate (shouldn't normally happen)
+            completion = completion + " "
+
+        # Replace the partial word with the completion
+        inp.value = current[:word_start] + completion + current[cursor:]
+        inp.cursor_position = word_start + len(completion)
 
     async def on_input_submitted(self, event: Input.Submitted):
         text = event.value
@@ -366,9 +418,14 @@ class TerraAIApp(App):
             self.exit()
             return
 
-        # Parse /msg <text> as a PM
-        is_pm = text.lower().startswith("/msg ")
-        if is_pm:
+        # Determine PM routing:
+        # - /msg prefix always routes to PM tab
+        # - Being in the PM tab implies /msg (no prefix needed)
+        active_tab = self.query_one(TabbedContent).active
+        is_explicit_pm = text.lower().startswith("/msg ")
+        is_pm = is_explicit_pm or active_tab == "pm"
+
+        if is_explicit_pm:
             pm_text = text[5:]
             if not pm_text:
                 return
@@ -381,39 +438,47 @@ class TerraAIApp(App):
         self.history_idx = -1
 
         # Determine target tab
-        target = "pm" if is_pm else self.query_one(TabbedContent).active
+        target = "pm" if is_pm else active_tab
 
         # Display user message
         self._append_to_tab(target, f"{self._ts()} <{self.client.nick}> {pm_text}")
 
-        # Show "thinking" indicator for noisy users
-        if self.client.terra.user.is_noisy(self.client.server, self.client.nick):
-            self.client.bot.notice(self.client.nick, "Thinking...")
-            self._append_to_tab(target, f"{self._ts()} -!- Thinking...")
+        # Dispatch the message in a worker so the UI stays responsive
+        self.run_worker(
+            self._dispatch(pm_text if is_pm else text, is_pm, target),
+            name="ai-dispatch",
+            exclusive=False,
+        )
 
-        # Dispatch the message (synchronous — blocks during AI call)
+    async def _dispatch(self, text, is_pm, target):
+        """Run AI dispatch in a thread pool so the UI stays responsive.
+
+        Uses asyncio.to_thread() to offload the synchronous AI call,
+        then updates the UI directly (we're back on the main thread).
+        """
         try:
             if is_pm:
-                result = self.client.send_pm(self.client.nick, pm_text)
+                result = await asyncio.to_thread(
+                    self.client.send_pm, self.client.nick, text
+                )
                 responses = result["say"]
                 notices = result["notice"]
             else:
-                responses = self.client.send_message(text)
-                notices = list(self.client.bot.notices)
+                result = await asyncio.to_thread(self.client.send_message, text)
+                responses = result["say"]
+                notices = result["notice"]
         except Exception as e:
             logger.exception("dispatch failed")
             self._append_to_tab(target, f"{self._ts()} -!- Error: {e}")
             return
 
-        # Render bot responses
+        # Update UI directly (we're back on the main thread)
+        ts = self._ts()
         for r in responses:
-            self._append_to_tab(target, f"{self._ts()} <{self.botnick}> {r}")
+            self._append_to_tab(target, f"{ts} <{self.botnick}> {r}")
 
-        # Render any new notices (besides the "Thinking..." we already showed)
-        for nick, msg in notices:
-            if msg == "Thinking...":
-                continue
-            self._append_to_tab(target, f"{self._ts()} -!- {msg}")
+        for _dest, msg in notices:
+            self._append_to_tab(target, f"{ts} -!- {msg}")
 
     def action_quit(self):
         self.exit()
@@ -432,36 +497,40 @@ if __name__ == "__main__":
         # Non-interactive mode for testing
         client = TerraAITestClient()
         terra_plugin._terrai = client.terra
-        botnick = client.terra.config.bot_nick or "TerraAI"
+        botnick = client.bot.nick
+        # The command prefix is stored as a regex (e.g. r"\-"); strip the
+        # backslash to get the plain character for display / typing.
+        prefix_re = client.bot.settings.core.prefix
+        prefix = prefix_re.lstrip("\\")
         print(f"{botnick} Test Client")
         print("=" * 40)
 
-        print("\n[.optin]")
-        print(client.send_message(".optin"))
+        print(f"\n[{prefix}optin]")
+        print(client.send_message(f"{prefix}optin"))
 
-        print("\n[.optout]")
-        print(client.send_message(".optout"))
+        print(f"\n[{prefix}optout]")
+        print(client.send_message(f"{prefix}optout"))
 
-        print("\n[.optin]")
-        print(client.send_message(".optin"))
+        print(f"\n[{prefix}optin]")
+        print(client.send_message(f"{prefix}optin"))
 
-        print("\n[.addprompt wea sunny]")
-        print(client.send_message(".addprompt wea sunny"))
+        print(f"\n[{prefix}addprompt wea sunny]")
+        print(client.send_message(f"{prefix}addprompt wea sunny"))
 
-        print("\n[.listprompts]")
-        print(client.send_message(".listprompts"))
+        print(f"\n[{prefix}listprompts]")
+        print(client.send_message(f"{prefix}listprompts"))
 
-        print("\n[.wea]")
-        print(client.send_message(".wea"))
+        print(f"\n[{prefix}wea]")
+        print(client.send_message(f"{prefix}wea"))
 
-        print("\n[.help]")
-        print(client.send_message(".help"))
+        print(f"\n[{prefix}help]")
+        print(client.send_message(f"{prefix}help"))
 
-        print("\n[.effort low]")
-        print(client.send_message(".effort low"))
+        print(f"\n[{prefix}effort low]")
+        print(client.send_message(f"{prefix}effort low"))
 
-        print("\n[.effort]")
-        print(client.send_message(".effort"))
+        print(f"\n[{prefix}effort]")
+        print(client.send_message(f"{prefix}effort"))
 
         print("\nDone!")
     else:

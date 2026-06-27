@@ -102,8 +102,8 @@ class TestManagementCommands:
 
     def test_help(self, terra):
         result = terra.management.handle_help()
-        assert ".optin" in result
-        assert ".ai" in result
+        assert "-optin" in result
+        assert "-ai" in result
 
 
 class TestUserCommands:
