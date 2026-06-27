@@ -277,7 +277,13 @@ def unknown_prefixed_command_to_ai(bot, trigger):
       -help              -> normal @plugin.command('help') handler
       -ai hello          -> normal @plugin.command('ai') handler
       -optin             -> normal @plugin.command('optin') handler
+
+    PMs are skipped — `pm_catch_all` handles all PM text to avoid duplicates.
     """
+    sender = trigger.sender or ""
+    if not sender.startswith("#"):
+        return  # PM — let pm_catch_all handle it
+
     command = (trigger.group('command') or '').strip()
     args = (trigger.group('args') or '').strip()
 
@@ -371,11 +377,13 @@ def pm_catch_all(bot, trigger):
     server = _server_name(bot)
     nick = _nick(trigger)
 
-    if not terra.should_respond(server, nick):
-        return
-
     text = (trigger.group(1) or "").strip()
     if not text:
+        return
+
+    # Opt-in guard: must check before responding
+    if not terra.is_opted_in(server, nick):
+        bot.notice(f"{nick}: you must opt in first. Use: .optin", nick)
         return
 
     logger.info("pm_catch_all: forwarding PM from %r: %r", nick, text)
