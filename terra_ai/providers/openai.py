@@ -27,7 +27,7 @@ class OpenAIProvider(AIProvider):
         return "openai"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high") -> str:
+             effort: str = "high", tools=None, max_tool_rounds=5) -> str:
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",

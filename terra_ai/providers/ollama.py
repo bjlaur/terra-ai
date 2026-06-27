@@ -31,7 +31,7 @@ class OllamaProvider(AIProvider):
         return "ollama"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high") -> str:
+             effort: str = "high", tools=None, max_tool_rounds=5) -> str:
         url = f"{self._base_url}/api/chat"
 
         payload_messages = []

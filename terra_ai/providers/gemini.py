@@ -25,7 +25,7 @@ class GeminiProvider(AIProvider):
         return "gemini"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high") -> str:
+             effort: str = "high", tools=None, max_tool_rounds=5) -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
 
         # Convert OpenAI-format messages to Gemini format

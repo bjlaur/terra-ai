@@ -1,10 +1,13 @@
 """OpenRouter provider for TerraAI."""
 
+import logging
 import os
 
 import httpx
 
 from terra_ai.providers.base import AIProvider, Message
+
+logger = logging.getLogger("terraai")
 
 # Models that do NOT support reasoning controls via chat-completions.
 # Sending reasoning fields to these models causes 422 errors or silent ignore.
@@ -71,7 +74,22 @@ class OpenRouterProvider(AIProvider):
         return "openrouter"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high") -> str:
+             effort: str = "high", tools: list[dict] | None = None,
+             max_tool_rounds: int = 5) -> str:
+        """Send messages and get a complete response.
+
+        Args:
+            messages: List of Message objects.
+            system_prompt: Optional system prompt prepended as a system message.
+            effort: Effort level ('low', 'medium', 'high', 'xhigh', 'max').
+            tools: Optional list of OpenAI-compatible tool schemas.
+            max_tool_rounds: Max tool-call ↔ execute rounds before forcing a text reply.
+
+        Returns:
+            The AI's response text.
+        """
+        from terra_ai.tools.executor import execute_tool
+
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -83,21 +101,53 @@ class OpenRouterProvider(AIProvider):
             payload_messages.append({"role": "system", "content": system_prompt})
         payload_messages.extend(m.to_dict() for m in messages)
 
-        payload = {
-            "model": self._model,
-            "messages": payload_messages,
-        }
+        for _ in range(max_tool_rounds + 1):
+            payload = {
+                "model": self._model,
+                "messages": payload_messages,
+            }
 
-        reasoning = _reasoning_for_model(self._model, effort)
-        if reasoning:
-            payload["reasoning"] = reasoning
+            reasoning = _reasoning_for_model(self._model, effort)
+            if reasoning:
+                payload["reasoning"] = reasoning
 
-        with httpx.Client(timeout=self._timeout) as client:
-            response = client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+            if tools:
+                payload["tools"] = tools
 
-        return data["choices"][0]["message"]["content"]
+            with httpx.Client(timeout=self._timeout) as client:
+                response = client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+            choice = data["choices"][0]["message"]
+
+            # If the model wants to call tools, execute them and continue.
+            tool_calls = choice.get("tool_calls")
+            if tool_calls:
+                # Append the assistant's tool_calls message to the conversation.
+                payload_messages.append(choice)
+
+                # Execute each tool call and append results.
+                for tc in tool_calls:
+                    fn = tc["function"]
+                    logger.info(
+                        "Tool call: %s(%s)", fn["name"], fn.get("arguments", "")
+                    )
+                    result = execute_tool(fn["name"], fn.get("arguments", "{}"))
+                    payload_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": result,
+                    })
+                # Loop — call the API again with the tool results appended.
+                continue
+
+            # No tool calls — return the text content.
+            return choice.get("content") or ""
+
+        # Safety: if we exhausted rounds, return whatever the last response was.
+        logger.warning("Exceeded max_tool_rounds (%d)", max_tool_rounds)
+        return choice.get("content") or "Error: too many tool rounds"
 
     def is_available(self) -> bool:
         return self._api_key is not None and len(self._api_key) > 0
