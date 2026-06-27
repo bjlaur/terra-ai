@@ -74,3 +74,9 @@ Test counts: 83 → 107+
   - Admin gating → SOPEL's `trigger.admin` / `@plugin.require_admin`; removed `TerraAI.is_admin()` and `admin_nicks`
   - Test tool → `getattr(terra_plugin, f"cmd_{name}")` dispatch
 - Custom prompts (`.addprompt`, `.rmprompt`, `match_prompt()`) — TBD, needs discussion (next task)
+
+### Web search + PM routing (2026-06-27) — **COMPLETE**
+- Replaced DuckDuckGo web search with OpenRouter server-side `openrouter:web_search` tool
+- Added PM catch-all rule (`@rule("(.+)")`) for bare PM text
+- Fixed timeout type bug (int cast in all providers)
+- 137 tests passing (mock + real + ergo)

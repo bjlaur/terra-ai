@@ -137,6 +137,27 @@
 - New tab completion tests with exact-match assertions
 - All `trigger_char`/`trigger_phrase` references removed from test fixtures
 
+### Agent 2 — Web search via OpenRouter server-side + PM routing (2026-06-27)
+
+#### Features
+- **Web search switched to OpenRouter server-side tool** — uses `{"type": "openrouter:web_search"}` with `engine: "auto"`, `max_results: 5`, `max_total_results: 15`. Replaces unreliable local DuckDuckGo implementation.
+- **PM routing** — `@rule("(.+)")` catch-all for bare PM text (no prefix, no nick). Channel messages without prefix are still ignored.
+- **Help desk behavior** — model told it has access to web search through provider, decides when to search vs answer from training data.
+
+#### Bug Fixes
+- **Timeout type error** — added `int()` cast for `timeout` in all providers (`OpenRouterProvider`, `GeminiProvider`, `OpenAIProvider`, `OllamaProvider`). Fixes `TypeError: 'str' object cannot be interpreted as an integer or float` when SOPEL passes `provider_timeout` as string from `.cfg` file.
+
+#### Cleanup
+- Removed `terra_ai/tools/web_search.py` (DuckDuckGo implementation)
+- Removed `web_search` entry from `tools/executor.py` (no local execution needed)
+- Simplified `OpenRouterProvider.chat()` — no more tool-call loop for web search
+- Removed DuckDuckGo tests from `test_tools.py` and `test_providers_extended.py`
+
+#### Testing
+- 137 tests passing total (mock + real + ergo)
+- 16/16 ergo integration tests passing
+- New tests: `test_bot_uses_web_search_for_weather`, `test_web_search_for_traverse_city_weather`, `test_no_search_for_trivial_question`, `test_bot_responds_to_bare_pm`, `test_pm_bare_message_routes_to_ai_mock/real`, `test_schema_type` (validates `openrouter:web_search` type)
+
 ---
 
 ## 0.0.1 — TBD
