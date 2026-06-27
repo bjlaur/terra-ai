@@ -240,6 +240,25 @@ class TestPM:
         assert len(result["say"]) > 0
 
     @pytest.mark.mock
+    def test_pm_bare_message_routes_to_ai_mock(self, terra):
+        """Mock version: bare PM (no prefix, no nick) routes to AI."""
+        from test_tool.console import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        result = client.send_pm("tester", "hello there, how are you?")
+        assert len(result["say"]) > 0
+        assert "mocked" in result["say"][0].lower()
+
+    @pytest.mark.real
+    def test_pm_bare_message_routes_to_ai_real(self, terra):
+        """Real version: bare PM (no prefix, no nick) routes to AI."""
+        from test_tool.console import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        result = client.send_pm("tester", "hello there, how are you?")
+        assert len(result["say"]) > 0
+
+    @pytest.mark.mock
     def test_clear_command(self, terra):
         """Test -clear command — wipes session, starts fresh."""
         from test_tool.console import TerraAITestClient

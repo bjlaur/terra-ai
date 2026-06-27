@@ -645,6 +645,26 @@ sqlite_path = {db_path}
 
         self._irc_quit(sock)
 
+    def test_bot_responds_to_bare_pm(self, sopel_bot_process):
+        """Test that bare PM text (no prefix, no nick) reaches the AI.
+
+        Sends 'hello there' as a PM without any trigger — the pm_catch_all
+        rule should route it to the AI, which should respond.
+        """
+        sock = self._irc_connect("TestBarePM")
+
+        # Send a private message directly to the bot (no channel, no prefix)
+        sock.sendall(b"PRIVMSG TerraAI :hello there, how are you?\r\n")
+
+        response = self._read_irc_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=60,  # AI roundtrip can be slow
+        )
+        assert response is not None, "Bot did not respond to bare PM"
+
+        self._irc_quit(sock)
+
     def test_bot_reports_error_on_ai_failure(self, sopel_bot_bad_provider):
         """Bot MUST send an error message to IRC when the AI provider fails.
 
