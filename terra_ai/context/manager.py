@@ -51,8 +51,9 @@ class ContextManager:
                 "content": msg["content"],
             })
 
-        # 5. Current user message
-        messages.append({"role": "user", "content": user_message})
+        # 5. Current user message — prefix with <nick> so the AI knows
+        # who's talking (matches the fake conversation context seed).
+        messages.append({"role": "user", "content": f"<{nick}> {user_message}"})
 
         return messages
 

@@ -357,43 +357,14 @@ def addressed_freeform(bot, trigger):
 
 
 # ── PM catch-all: bare text in private messages ─────────────────────────────
-
-
-@sopel_plugin.rule(r"(.+)")
-@sopel_plugin.priority('low')
-@_irc_error_handler
-def pm_catch_all(bot, trigger):
-    """Route bare PM text (no prefix, no nick addressing) to the AI.
-
-    Channel messages without a prefix or nick addressing are ignored — this
-    rule only fires for PMs. We detect PMs by checking that ``trigger.sender``
-    is not a channel name (channels start with ``#``).
-    """
-    sender = trigger.sender or ""
-    if sender.startswith("#"):
-        return  # Channel message — ignore (handled by other rules if addressed)
-
-    terra = _get_terra()
-    server = _server_name(bot)
-    nick = _nick(trigger)
-
-    text = (trigger.group(1) or "").strip()
-    if not text:
-        return
-
-    # Opt-in guard: must check before responding
-    if not terra.is_opted_in(server, nick):
-        bot.notice(f"{nick}: you must opt in first. Use: .optin", nick)
-        return
-
-    logger.info("pm_catch_all: forwarding PM from %r: %r", nick, text)
-
-    if terra.user.is_noisy(server, nick):
-        bot.notice("Thinking...", nick)
-
-    response = terra.handle_ai_message(server, nick, nick, text)
-    if response:
-        bot.say(response)
+# DISABLED — this was causing duplicate responses and opt-in/opt-out issues.
+# PM routing needs a proper redesign. For now, PMs use the same prefixed
+# commands (.ai, .optin, etc) as channel messages.
+#
+# @sopel_plugin.rule(r"(.+)")
+# @sopel_plugin.priority('low')
+# def pm_catch_all(bot, trigger):
+#     ...
 
 
 # ── Test-console routing entry point ─────────────────────────────────────────
