@@ -27,10 +27,10 @@ class TerraAI:
         self.config = config
         self.db = Database(DBConfig(path=config.sqlite_path))
         self.prompts = PromptManager(
-            self.db, trigger_char=config.trigger_char, config=config
+            self.db, config=config
         )
         self.context = ContextManager(self.db, self.prompts)
-        self.management = ManagementCommands(self.db, self.prompts)
+        self.management = ManagementCommands(self.db, self.prompts, help_prefix="-")
         self.user = UserCommands(self.db, self.prompts)
 
         # Set up provider

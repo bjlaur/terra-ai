@@ -2,6 +2,10 @@
 
 Uses SOPEL's native StaticSection config system.
 All settings live in the [terraai] section of the SOPEL .cfg file.
+
+Command prefix routing is handled by SOPEL's ``settings.core.prefix`` and
+``$nick`` rules — there is no ``trigger_char`` or ``trigger_phrase`` in the
+TerraAI config section.
 """
 
 from sopel.config import types
@@ -13,6 +17,10 @@ class TerraAISection(types.StaticSection):
     Defined in the [terraai] section of the SOPEL config file (.cfg).
     All fields have sensible defaults — the plugin works with zero
     configuration beyond enabling it.
+
+    Note: ``trigger_char`` and ``trigger_phrase`` have been removed.
+    SOPEL's ``settings.core.prefix`` handles command prefix routing,
+    and ``$nick`` rules handle addressed freeform queries.
     """
 
     # ── Provider settings ──────────────────────────────────────────────
@@ -39,20 +47,10 @@ class TerraAISection(types.StaticSection):
 
     # ── Bot behavior ───────────────────────────────────────────────────
 
-    trigger_phrase = types.ValidatedAttribute(
-        'trigger_phrase', default='TerraAI:',
-    )
-    """Trigger phrase for addressed queries (e.g. 'TerraAI: hello')."""
-
     bot_nick = types.ValidatedAttribute(
         'bot_nick', default='',
     )
     """Bot nick for prompt interpolation. Empty = use SOPEL's nick."""
-
-    trigger_char = types.ValidatedAttribute(
-        'trigger_char', default='.',
-    )
-    """Command prefix character (e.g. '.' for .optin, '-' for -optin)."""
 
     effort = types.ValidatedAttribute(
         'effort', default='high',

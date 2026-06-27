@@ -8,6 +8,15 @@ Mock vs Real provider:
 - To run against the real API, pass --real on the command line.
   Only tests marked @pytest.mark.real will hit the real provider.
   Requires OPENROUTER_API_KEY to be set.
+
+- Tests marked @pytest.mark.mock always use the mock provider,
+  even when --real is passed.
+
+- Tests with no marker default to mock behavior.
+
+Run mock tests (default):  pytest
+Run real API tests:         pytest --real -m real
+Run everything:              pytest --real
 """
 
 import os
@@ -40,9 +49,7 @@ def _make_test_config(**overrides):
         api_key=os.environ.get("OPENROUTER_API_KEY", "test-key"),
         base_url="https://openrouter.ai/api/v1",
         provider_timeout=30,
-        trigger_phrase="TerraAI:",
         bot_nick="",
-        trigger_char=".",
         effort="high",
         sqlite_path="data/terraai.db",
     )
@@ -63,25 +70,34 @@ def db():
 
 @pytest.fixture
 def terra(db, request):
-    """TerraAI instance with mock provider by default.
+    """TerraAI instance — mock or real depending on markers.
 
-    When --real is passed AND the test is marked @pytest.mark.real,
-    the real OpenRouter provider is used (requires OPENROUTER_API_KEY).
-    Otherwise, provider.chat() is patched to return a mock response.
+    Rules:
+    - @pytest.mark.mock → mock provider (always, even with --real)
+    - @pytest.mark.real + --real + key → real provider
+    - @pytest.mark.real without --real or key → skip
+    - No marker → mock provider (default)
     """
-    use_real = (
-        request.config.getoption("--real")
-        and bool(os.environ.get("OPENROUTER_API_KEY"))
-        and request.node.get_closest_marker("real") is not None
-    )
+    has_key = bool(os.environ.get("OPENROUTER_API_KEY"))
+    marker_real = request.node.get_closest_marker("real")
+    marker_mock = request.node.get_closest_marker("mock")
+
+    if marker_real is not None:
+        if not request.config.getoption("--real"):
+            pytest.skip("@pytest.mark.real requires --real flag")
+        if not has_key:
+            pytest.skip("@pytest.mark.real requires OPENROUTER_API_KEY")
+        use_real = True
+    elif marker_mock is not None:
+        use_real = False
+    else:
+        # No marker → default mock
+        use_real = False
 
     config = _make_test_config(sqlite_path=db.config.path)
     t = TerraAI(config)
 
-    if use_real:
-        # Real API — set effort to low for speed
-        t.prompts.set_effort("low")
-    else:
+    if not use_real:
         # Mock — patch provider.chat() to return instantly
         original_chat = OpenRouterProvider.chat
 
@@ -90,6 +106,9 @@ def terra(db, request):
 
         OpenRouterProvider.chat = mock_chat
         request.addfinalizer(lambda: setattr(OpenRouterProvider, "chat", original_chat))
+    else:
+        # Real API — set effort to low for speed
+        t.prompts.set_effort("low")
 
     # So plugin handlers (_get_terra()) work in tests
     terra_plugin._terrai = t

@@ -49,7 +49,7 @@
 - 94 unit tests passing (after cleanup), 7 real-API tests passing (with key) (database, providers, prompts, context, bot, providers_extended, test_tool)
 - 15 ergo integration tests (require live ergochat server)
 
-### Agent 2 — Routing fixes, new commands, PM support, manual testing
+### Agent 2 — Console rewrite: SOPEL dispatch, remove trigger_char/phrase
 
 #### Features
 - `.clear` command — wipe conversation history and start fresh session
@@ -97,6 +97,45 @@
 - Deferred tests tracked in `docs/release-0.0.2/deferred-testing-agent2.md`
 - Async testing report in `docs/misc/claude-didn't-listen.md`
 - **3 interactive tests deferred** (2026-06-26): `test_interactive_accepts_pm`, `test_interactive_noisy_notice`, `test_interactive_accepts_input` — AI response never arrives in subprocess+curses+pty within 30s timeout. Works in-process. Root cause unknown.
+
+### Agent 2 — Console phase 2: SOPEL dispatch, remove trigger_char/phrase (2026-06-27)
+
+#### Breaking Changes
+- **Removed `trigger_char` and `trigger_phrase`** from `TerraAISection` config — SOPEL's `settings.core.prefix` and `$nick` rules handle all routing now
+- **Removed `load_config()`** from `config.py` — `setup()` reads `bot.config.terraai` directly; no separate YAML config needed
+- **Removed YAML config path** — ergo test fixtures now use SOPEL `.cfg` `[terraai]` section exclusively
+
+#### Routing
+- Added `dispatch_line(bot, nick, line, is_pm=False)` in `plugin.py` — routes through SOPEL's real rule dispatcher (PreTrigger → get_triggered_rules → rule.execute)
+- Rebuilt `FakeBot` with real SOPEL `RulesManager` — test console follows the exact same dispatch path as production IRC
+- Removed legacy shims: `handle_channel_message`, `handle_pm_message`, `_cmd_word`, `_notify_thinking`
+- Added thinking notice (`bot.notice("Thinking...", nick)`) directly to `addressed_freeform` and `unknown_prefixed_command_to_ai` handlers
+- Fixed hardcoded `.setlocation` prefix → `setlocation` (SOPEL already strips prefix)
+
+#### Prompts
+- Removed `${triggerchar}` placeholders from `defaults.py` — replaced with real examples (`-wea`)
+- Removed `trigger_char` parameter/property from `PromptManager`
+- Removed auto-prefix logic from `add_prompt()` / `remove_prompt()`
+
+#### Console (test_tool/console.py)
+- Removed `FakeTrigger` entirely — SOPEL's `Trigger` does prefix stripping via regex
+- Removed hardcoded "Thinking..." line from TUI — notices come from plugin handlers only
+- Removed "Thinking..." duplicate filter in `_dispatch` — handler owns the notice
+- Tab completion: prefix-aware (strips `-` for matching, re-adds in completion)
+- Tab completion: nick at start-of-line gets colon (`Ter<Tab>` → `TerraAI: `), mid-line gets space (`Hello Ter<Tab>` → `Hello TerraAI `)
+- Console config derived from `_Core`/`_Settings` defaults — no YAML/INI file needed
+
+#### Config
+- Help text uses configurable `help_prefix` (default `"-"`) instead of hardcoded `"."`
+
+#### Ergo Tests
+- Removed YAML config files — all settings in SOPEL `.cfg` `[terraai]` section
+- 16/16 ergo integration tests passing with live ergochat
+
+#### Testing
+- 116 unit tests passing, 0 failures
+- New tab completion tests with exact-match assertions
+- All `trigger_char`/`trigger_phrase` references removed from test fixtures
 
 ---
 

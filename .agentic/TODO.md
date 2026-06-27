@@ -14,6 +14,17 @@ Only pending/unfinished work stays in the active sections below.
 ## Active: 0.0.2 — SOPEL-Native Plugin Cleanup
 
 ### Done ✅
+- [x] Console phase 2: route through SOPEL's real rule dispatcher via `dispatch_line()`
+- [x] Removed `trigger_char` and `trigger_phrase` from config, PromptManager, bot, and all tests
+- [x] Removed `load_config()` / YAML config path — `setup()` reads `bot.config.terraai` directly
+- [x] Rebuilt `FakeBot` with real SOPEL `RulesManager` — same dispatch path as production
+- [x] Removed `FakeTrigger` — SOPEL's `Trigger` handles prefix stripping via regex
+- [x] Removed hardcoded "Thinking..." from TUI — notices come from plugin handlers only
+- [x] Tab completion: prefix-aware, nick gets colon at start-of-line, space mid-line
+- [x] Help text uses configurable `help_prefix` instead of hardcoded `.`
+- [x] Ergo test fixtures use SOPEL `.cfg` `[terraai]` section (no separate YAML)
+- [x] 16/16 ergo integration tests passing with live ergochat
+- [x] 116 unit tests passing, 0 failures
 - [x] SOPEL-native cleanup: deleted `handle_management()` routing layer, plugin commands call `user.*`/`management.*` directly
 - [x] Renamed `AdminCommands` → `ManagementCommands` (file + class)
 - [x] Removed dead code: `is_management_command()`, `match_prompt()`, `handle_setlocation()`, `handle_ai()`, `MANAGEMENT_COMMANDS` set

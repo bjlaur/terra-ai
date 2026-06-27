@@ -11,9 +11,10 @@ logger = logging.getLogger("terraai")
 class ManagementCommands:
     """Management commands that never reach the AI."""
 
-    def __init__(self, db: Database, prompts: PromptManager):
+    def __init__(self, db: Database, prompts: PromptManager, help_prefix: str = "-"):
         self.db = db
         self.prompts = prompts
+        self.help_prefix = help_prefix
 
     def handle_listprompts(self, server: str, nick: str) -> str:
         """Handle .listprompts command."""
@@ -100,9 +101,10 @@ class ManagementCommands:
         return "\n".join(lines)
 
     def handle_help(self) -> str:
-        """Handle .help command."""
+        """Handle help command."""
+        p = self.help_prefix
         return (
-            "Commands: .optin, .optout, .noisy, .ai <prompt>, "
-            ".addprompt <trigger> <text>, .rmprompt <number>, .listprompts, "
-            ".setlocation <city, state>, .compact, .clear, .stats, .help, .effort [level]"
+            f"Commands: {p}optin, {p}optout, {p}noisy, {p}ai <prompt>, "
+            f"{p}addprompt <trigger> <text>, {p}rmprompt <number>, {p}listprompts, "
+            f"{p}setlocation <city, state>, {p}compact, {p}clear, {p}stats, {p}help, {p}effort [level]"
         )

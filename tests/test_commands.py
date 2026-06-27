@@ -22,7 +22,7 @@ def db():
 
 @pytest.fixture
 def prompts(db):
-    return PromptManager(db, trigger_char=".")
+    return PromptManager(db)
 
 
 @pytest.fixture
@@ -33,8 +33,8 @@ def context(db, prompts):
 class TestPromptManager:
     def test_get_system_prompt(self, prompts):
         sp = prompts.get_system_prompt()
-        # With no config, botnick defaults to "" so no name appears
-        assert "{triggerchar}" not in sp  # Should be interpolated
+        # triggerchar is no longer used — template should not have it
+        assert "{triggerchar}" not in sp
 
     def test_context_seed(self, prompts):
         seed = prompts.get_context_seed("irc.example.com", "#chan")
@@ -43,12 +43,12 @@ class TestPromptManager:
         assert seed[0]["source"] == "system"
 
     def test_add_and_remove_prompt(self, prompts):
-        prompts.add_prompt("irc.example.com", ".wea", "sunny", "admin")
-        assert prompts.remove_prompt("irc.example.com", ".wea") is True
+        prompts.add_prompt("irc.example.com", "wea", "sunny", "admin")
+        assert prompts.remove_prompt("irc.example.com", "wea") is True
 
     def test_list_prompts(self, prompts):
-        prompts.add_prompt("irc.example.com", ".wea", "sunny")
-        prompts.add_prompt("irc.example.com", ".bye", "goodbye")
+        prompts.add_prompt("irc.example.com", "wea", "sunny")
+        prompts.add_prompt("irc.example.com", "bye", "goodbye")
         all_prompts = prompts.list_prompts("irc.example.com")
         assert len(all_prompts) == 2
 

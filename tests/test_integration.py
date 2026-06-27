@@ -33,13 +33,21 @@ class TestTerraAI:
             # Self-check disabled when bot_nick not configured
             assert terra.should_respond("irc.example.com", "anyone") is True
 
-    def test_handle_ai_message(self, terra):
-        """Test that handle_ai_message returns the provider's response."""
+    @pytest.mark.mock
+    def test_handle_ai_message_mock(self, terra):
+        """Mock version: handle_ai_message returns mocked response."""
         provider = terra.registry.get()
         provider.chat = lambda messages, system_prompt=None, effort="high": "Hello!"
 
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
+
+    @pytest.mark.real
+    def test_handle_ai_message_real(self, terra):
+        """Real version: handle_ai_message hits the real provider."""
+        result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
+        assert result is not None
+        assert result.strip() != ""
 
     def test_handle_optin(self, terra):
         result = terra.user.handle_optin("irc.example.com", "nick")
@@ -53,8 +61,16 @@ class TestTerraAI:
 class TestPluginRules:
     """Verify SOPEL plugin rule configuration."""
 
-    def test_addressed_freeform_allows_bots(self):
+    @pytest.mark.mock
+    def test_addressed_freeform_allows_bots_mock(self):
         """$nick rule must allow bot-tagged messages."""
+        from terra_ai import plugin as terra_plugin
+        assert getattr(terra_plugin.addressed_freeform, 'allow_bots', False), \
+            "addressed_freeform.allow_bots must be True for IRCv3 bot tag compatibility"
+
+    @pytest.mark.real
+    def test_addressed_freeform_allows_bots_real(self):
+        """$nick rule must allow bot-tagged messages (real API)."""
         from terra_ai import plugin as terra_plugin
         assert getattr(terra_plugin.addressed_freeform, 'allow_bots', False), \
             "addressed_freeform.allow_bots must be True for IRCv3 bot tag compatibility"
@@ -86,8 +102,8 @@ class TestManagementCommands:
 
     def test_help(self, terra):
         result = terra.management.handle_help()
-        assert ".optin" in result
-        assert ".ai" in result
+        assert "-optin" in result
+        assert "-ai" in result
 
 
 class TestUserCommands:
