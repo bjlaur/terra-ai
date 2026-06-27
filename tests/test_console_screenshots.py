@@ -16,7 +16,7 @@ import html
 import re
 
 import pytest
-from textual.widgets import Input
+from textual.widgets import Input, TabbedContent
 
 from terra_ai import plugin as terra_plugin
 from test_tool.console import TerraAIApp, TerraAITestClient
@@ -31,9 +31,9 @@ def _extract_svg_texts(svg_str: str) -> list[str]:
     return [m.group(1) for m in re.finditer(r"<text[^>]*>([^<]*)</text>", svg)]
 
 
-def _chat_text(app) -> str:
-    """Get the chat text from the app's messages list."""
-    return "\n".join(app.messages)
+def _chat_text(app, tab="channel") -> str:
+    """Get the chat text from the specified tab's messages list."""
+    return "\n".join(app.messages.get(tab, []))
 
 
 async def _type_text(pilot, selector, text):
@@ -54,43 +54,51 @@ def app(terra):
 
 @pytest.mark.asyncio
 async def test_initial_state(app):
-    """Header shows #terra-ai."""
+    """Header shows #terra-ai, Channel tab is active, both tabs empty."""
     async with app.run_test() as pilot:
         await pilot.pause()
         svg = app.export_screenshot()
         texts = _extract_svg_texts(svg)
         all_text = " ".join(texts)
         assert "#terra-ai" in all_text, f"Header not found. texts: {texts[:10]}"
-        assert app.messages == [], "Chat should be empty on launch"
+        # Tabbed layout: messages is a dict with channel and pm keys
+        assert app.messages == {"channel": [], "pm": []}, \
+            f"Both tabs should be empty on launch. messages: {app.messages}"
+        # Channel tab is active by default
+        assert app.query_one(TabbedContent).active == "channel"
 
 
 @pytest.mark.asyncio
 async def test_after_message(app):
-    """User message + bot response visible in chat."""
+    """User message + bot response visible in channel tab."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", ".optin")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
+        text = _chat_text(app, "channel")
         assert "optin" in text.lower() or "opted" in text.lower(), \
-            f"Optin response not found. messages: {app.messages}"
+            f"Optin response not found. channel messages: {app.messages['channel']}"
 
 
 @pytest.mark.asyncio
-async def test_pm_sends_with_prefix(app):
-    """/msg hello shows [PM] <tester> hello prefix."""
+async def test_pm_routes_to_pm_tab(app):
+    """/msg hello shows <tester> hello in the PM tab (no [PM] prefix)."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", "/msg hello")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
-        assert "[PM]" in text, f"[PM] prefix not found. messages: {app.messages}"
-        assert "tester" in text.lower(), f"tester nick not found"
+        text = _chat_text(app, "pm")
+        assert "[PM]" not in text, \
+            f"[PM] prefix should be gone in tabbed layout. pm messages: {app.messages['pm']}"
+        assert "tester" in text.lower(), \
+            f"tester nick not found in PM tab. pm messages: {app.messages['pm']}"
+        assert "hello" in text.lower(), \
+            f"hello not found in PM tab. pm messages: {app.messages['pm']}"
 
 
 @pytest.mark.asyncio
 async def test_notice_shows_thinking(app):
-    """With noisy ON, -!- Thinking... appears before AI response."""
+    """With noisy ON, -!- Thinking... appears in channel tab."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", ".noisy")
         await pilot.press("enter")
@@ -98,31 +106,31 @@ async def test_notice_shows_thinking(app):
         await _type_text(pilot, "#input", "TerraAI: hello")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
-        assert "-!-" in text, f"Notice prefix not found. messages: {app.messages}"
-        assert "Thinking" in text, f"Thinking notice not found. messages: {app.messages}"
+        text = _chat_text(app, "channel")
+        assert "-!-" in text, f"Notice prefix not found. channel: {app.messages['channel']}"
+        assert "Thinking" in text, f"Thinking notice not found. channel: {app.messages['channel']}"
 
 
 @pytest.mark.asyncio
 async def test_noisy_toggle_shows_notice(app):
-    """.noisy shows 'Noisy mode ON/OFF'."""
+    """.noisy shows 'Noisy mode ON/OFF' in channel tab."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", ".noisy")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
-        assert "Noisy" in text, f"Noisy mode notice not found. messages: {app.messages}"
+        text = _chat_text(app, "channel")
+        assert "Noisy" in text, f"Noisy mode notice not found. channel: {app.messages['channel']}"
 
 
 @pytest.mark.asyncio
 async def test_help_shows_command_list(app):
-    """.help shows all commands."""
+    """.help shows all commands in channel tab."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", ".help")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
-        assert ".optin" in text, f"Command list not found. messages: {app.messages}"
+        text = _chat_text(app, "channel")
+        assert ".optin" in text, f"Command list not found. channel: {app.messages['channel']}"
 
 
 @pytest.mark.asyncio
@@ -154,7 +162,7 @@ async def test_input_history(app):
 
 @pytest.mark.asyncio
 async def test_management_commands_work(app):
-    """.optin, .effort low, etc. produce correct responses."""
+    """.optin, .effort low, etc. produce correct responses in channel tab."""
     async with app.run_test() as pilot:
         await _type_text(pilot, "#input", ".optin")
         await pilot.press("enter")
@@ -162,8 +170,34 @@ async def test_management_commands_work(app):
         await _type_text(pilot, "#input", ".effort low")
         await pilot.press("enter")
         await pilot.pause()
-        text = _chat_text(app)
+        text = _chat_text(app, "channel")
         assert "opted" in text.lower() or "optin" in text.lower(), \
-            f"Optin response not found. messages: {app.messages}"
+            f"Optin response not found. channel: {app.messages['channel']}"
         assert "low" in text.lower(), \
-            f"Effort level not found. messages: {app.messages}"
+            f"Effort level not found. channel: {app.messages['channel']}"
+
+
+@pytest.mark.asyncio
+async def test_f1_switches_to_channel(app):
+    """F1 switches to Channel tab."""
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Switch to PM first
+        await pilot.press("f2")
+        await pilot.pause()
+        assert app.query_one(TabbedContent).active == "pm"
+        # Now switch back to Channel
+        await pilot.press("f1")
+        await pilot.pause()
+        assert app.query_one(TabbedContent).active == "channel"
+
+
+@pytest.mark.asyncio
+async def test_f2_switches_to_pm(app):
+    """F2 switches to PM tab."""
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.query_one(TabbedContent).active == "channel"
+        await pilot.press("f2")
+        await pilot.pause()
+        assert app.query_one(TabbedContent).active == "pm"

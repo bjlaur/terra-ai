@@ -51,7 +51,7 @@ From `.agentic/plan.md` §7.2, adapted for Textual widgets:
 ┌─────────────────────────────────────────────────────────┐
 │ #terra-ai                                    12:34     │  ← Header (Static)
 │─────────────────────────────────────────────────────────│
-│ [Channel]                                      [PM]     │  ← Tab bar (Ctrl+X to switch)
+│ [Channel]                                      [PM]     │  ← Tab bar (F1/F2 to switch)
 │─────────────────────────────────────────────────────────│
 │ [12:34] <nick1> hey TerraAI                             │
 │ [12:34] <TerraAI> hi there                              │
@@ -70,11 +70,11 @@ Textual widget tree:
 
 **Two tabs (using Textual's native `TabbedContent`):**
 - **Channel tab** — shows channel messages (`<nick> message`, `<TerraAI> response`, `-!- notice`)
-- **PM tab** — shows PM history (`[PM] <nick> message`, `[PM] <TerraAI> response`)
-- `Ctrl+X` switches between tabs
+- **PM tab** — shows PM history (`<nick> message`, `<TerraAI> response`) — no `[PM]` prefix needed since the tab provides context
+- `F1` switches to Channel tab, `F2` switches to PM tab
 - The input line is shared — what you type goes to whichever tab is active
-- `/msg <text>` automatically switches to the PM tab and sends as a PM
-- Regular messages go to the Channel tab
+- `/msg <text>` routes to the PM tab regardless of which tab is active
+- Regular messages go to whichever tab is currently active
 
 ---
 
@@ -89,6 +89,8 @@ From `.agentic/plan.md` §7.3, adapted for Textual:
 | `Ctrl+D` | Quit |
 | `Ctrl+C` | Quit |
 | `Tab` | Complete trigger phrase (start-of-line → `TerraAI: `, mid-line → `TerraAI `) |
+| `F1` | Switch to Channel tab |
+| `F2` | Switch to PM tab |
 | `Enter` | Submit input |
 | Anything else | Send as message to current target |
 
@@ -116,13 +118,15 @@ The `plugin.py` handlers (`cmd_optin`, `cmd_effort`, `addressed_freeform`, etc.)
 
 ### 5.2 PMs
 
-PMs are done by sending `/msg TerraAI hello` in the console. The console parses `/msg <text>` and sets `is_pm=True` on the trigger. The plugin.py handler then routes it as a direct message (no trigger phrase needed).
+PMs are done by sending `/msg hello` in the console. The console parses `/msg <text>` and routes the message to the PM tab. The plugin.py handler processes it as a direct message (no trigger phrase needed).
+
+Messages in the PM tab do **not** carry a `[PM]` prefix — the tab title provides context instead.
 
 ```python
-# In the console's input loop
-is_pm = cmd.lower().startswith("/msg ")
-pm_text = cmd[5:] if is_pm else cmd
-trigger = FakeTrigger(nick, channel, pm_text, is_pm=is_pm)
+# In the console's input handler
+is_pm = text.lower().startswith("/msg ")
+pm_text = text[5:] if is_pm else text
+target = "pm" if is_pm else self.query_one(TabbedContent).active
 ```
 
 ### 5.3 No routing in the console
@@ -152,9 +156,10 @@ All of that lives in `plugin.py`. The console just:
 ### 6.2 PMs (Private Messages)
 
 - Messages addressed to the bot go to AI without trigger phrase
-- irssi-style format: `[HH:MM] [PM] <nick> message` for user input
-- PM bot response: `[HH:MM] [PM] <TerraAI> response`
-- `[PM]` has its own color pair (distinct from channel messages)
+- PMs are displayed in the **PM tab** — no `[PM]` prefix needed (tab title provides context)
+- Format: `[HH:MM] <nick> message` for user input
+- Bot response: `[HH:MM] <TerraAI> response`
+- `/msg <text>` routes to the PM tab regardless of which tab is active
 
 ### 6.3 Notices (irssi format)
 
@@ -562,7 +567,7 @@ Non-interactive tests that use `TerraAITestClient` directly (no pty subprocess).
 
 ### 8.2 Console SVG tests (`tests/test_console_screenshots.py`)
 
-These tests exercise the **Textual UI** by using Textual's built-in test pilot (`app.run_test()`) to drive the real `TerraAIApp` headlessly, then exporting SVG screenshots via `app.screen.export_screenshot(format="svg")`. The tests then **inspect the SVG content programmatically** to verify the UI shows the correct output.
+These tests exercise the **Textual UI** by using Textual's built-in test pilot (`app.run_test()`) to drive the real `TerraAIApp` headlessly. Tests assert against `app.messages` (per-tab dict: `{"channel": [...], "pm": [...]}`) rather than parsing SVG — Textual 8.2's `export_screenshot()` does not capture dynamically-updated Static widget content. SVG screenshots are saved as debug artifacts only.
 
 **How SVG export works:**
 
@@ -575,32 +580,32 @@ Textual has built-in SVG export:
 
 ```python
 @pytest.mark.asyncio
-async def test_pm_mode():
-    """PM mode shows [PM] prefix and bot responds."""
+async def test_pm_routes_to_pm_tab():
+    """/msg hello shows <tester> hello in PM tab (no [PM] prefix)."""
     app = TerraAIApp(client=client)
     async with app.run_test() as pilot:
         await pilot.type("#input", "/msg hello")
         await pilot.press("enter")
         await pilot.pause(2)  # wait for AI response to render
-        svg = await app.screen.export_screenshot(format="svg")
-
-        # Parse SVG and verify content
-        texts = extract_svg_texts(svg)
-        assert any("[PM]" in t and "tester" in t and "hello" in t for t in texts)
-        assert any("TerraAI" in t for t in texts)
+        # Assert against app.messages (per-tab dict), not SVG
+        text = "\n".join(app.messages["pm"])
+        assert "[PM]" not in text  # No [PM] prefix in tabbed layout
+        assert "hello" in text.lower()
 ```
 
 **SVG tests:**
 
-- `test_initial_state` — header shows `#terra-ai`, empty chat, input line at bottom
-- `test_after_message` — user message + bot response visible in chat
-- `test_pm_sends_with_prefix` — `/msg hello` shows `[PM] <tester> hello` prefix
-- `test_notic_shows_thinking` — `-!- Thinking...` appears before AI response
+- `test_initial_state` — header shows `#terra-ai`, both tabs empty, Channel tab active
+- `test_after_message` — user message + bot response visible in channel tab
+- `test_pm_routes_to_pm_tab` — `/msg hello` shows `<tester> hello` in PM tab (no `[PM]` prefix)
+- `test_notice_shows_thinking` — `-!- Thinking...` appears before AI response
 - `test_noisy_toggle_shows_notice` — `.noisy` shows "Noisy mode ON/OFF"
 - `test_help_shows_command_list` — `.help` shows all commands
 - `test_tab_completion` — pressing Tab completes `TerraAI: `
 - `test_input_history` — pressing Up recalls previous input
 - `test_management_commands_work` — `.optin`, `.effort low`, etc. produce correct responses
+- `test_f1_switches_to_channel` — F1 switches to Channel tab
+- `test_f2_switches_to_pm` — F2 switches to PM tab
 
 **Why SVG tests?**
 

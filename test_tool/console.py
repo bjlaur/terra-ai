@@ -29,8 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from textual.app import App
 from textual.binding import Binding
-from textual.color import Color
-from textual.widgets import Input, RichLog, Static
+from textual.widgets import Input, Static, TabbedContent, TabPane
 
 from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
@@ -242,18 +241,6 @@ class TerraAITestClient:
         return {"say": list(self.bot.messages), "notice": list(self.bot.notices)}
 
 
-def _format_messages(messages, botnick):
-    """Format a list of message strings for display in the chat widget.
-
-    Returns a Rich Loggable object (plain string — RichLog.write() handles
-    newlines natively).
-    """
-    lines = []
-    for msg in messages:
-        lines.append(msg)
-    return "\n".join(lines) if lines else ""
-
-
 class TerraAIApp(App):
     """Textual TUI for interacting with TerraAI."""
 
@@ -268,12 +255,10 @@ class TerraAIApp(App):
         text-style: bold;
         padding: 0 1;
     }
-    #chat {
+    TabbedContent {
         height: 1fr;
-        overflow-y: auto;
-        padding: 0 1;
     }
-    #input {
+    Input {
         height: 1;
         background: $surface;
     }
@@ -283,25 +268,29 @@ class TerraAIApp(App):
         Binding("ctrl+q", "quit", "Quit", show=True),
         Binding("ctrl+d", "quit", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False),
+        Binding("f1", "switch_tab('channel')", "Channel", show=True),
+        Binding("f2", "switch_tab('pm')", "PM", show=True),
     ]
 
     def __init__(self, client: TerraAITestClient):
         super().__init__()
         self.client = client
-        self.messages: list[str] = []
+        self.messages = {"channel": [], "pm": []}
         self.input_history: list[str] = []
         self.history_idx: int = -1
         self.botnick = client.terra.config.bot_nick or "TerraAI"
 
     def compose(self):
         yield Static("", id="header")
-        self.chat_log = RichLog(id="chat", wrap=True, markup=False)
-        yield self.chat_log
+        with TabbedContent(initial="channel") as tc:
+            with TabPane("Channel", id="channel"):
+                yield Static("", id="channel-log")
+            with TabPane("PM", id="pm"):
+                yield Static("", id="pm-log")
         yield Input(placeholder="Type a message...", id="input")
 
     def on_mount(self):
         self._redraw_header()
-        self._redraw_chat()
         self.query_one("#input", Input).focus()
 
     def _ts(self):
@@ -313,16 +302,17 @@ class TerraAIApp(App):
         clock = time.strftime("%H:%M")
         header.update(f" #terra-ai (test mode) — type 'quit' to exit {clock}")
 
-    def _redraw_chat(self):
-        self.chat_log.clear()
-        self.chat_log.write(_format_messages(self.messages, self.botnick))
+    def _append_to_tab(self, tab, msg):
+        """Append a message to the specified tab's Static widget."""
+        self.messages[tab].append(msg)
+        if len(self.messages[tab]) > 500:
+            self.messages[tab] = self.messages[tab][500:]
+        log = self.query_one(f"#{tab}-log", Static)
+        log.update("\n".join(self.messages[tab]))
 
-    def _append_message(self, msg):
-        self.messages.append(msg)
-        # Keep history bounded
-        if len(self.messages) > 500:
-            self.messages = self.messages[-500:]
-        self._redraw_chat()
+    def action_switch_tab(self, tab: str):
+        """Switch to the given tab."""
+        self.query_one(TabbedContent).active = tab
 
     def on_key(self, event):
         """Handle Tab/Up/Down in the input widget."""
@@ -390,16 +380,16 @@ class TerraAIApp(App):
             self.input_history.append(text)
         self.history_idx = -1
 
-        # Display user message immediately
-        if is_pm:
-            self._append_message(f"{self._ts()} [PM] <{self.client.nick}> {pm_text}")
-        else:
-            self._append_message(f"{self._ts()} <{self.client.nick}> {text}")
+        # Determine target tab
+        target = "pm" if is_pm else self.query_one(TabbedContent).active
+
+        # Display user message
+        self._append_to_tab(target, f"{self._ts()} <{self.client.nick}> {pm_text}")
 
         # Show "thinking" indicator for noisy users
         if self.client.terra.user.is_noisy(self.client.server, self.client.nick):
             self.client.bot.notice(self.client.nick, "Thinking...")
-            self._append_message(f"{self._ts()} -!- Thinking...")
+            self._append_to_tab(target, f"{self._ts()} -!- Thinking...")
 
         # Dispatch the message (synchronous — blocks during AI call)
         try:
@@ -412,21 +402,18 @@ class TerraAIApp(App):
                 notices = list(self.client.bot.notices)
         except Exception as e:
             logger.exception("dispatch failed")
-            self._append_message(f"{self._ts()} -!- Error: {e}")
+            self._append_to_tab(target, f"{self._ts()} -!- Error: {e}")
             return
 
         # Render bot responses
         for r in responses:
-            if is_pm:
-                self._append_message(f"{self._ts()} [PM] <{self.botnick}> {r}")
-            else:
-                self._append_message(f"{self._ts()} <{self.botnick}> {r}")
+            self._append_to_tab(target, f"{self._ts()} <{self.botnick}> {r}")
 
         # Render any new notices (besides the "Thinking..." we already showed)
         for nick, msg in notices:
             if msg == "Thinking...":
                 continue
-            self._append_message(f"{self._ts()} -!- {msg}")
+            self._append_to_tab(target, f"{self._ts()} -!- {msg}")
 
     def action_quit(self):
         self.exit()

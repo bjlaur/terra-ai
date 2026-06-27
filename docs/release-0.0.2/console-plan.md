@@ -4,7 +4,7 @@
 **Branch:** `agent2/redo-console-and-tests`
 **Spec:** `docs/release-0.0.2/console-feature.md` (the source of truth)
 **Test matrix:** `docs/release-0.0.2/testing-agent2.md` + `testing-agent2-v2.md`
-**Status:** Not started
+**Status:** Phase 1 complete, Phase 2 complete
 
 ---
 
@@ -19,8 +19,8 @@ The rewrite is fully specced in `console-feature.md`. **This plan is the impleme
 - No pty/curses/httpx deadlock
 
 **Phase 1 vs Phase 2:** The rewrite has two phases:
-- **Phase 1** (this plan): Single chat window, synchronous AI calls, unit + interactive tests
-- **Phase 2** (future): PM tabs with `Ctrl+X` switching, async AI calls, SVG screenshot tests
+- **Phase 1** (COMPLETE): Single chat window, synchronous AI calls, unit + interactive tests
+- **Phase 2** (COMPLETE): PM tabs with F1/F2 switching, no `[PM]` prefix, per-tab message tracking
 
 ---
 
@@ -162,36 +162,30 @@ async def test_interactive_accepts_pm():
 
 No pty, no subprocess, no polling harness. The pilot drives the real app headlessly.
 
-### Phase 2: PM tabs + SVG screenshot tests
+### Phase 2: PM tabs + per-tab assertions
 
-**Two changes for Phase 2:**
+**Changes for Phase 2 (implemented):**
 
-1. **PM tabs via `TabbedContent`** — When switching to the tabbed layout, we can **remove the `[PM]` prefix markings** from messages. Instead of displaying `[PM] <nick> hello` in the chat, PMs go into the PM tab as just `<nick> hello` (no prefix needed — the tab title "PM" provides context). Channel messages stay in the Channel tab without any prefix.
+1. **PM tabs via `TabbedContent`** — The `[PM]` prefix is removed. PMs go into the PM tab as just `<nick> hello` (no prefix needed — the tab title "PM" provides context). Channel messages stay in the Channel tab without any prefix.
 
-2. **SVG screenshot tests** — Uses the same `run_test()` pilot pattern. After driving the app, calls `app.export_screenshot()` and parses the SVG to verify content.
+2. **Keyboard shortcuts: F1** switches to Channel tab, **F2** switches to PM tab. (Ctrl+B/Ctrl+P don't work because Textual's Input widget captures Ctrl+letter keys before they reach App-level bindings.)
 
-> **Blocker:** Textual 8.2.7's `export_screenshot()` does NOT capture `RichLog` content. Documented in `~/textual-svg-export-issue.md`. Phase 2 will need to either resolve this or use a different verification strategy.
+3. **Per-tab message tracking** — `app.messages` is now a dict `{"channel": [...], "pm": [...]}` instead of a flat list. Tests assert against the appropriate tab.
 
-**SVG tests:**
-- `test_initial_state` — header `#terra-ai`, empty chat, input line
-- `test_after_message` — user message + bot response visible
-- `test_pm_sends_with_prefix` — `[PM] <tester> hello`
-- `test_notice_shows_thinking` — `-!- Thinking...`
-- `test_noisy_toggle_shows_notice` — "Noisy mode ON/OFF"
-- `test_help_shows_command_list`
-- `test_tab_completion`
-- `test_input_history`
-- `test_management_commands_work`
+4. **SVG export confirmed impossible** for dynamic Static widget content. Tests assert against `app.messages` dict directly. SVG screenshots saved as debug artifacts only. See `~/textual-richlog-svg-export-report.md`.
 
-**SVG parsing helper:**
-
-```python
-def extract_svg_texts(svg_str: str) -> list[str]:
-    """Extract all text content from an SVG string."""
-    import re, html
-    svg = html.unescape(svg_str)
-    return [m.group(1) for m in re.finditer(r'<text[^>]*>([^<]*)</text>', svg)]
-```
+**Screenshot tests (tests/test_console_screenshots.py):**
+- `test_initial_state` — both tabs empty, Channel tab active
+- `test_after_message` — user message + bot response visible in channel tab
+- `test_pm_routes_to_pm_tab` — `/msg hello` shows in PM tab (no `[PM]` prefix)
+- `test_notice_shows_thinking` — `-!- Thinking...` in channel tab
+- `test_noisy_toggle_shows_notice` — "Noisy mode ON/OFF" in channel tab
+- `test_help_shows_command_list` — `.help` shows commands in channel tab
+- `test_tab_completion` — Tab completes `TerraAI: `
+- `test_input_history` — Up recalls previous input
+- `test_management_commands_work` — `.optin`, `.effort low` responses in channel tab
+- `test_f1_switches_to_channel` — F1 switches to Channel tab
+- `test_f2_switches_to_pm` — F2 switches to PM tab
 
 ## Files to modify
 
@@ -201,17 +195,21 @@ def extract_svg_texts(svg_str: str) -> list[str]:
 
 ## Implementation order
 
-### Phase 1 (current)
+### Phase 1 (COMPLETE)
 1. ~~**Delete** the 3 old files + `screenshots/` dir~~ DONE
 2. ~~**Write `test_tool/console.py`**~~ DONE — single chat window, synchronous AI
-3. ~~**Write `tests/test_console.py`**~~ DONE — 14 tests passing (5 unit + 5 interactive + 4 noisy/PM)
-4. **Run full suite** — `pytest tests/test_console.py -v`
-5. **Commit** — ask user first
+3. ~~**Write `tests/test_console.py`**~~ DONE — 22 tests passing
+4. ~~**Full suite passing**~~ DONE — 112 mock tests pass
+5. ~~**Committed**~~ DONE
 
-### Phase 2 (future)
-6. Add PM tabs with `Ctrl+X` switching (using `TabbedContent`)
-7. Write `tests/test_console_screenshots.py` — SVG export tests (blocked on RichLog SVG issue)
-8. Add async AI calls if needed
+### Phase 2 (COMPLETE)
+6. ~~Add PM tabs with `TabbedContent`~~ DONE — Channel + PM tabs
+7. ~~Drop `[PM]` prefix~~ DONE — tab context replaces prefix
+8. ~~F1/F2 keyboard shortcuts~~ DONE — Ctrl+B/Ctrl+P don't work with Input widget
+9. ~~Update `tests/test_console_screenshots.py`~~ DONE — per-tab assertions
+10. ~~Update `tests/test_console.py`~~ DONE — per-tab assertions for interactive PM test
+11. ~~Update docs~~ DONE — console-feature.md, console-plan.md
+12. ~~Full suite still passing~~ DONE — 112 mock + 12 real tests
 
 ## Verification
 
@@ -233,12 +231,10 @@ python test_tool/console.py
 
 ## Open questions
 
-1. **pytest-asyncio setup** — DONE. `asyncio_mode = auto` added to `pytest.ini`. Tests use `@pytest.mark.asyncio`.
-2. **Textual SVG export + RichLog** — BLOCKING screenshot tests. `App.export_screenshot()` does NOT capture `RichLog` content in Textual 8.2.7. Documented in `~/textual-svg-export-issue.md`. Need to either:
-   - Find a widget that SVG export captures (Static with update() works, but can't show scrolling history easily)
-   - Use a different verification strategy for screenshot tests (e.g., verify via `render_lines()` instead of SVG)
-3. **Phase 2 async** — deferred unless Phase 1 proves to have UI jank. The spec keeps the Phase 2 description as a fallback.
-4. **TabbedContent API** — Need to verify the exact API for switching tabs programmatically and getting the active tab.
+1. ~~**pytest-asyncio setup**~~ — DONE. `asyncio_mode = auto` added to `pytest.ini`. Tests use `@pytest.mark.asyncio`.
+2. ~~**Textual SVG export + RichLog**~~ — RESOLVED. `App.export_screenshot()` does NOT capture dynamically-updated Static widget content. We assert against `app.messages` dict instead. See `~/textual-richlog-svg-export-report.md`.
+3. ~~**Phase 2 async**~~ — NOT NEEDED. Textual's event loop doesn't have the httpx+pty deadlock. Synchronous AI calls work fine.
+4. ~~**TabbedContent keyboard shortcuts**~~ — RESOLVED. F1/F2 work. Ctrl+B/Ctrl+P don't work because Textual's Input widget captures Ctrl+letter keys before they reach App-level bindings.
 
 ## Out of scope
 

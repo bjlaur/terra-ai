@@ -334,13 +334,13 @@ class TestInteractiveMode:
             await _type_text(pilot, "#input", ".optin")
             await pilot.press("enter")
             await pilot.pause()
-            content = "\n".join(app.messages)
+            content = "\n".join(app.messages["channel"])
             assert "optin" in content.lower() or "opted" in content.lower()
 
     @pytest.mark.asyncio
     @pytest.mark.mock
     async def test_interactive_accepts_pm(self, terra):
-        """Test that /msg <text> sends as a PM."""
+        """Test that /msg <text> sends as a PM (routes to PM tab, no [PM] prefix)."""
         from test_tool.console import TerraAIApp, TerraAITestClient
         client = TerraAITestClient()
         client.terra = terra
@@ -349,8 +349,12 @@ class TestInteractiveMode:
             await _type_text(pilot, "#input", "/msg hello")
             await pilot.press("enter")
             await pilot.pause()
-            content = "\n".join(app.messages)
-            assert "[PM]" in content
+            # PM messages go to the PM tab, no [PM] prefix needed
+            content = "\n".join(app.messages["pm"])
+            assert "[PM]" not in content, \
+                f"[PM] prefix should not appear in PM tab. pm: {app.messages['pm']}"
+            assert "hello" in content.lower(), \
+                f"hello not found in PM tab. pm: {app.messages['pm']}"
 
     @pytest.mark.asyncio
     @pytest.mark.mock
