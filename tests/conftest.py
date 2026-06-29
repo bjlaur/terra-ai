@@ -101,7 +101,11 @@ def terra(db, request):
         # Mock — patch provider.chat() to return instantly
         original_chat = OpenRouterProvider.chat
 
-        def mock_chat(self, messages, system_prompt=None, effort="high"):
+        def mock_chat(self, messages, system_prompt=None, effort="high",
+                      tools=None, max_tool_rounds=3, noisy_callback=None):
+            # Simulate the real loop: notify "Thinking..." on each call.
+            if noisy_callback:
+                noisy_callback("Thinking...")
             return "mocked AI response"
 
         OpenRouterProvider.chat = mock_chat

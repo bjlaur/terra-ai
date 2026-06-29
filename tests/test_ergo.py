@@ -587,6 +587,64 @@ sqlite_path = {db_path}
 
         self._irc_quit(sock)
 
+    def test_noisy_shows_tool_progress(self, sopel_bot_process):
+        """Noisy mode shows per-tool notices during a weather query.
+
+        With noisy ON, a weather question should produce multiple notices:
+        "Thinking..." before the AI call, then tool-specific notices
+        ("Fetching weather...", etc.) during the tool-call loop.
+        """
+        sock = self._irc_connect("TestNoisyTool")
+        self._irc_join(sock, "TestNoisyTool", self.TEST_CHANNEL)
+
+        # Toggle noisy ON
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}noisy\r\n".encode())
+        self._read_irc_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "Noisy" in line,
+            timeout=10,
+        )
+
+        # Send a weather query — this triggers the tool-call loop.
+        sock.sendall(
+            f"PRIVMSG {self.TEST_CHANNEL} :{self.BOT_NICK}: weather Detroit\r\n".encode()
+        )
+
+        # Collect all notices until the bot sends its final answer.
+        all_notices = []
+        got_final_answer = False
+        deadline = time.time() + 90  # tool loop can be slow
+        while time.time() < deadline and not got_final_answer:
+            sock.settimeout(3)
+            try:
+                chunk = sock.recv(4096)
+            except TimeoutError:
+                continue
+            if not chunk:
+                break
+            for line in chunk.decode(errors="replace").split("\r\n"):
+                if not line:
+                    continue
+                if line.startswith("PING "):
+                    token = line.split(" ", 1)[1]
+                    sock.sendall(f"PONG {token}\r\n".encode())
+                    continue
+                if "NOTICE" in line and self.BOT_NICK in line:
+                    all_notices.append(line)
+                if self.BOT_NICK in line and "PRIVMSG" in line and "NOTICE" not in line:
+                    got_final_answer = True
+
+        assert len(all_notices) >= 2, \
+            f"Expected multiple notices during tool loop, got {len(all_notices)}: {all_notices}"
+        combined = " ".join(all_notices).lower()
+        assert "thinking" in combined, \
+            f"Expected 'Thinking...' notice, got: {all_notices}"
+        tool_words = ["weather", "geocoding", "fetching", "forecast"]
+        assert any(w in combined for w in tool_words), \
+            f"Expected tool-specific notice, got: {all_notices}"
+
+        self._irc_quit(sock)
+
     def test_bot_optin_optout(self, sopel_bot_process):
         """Test that .optout prevents responses and .optin re-enables."""
         sock = self._irc_connect("TestOptInOut")
@@ -662,6 +720,38 @@ sqlite_path = {db_path}
             timeout=60,  # AI roundtrip can be slow
         )
         assert response is not None, "Bot did not respond to bare PM"
+
+        self._irc_quit(sock)
+
+    def test_bot_uses_weather_forecast_tool(self, sopel_bot_process):
+        """Test that the bot calls weather_forecast when asked about weather.
+
+        Sends 'weather Detroit' to a live ergo channel. The bot should call
+        the weather_forecast tool (via the tool-call loop) and respond with
+        real weather content including a temperature.
+        """
+        sock = self._irc_connect("TestWeatherTool")
+        self._irc_join(sock, "TestWeatherTool", self.TEST_CHANNEL)
+
+        sock.sendall(
+            f"PRIVMSG {self.TEST_CHANNEL} :{self.BOT_NICK}: weather Detroit\r\n".encode()
+        )
+
+        response = self._read_irc_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=90,  # tool loop + two AI calls can be slow
+        )
+        assert response is not None, "Bot did not respond to weather query"
+
+        full_text = "\n".join(response).lower()
+        assert "detroit" in full_text, \
+            f"Response should mention Detroit:\n{chr(10).join(response)}"
+        # Should contain a temperature reading (°F or a number + "high"/"low")
+        weather_markers = ["°", "high", "low", "temperature", "fahrenheit",
+                          "cloud", "rain", "clear", "wind", "forecast"]
+        assert any(m in full_text for m in weather_markers), \
+            f"Response should contain weather data:\n{chr(10).join(response)}"
 
         self._irc_quit(sock)
 

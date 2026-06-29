@@ -12,6 +12,7 @@ from terra_ai.providers.base import Message
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
 from terra_ai.prompts.manager import PromptManager
+from terra_ai.tools.schemas import AVAILABLE_TOOLS
 logger = logging.getLogger("terraai")
 
 
@@ -61,8 +62,14 @@ class TerraAI:
         return True
 
     def handle_ai_message(self, server: str, channel: str, nick: str,
-                          text: str, include_history: bool = True) -> str:
-        """Handle a message that should go to the AI."""
+                          text: str, include_history: bool = True,
+                          noisy_callback=None) -> str:
+        """Handle a message that should go to the AI.
+
+        *noisy_callback* is an optional callable(message: str) that the
+        provider calls at each step of a tool-call loop so the caller can
+        show progress (e.g. "Thinking...", "Geocoding Detroit...").
+        """
         provider = self.registry.get()
         if not provider:
             return "Error: AI provider not configured."
@@ -83,7 +90,10 @@ class TerraAI:
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
             logger.info("AI_REQUEST: model=%s effort=%s messages=%d", provider._model, self.prompts.effort, len(msg_objs))
-            response = provider.chat(msg_objs, effort=self.prompts.effort)
+            response = provider.chat(
+                msg_objs, effort=self.prompts.effort, tools=AVAILABLE_TOOLS,
+                noisy_callback=noisy_callback,
+            )
             logger.info("AI_RESPONSE: model=%s length=%d", provider._model, len(response or ""))
 
             elapsed_ms = int((time.time() - start) * 1000)

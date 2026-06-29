@@ -66,7 +66,8 @@ class TestContextManager:
         assert len(ctx) > 0
         assert ctx[0]["role"] == "system"  # System prompt
         assert ctx[-1]["role"] == "user"  # Current message
-        assert ctx[-1]["content"] == "hello"
+        # User messages are prefixed with <nick> so the AI knows who's talking.
+        assert ctx[-1]["content"] == "<nick> hello"
 
     def test_save_exchange(self, context):
         context.save_exchange("irc.example.com", "#chan", "nick", "hello", "hi there")

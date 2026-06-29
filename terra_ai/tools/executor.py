@@ -8,18 +8,26 @@ function tools are executed here.
 import json
 import logging
 
+from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
+from terra_ai.tools.openmeteo.geocode_tool import execute_geocode
+
 logger = logging.getLogger("terraai")
 
-# Only local function tools go here.
-# OpenRouter server tools (like web_search) are executed server-side.
-TOOL_FUNCTIONS = {}
+# Local function tools. OpenRouter server tools (like web_search) are
+# executed server-side and never reach this dict.
+TOOL_FUNCTIONS = {
+    "weather_forecast": execute_weather_forecast,
+    "geocode": execute_geocode,
+}
 
 
-def execute_tool(name: str, arguments: str | dict) -> str:
+def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
     """Execute a local tool by name and return its result as a string.
 
     *arguments* can be a dict (already parsed) or a JSON string
     (as returned by the OpenAI tool_calls response).
+    *noisy_callback* is an optional callable(message: str) the tool can use
+    to report what it's doing (for noisy mode).
     """
     if isinstance(arguments, str):
         try:
@@ -32,7 +40,11 @@ def execute_tool(name: str, arguments: str | dict) -> str:
         return f"Error: unknown tool '{name}'"
 
     try:
-        return handler(**arguments)
+        result = handler(arguments, noisy_callback=noisy_callback)
+        # ToolResult -> JSON string for the model.
+        if hasattr(result, "to_dict"):
+            return json.dumps(result.to_dict())
+        return str(result)
     except Exception as e:
         logger.error("Tool %r execution failed: %s", name, e)
         return f"Error: {e}"
