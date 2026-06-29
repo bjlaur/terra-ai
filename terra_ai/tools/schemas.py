@@ -17,6 +17,11 @@ OPENROUTER_WEB_SEARCH_TOOL = {
     },
 }
 
+from terra_ai.tools.openmeteo.schemas import (
+    WEATHER_FORECAST_TOOL,
+    GEOCODE_TOOL,
+)
+
 # Legacy local DuckDuckGo web_search — kept for backward compat in tests
 # but NOT included in production requests.
 WEB_SEARCH_TOOL = {
@@ -41,5 +46,11 @@ WEB_SEARCH_TOOL = {
     },
 }
 
-# Production uses OpenRouter server-side search, not the local function.
-AVAILABLE_TOOLS = [OPENROUTER_WEB_SEARCH_TOOL]
+# Production uses OpenRouter server-side search + local Open-Meteo tools.
+# weather_forecast is the first custom local tool; more will be added.
+# geocode is a standalone tool for resolving place names to coordinates.
+AVAILABLE_TOOLS = [
+    OPENROUTER_WEB_SEARCH_TOOL,
+    WEATHER_FORECAST_TOOL,
+    GEOCODE_TOOL,
+]

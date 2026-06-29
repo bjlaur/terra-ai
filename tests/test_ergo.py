@@ -665,6 +665,38 @@ sqlite_path = {db_path}
 
         self._irc_quit(sock)
 
+    def test_bot_uses_weather_forecast_tool(self, sopel_bot_process):
+        """Test that the bot calls weather_forecast when asked about weather.
+
+        Sends 'weather Detroit' to a live ergo channel. The bot should call
+        the weather_forecast tool (via the tool-call loop) and respond with
+        real weather content including a temperature.
+        """
+        sock = self._irc_connect("TestWeatherTool")
+        self._irc_join(sock, "TestWeatherTool", self.TEST_CHANNEL)
+
+        sock.sendall(
+            f"PRIVMSG {self.TEST_CHANNEL} :{self.BOT_NICK}: weather Detroit\r\n".encode()
+        )
+
+        response = self._read_irc_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=90,  # tool loop + two AI calls can be slow
+        )
+        assert response is not None, "Bot did not respond to weather query"
+
+        full_text = "\n".join(response).lower()
+        assert "detroit" in full_text, \
+            f"Response should mention Detroit:\n{chr(10).join(response)}"
+        # Should contain a temperature reading (°F or a number + "high"/"low")
+        weather_markers = ["°", "high", "low", "temperature", "fahrenheit",
+                          "cloud", "rain", "clear", "wind", "forecast"]
+        assert any(m in full_text for m in weather_markers), \
+            f"Response should contain weather data:\n{chr(10).join(response)}"
+
+        self._irc_quit(sock)
+
     def test_bot_reports_error_on_ai_failure(self, sopel_bot_bad_provider):
         """Bot MUST send an error message to IRC when the AI provider fails.
 

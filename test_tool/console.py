@@ -526,6 +526,15 @@ if __name__ == "__main__":
         print(f"\n[{prefix}help]")
         print(client.send_message(f"{prefix}help"))
 
+        print(f"\n[{prefix}weather Detroit]")
+        print(client.send_message(f"{prefix}weather Detroit"))
+
+        print(f"\n[{prefix}rain tonight in Detroit?]")
+        print(client.send_message(f"{prefix}rain tonight in Detroit?"))
+
+        print(f"\n[{prefix}weather Chicago this week]")
+        print(client.send_message(f"{prefix}weather Chicago this week"))
+
         print(f"\n[{prefix}effort low]")
         print(client.send_message(f"{prefix}effort low"))
 

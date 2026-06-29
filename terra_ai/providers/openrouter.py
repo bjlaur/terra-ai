@@ -1,13 +1,19 @@
 """OpenRouter provider for TerraAI."""
 
+import json
 import logging
 import os
 
 import httpx
 
 from terra_ai.providers.base import AIProvider, Message
+from terra_ai.tools.executor import execute_tool
 
 logger = logging.getLogger("terraai")
+
+# Cap on tool-call round-trips per chat() call. Prevents infinite loops if
+# the model keeps requesting tools without converging on a final answer.
+MAX_TOOL_ROUNDS = 3
 
 # Models that do NOT support reasoning controls via chat-completions.
 # Sending reasoning fields to these models causes 422 errors or silent ignore.
@@ -78,13 +84,21 @@ class OpenRouterProvider(AIProvider):
         return "openrouter"
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
-             effort: str = "high") -> str:
+             effort: str = "high", tools: list[dict] | None = None,
+             max_tool_rounds: int = MAX_TOOL_ROUNDS) -> str:
         """Send messages and get a complete response.
+
+        If the model returns tool_calls, execute them locally and feed the
+        results back, looping until the model gives a final text response
+        or max_tool_rounds is reached.
 
         Args:
             messages: List of Message objects.
             system_prompt: Optional system prompt prepended as a system message.
             effort: Effort level ('low', 'medium', 'high', 'xhigh', 'max').
+            tools: Local function-tool schemas to include alongside the
+                server-side web_search tool.
+            max_tool_rounds: Max tool-call round-trips before giving up.
 
         Returns:
             The AI's response text.
@@ -95,7 +109,7 @@ class OpenRouterProvider(AIProvider):
             "Content-Type": "application/json",
         }
 
-        payload_messages = []
+        payload_messages: list[dict] = []
         if system_prompt:
             payload_messages.append({"role": "system", "content": system_prompt})
         payload_messages.extend(m.to_dict() for m in messages)
@@ -110,8 +124,9 @@ class OpenRouterProvider(AIProvider):
         if reasoning:
             payload["reasoning"] = reasoning
 
-        # Add OpenRouter server-side web search by default
-        payload["tools"] = [
+        # Build tools list: always include server-side web_search, plus any
+        # local function tools the caller passed in.
+        request_tools = [
             {
                 "type": "openrouter:web_search",
                 "parameters": {
@@ -122,25 +137,61 @@ class OpenRouterProvider(AIProvider):
                 },
             }
         ]
+        if tools:
+            request_tools.extend(tools)
+        payload["tools"] = request_tools
 
-        logger.info("OpenRouter chat: model=%s web_search_enabled=True", self._model)
+        logger.info("OpenRouter chat: model=%s tools=%d", self._model, len(request_tools))
 
         with httpx.Client(timeout=self._timeout) as client:
-            response = client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+            for round_idx in range(max_tool_rounds + 1):
+                response = client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
 
-        # Log server-side tool usage if available
-        usage = data.get("usage") or {}
-        server_tool_use = usage.get("server_tool_use") or {}
-        if server_tool_use.get("web_search_requests"):
-            logger.info(
-                "OpenRouter web_search: requests=%d",
-                server_tool_use["web_search_requests"],
-            )
+                # Log server-side tool usage if available
+                usage = data.get("usage") or {}
+                server_tool_use = usage.get("server_tool_use") or {}
+                if server_tool_use.get("web_search_requests"):
+                    logger.info(
+                        "OpenRouter web_search: requests=%d",
+                        server_tool_use["web_search_requests"],
+                    )
 
-        message = data["choices"][0]["message"]
-        return message.get("content") or ""
+                message = data["choices"][0]["message"]
+                tool_calls = message.get("tool_calls")
+
+                if not tool_calls:
+                    # Final text answer — done.
+                    return message.get("content") or ""
+
+                # Has tool calls — execute them and feed results back.
+                logger.info(
+                    "OpenRouter tool_calls: round=%d count=%d",
+                    round_idx, len(tool_calls),
+                )
+                # Append the assistant message with tool_calls as-is.
+                payload_messages.append(message)
+
+                for call in tool_calls:
+                    call_id = call.get("id", "")
+                    function = call.get("function") or {}
+                    name = function.get("name", "")
+                    raw_args = function.get("arguments", "{}")
+                    logger.info("Tool call: id=%s name=%s", call_id, name)
+
+                    result_str = execute_tool(name, raw_args)
+
+                    payload_messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": name,
+                        "content": result_str,
+                    })
+
+            # Fell off the loop — last attempt, return whatever we have.
+            logger.warning("OpenRouter: hit max_tool_rounds=%d", max_tool_rounds)
+            return message.get("content") or ""
 
     def is_available(self) -> bool:
         return self._api_key is not None and len(self._api_key) > 0
