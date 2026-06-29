@@ -311,11 +311,14 @@ def unknown_prefixed_command_to_ai(bot, trigger):
     if not terra.should_respond(server, nick):
         return
 
-    # Notify noisy users that the AI is thinking
-    if terra.user.is_noisy(server, nick):
-        bot.notice("Thinking...", nick)
+    # Build a noisy callback so the user can see tool-call progress.
+    # Falls back to a no-op if noisy is disabled.
+    def _noisy_notify(msg):
+        if terra.user.is_noisy(server, nick):
+            bot.notice(msg, nick)
 
-    response = terra.handle_ai_message(server, channel, nick, text)
+    response = terra.handle_ai_message(server, channel, nick, text,
+                                       noisy_callback=_noisy_notify)
     if response:
         bot.say(response)
 
@@ -345,12 +348,14 @@ def addressed_freeform(bot, trigger):
         logger.info("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
         return
 
-    # Notify noisy users that the AI is thinking
-    if terra.user.is_noisy(server, nick):
-        bot.notice("Thinking...", nick)
+    # Build a noisy callback so the user can see tool-call progress.
+    def _noisy_notify(msg):
+        if terra.user.is_noisy(server, nick):
+            bot.notice(msg, nick)
 
     logger.info("addressed_freeform: calling handle_ai_message text=%r", text)
-    response = terra.handle_ai_message(server, channel, nick, text)
+    response = terra.handle_ai_message(server, channel, nick, text,
+                                       noisy_callback=_noisy_notify)
     logger.info("addressed_freeform: response=%r", response)
     if response:
         bot.say(response)

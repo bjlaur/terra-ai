@@ -85,7 +85,8 @@ class OpenRouterProvider(AIProvider):
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
-             max_tool_rounds: int = MAX_TOOL_ROUNDS) -> str:
+             max_tool_rounds: int = MAX_TOOL_ROUNDS,
+             noisy_callback=None) -> str:
         """Send messages and get a complete response.
 
         If the model returns tool_calls, execute them locally and feed the
@@ -99,6 +100,9 @@ class OpenRouterProvider(AIProvider):
             tools: Local function-tool schemas to include alongside the
                 server-side web_search tool.
             max_tool_rounds: Max tool-call round-trips before giving up.
+            noisy_callback: Optional callable(message: str) called at each
+                step so the caller can show progress (e.g. "Thinking...",
+                "Geocoding Detroit...").
 
         Returns:
             The AI's response text.
@@ -145,6 +149,10 @@ class OpenRouterProvider(AIProvider):
 
         with httpx.Client(timeout=self._timeout) as client:
             for round_idx in range(max_tool_rounds + 1):
+                # Notify caller: waiting for AI response.
+                if noisy_callback:
+                    noisy_callback("Thinking...")
+
                 response = client.post(url, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
@@ -157,6 +165,8 @@ class OpenRouterProvider(AIProvider):
                         "OpenRouter web_search: requests=%d",
                         server_tool_use["web_search_requests"],
                     )
+                    if noisy_callback:
+                        noisy_callback("Searching web...")
 
                 message = data["choices"][0]["message"]
                 tool_calls = message.get("tool_calls")
@@ -180,7 +190,9 @@ class OpenRouterProvider(AIProvider):
                     raw_args = function.get("arguments", "{}")
                     logger.info("Tool call: id=%s name=%s", call_id, name)
 
-                    result_str = execute_tool(name, raw_args)
+                    # Forward noisy_callback so the tool can report what it does.
+                    result_str = execute_tool(name, raw_args,
+                                              noisy_callback=noisy_callback)
 
                     payload_messages.append({
                         "role": "tool",

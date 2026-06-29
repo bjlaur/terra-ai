@@ -21,11 +21,13 @@ TOOL_FUNCTIONS = {
 }
 
 
-def execute_tool(name: str, arguments: str | dict) -> str:
+def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
     """Execute a local tool by name and return its result as a string.
 
     *arguments* can be a dict (already parsed) or a JSON string
     (as returned by the OpenAI tool_calls response).
+    *noisy_callback* is an optional callable(message: str) the tool can use
+    to report what it's doing (for noisy mode).
     """
     if isinstance(arguments, str):
         try:
@@ -38,7 +40,7 @@ def execute_tool(name: str, arguments: str | dict) -> str:
         return f"Error: unknown tool '{name}'"
 
     try:
-        result = handler(arguments)
+        result = handler(arguments, noisy_callback=noisy_callback)
         # ToolResult -> JSON string for the model.
         if hasattr(result, "to_dict"):
             return json.dumps(result.to_dict())

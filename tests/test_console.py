@@ -321,6 +321,30 @@ class TestNoisy:
         assert len(client.bot.notices) > 0
         assert any("Thinking" in msg for _, msg in client.bot.notices)
 
+    @pytest.mark.real
+    def test_noisy_shows_tool_progress_real(self, terra):
+        """Real version: noisy ON shows per-tool notices during weather query.
+
+        Sends a weather question with noisy enabled. The tool-call loop
+        should generate multiple notices: "Thinking...", then tool-specific
+        notices like "Fetching weather...", then "Thinking..." again.
+        """
+        from test_tool.console import TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        client.send_message(f"{PREFIX}noisy")  # toggle ON
+        client.bot.notices.clear()
+        client.send_message("TerraAI: weather Detroit")
+        # Should have multiple notices (Thinking + tool calls).
+        assert len(client.bot.notices) >= 2, \
+            f"Expected multiple notices, got {len(client.bot.notices)}: {client.bot.notices}"
+        all_notices = " ".join(msg for _, msg in client.bot.notices)
+        assert "Thinking" in all_notices
+        # Should contain a tool-specific notice (geocode or weather).
+        tool_words = ["weather", "Geocoding", "Fetching", "forecast"]
+        assert any(w.lower() in all_notices.lower() for w in tool_words), \
+            f"Expected tool-specific notice, got: {client.bot.notices}"
+
 
 class TestInteractiveMode:
     """Test the Textual TUI via the test pilot.

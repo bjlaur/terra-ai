@@ -253,7 +253,8 @@ def _normalize_block(raw: dict, block: str, rename: dict[str, str]) -> list[dict
     return _normalize_add_descriptions(rows)
 
 
-def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient | None = None) -> ToolResult:
+def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient | None = None,
+                              noisy_callback=None) -> ToolResult:
     """Execute the weather_forecast tool.
 
     *arguments* is the parsed JSON the model sent for the tool call.
@@ -264,6 +265,9 @@ def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient 
 
     location_arg = arguments.get("location")
     preset = arguments.get("preset") or "basic_forecast"
+
+    if noisy_callback and location_arg:
+        noisy_callback(f"Fetching weather for {location_arg} ({preset})...")
 
     if not location_arg:
         return ToolResult(

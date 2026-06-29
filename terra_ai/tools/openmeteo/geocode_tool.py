@@ -18,7 +18,8 @@ from terra_ai.tools.openmeteo.result import ToolResult
 logger = logging.getLogger("terraai")
 
 
-def execute_geocode(arguments: dict[str, Any], client: OpenMeteoClient | None = None) -> ToolResult:
+def execute_geocode(arguments: dict[str, Any], client: OpenMeteoClient | None = None,
+                   noisy_callback=None) -> ToolResult:
     """Execute the geocode tool.
 
     arguments: {"location": "Detroit, MI"}
@@ -28,6 +29,8 @@ def execute_geocode(arguments: dict[str, Any], client: OpenMeteoClient | None = 
     client = client or OpenMeteoClient()
 
     location_arg = arguments.get("location")
+    if noisy_callback and location_arg:
+        noisy_callback(f"Geocoding {location_arg}...")
     if not location_arg:
         return ToolResult(
             ok=False,

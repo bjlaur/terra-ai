@@ -37,7 +37,7 @@ class TestTerraAI:
     def test_handle_ai_message_mock(self, terra):
         """Mock version: handle_ai_message returns mocked response."""
         provider = terra.registry.get()
-        provider.chat = lambda messages, system_prompt=None, effort="high", tools=None, max_tool_rounds=3: "Hello!"
+        provider.chat = lambda messages, system_prompt=None, effort="high", tools=None, max_tool_rounds=3, noisy_callback=None: "Hello!"
 
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
@@ -129,7 +129,7 @@ class TestEffortWire:
         original_chat = provider.chat
 
         def spy_chat(messages, system_prompt=None, effort="high",
-                     tools=None, max_tool_rounds=3):
+                     tools=None, max_tool_rounds=3, noisy_callback=None):
             captured["effort"] = effort
             return "ok"
 
