@@ -111,6 +111,9 @@ class OpenRouterProvider(AIProvider):
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            # OpenRouter app attribution
+            "HTTP-Referer": "https://terra-ai.local",
+            "X-OpenRouter-Title": "TerraAI",
         }
 
         payload_messages: list[dict] = []
