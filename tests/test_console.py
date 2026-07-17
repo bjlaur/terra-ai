@@ -424,3 +424,74 @@ class TestInteractiveMode:
             await pilot.press("ctrl+d")
             await pilot.pause()
         assert True
+
+
+class TestToolEnableDisable:
+    """Test -disable-tool / -enable-tool / -list-tools."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.mock
+    async def test_tui_disable_tool(self, terra):
+        """-disable-tool weather_forecast reports it disabled."""
+        from test_tool.console import TerraAIApp, TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        app = TerraAIApp(client=client)
+        async with app.run_test() as pilot:
+            await _type_text(pilot, "#input", f"{PREFIX}disable-tool weather_forecast")
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.pause()  # extra wait for async queue
+            text = "\n".join(app.messages["channel"]).lower()
+            assert "disabled" in text
+            assert "weather_forecast" in text
+
+    @pytest.mark.asyncio
+    @pytest.mark.mock
+    async def test_tui_enable_tool(self, terra):
+        """-enable-tool weather_forecast re-enables it."""
+        from test_tool.console import TerraAIApp, TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        app = TerraAIApp(client=client)
+        async with app.run_test() as pilot:
+            await _type_text(pilot, "#input", f"{PREFIX}disable-tool weather_forecast")
+            await pilot.press("enter")
+            await pilot.pause()
+            await _type_text(pilot, "#input", f"{PREFIX}enable-tool weather_forecast")
+            await pilot.press("enter")
+            await pilot.pause()
+            text = "\n".join(app.messages["channel"]).lower()
+            assert "enabled" in text
+            assert "weather_forecast" in text
+
+    @pytest.mark.asyncio
+    @pytest.mark.mock
+    async def test_tui_disable_unknown_tool(self, terra):
+        """-disable-tool with an invalid name reports the valid tools."""
+        from test_tool.console import TerraAIApp, TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        app = TerraAIApp(client=client)
+        async with app.run_test() as pilot:
+            await _type_text(pilot, "#input", f"{PREFIX}disable-tool not_a_tool")
+            await pilot.press("enter")
+            await pilot.pause()
+            text = "\n".join(app.messages["channel"]).lower()
+            assert "unknown tool" in text
+            assert "weather_forecast" in text
+
+    @pytest.mark.asyncio
+    @pytest.mark.mock
+    async def test_tui_list_tools(self, terra):
+        """-list-tools shows tool status."""
+        from test_tool.console import TerraAIApp, TerraAITestClient
+        client = TerraAITestClient()
+        client.terra = terra
+        app = TerraAIApp(client=client)
+        async with app.run_test() as pilot:
+            await _type_text(pilot, "#input", f"{PREFIX}list-tools")
+            await pilot.press("enter")
+            await pilot.pause()
+            text = "\n".join(app.messages["channel"]).lower()
+            assert "weather_forecast" in text or "enabled" in text

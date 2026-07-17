@@ -124,6 +124,19 @@ class Database:
                 ON prompts (server, trigger);
             CREATE INDEX IF NOT EXISTS idx_stats_server_command
                 ON command_stats (server, command, timestamp);
+
+            CREATE TABLE IF NOT EXISTS tools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server TEXT NOT NULL,
+                nick TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                disabled INTEGER NOT NULL DEFAULT 0,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(server, nick, tool_name)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tools_server_nick
+                ON tools (server, nick);
         """)
 
 
@@ -161,6 +174,48 @@ class UserStore:
     def is_noisy(self, server: str, nick: str) -> bool:
         user = self.get_user(server, nick)
         return user["noisy"] if user else False
+
+    # ── Tool management ──────────────────────────────────────────────────
+
+    def disable_tool(self, server: str, nick: str, tool_name: str):
+        """Disable a tool for a user on a server."""
+        now = datetime.now(timezone.utc).isoformat()
+        self.db.conn.execute(
+            """INSERT INTO tools (server, nick, tool_name, disabled, timestamp)
+               VALUES (?, ?, ?, 1, ?)
+               ON CONFLICT(server, nick, tool_name) DO UPDATE SET
+                   disabled = 1, timestamp = ?""",
+            (server, nick, tool_name, now, now)
+        )
+        self.db.conn.commit()
+
+    def enable_tool(self, server: str, nick: str, tool_name: str):
+        """Enable a tool for a user on a server."""
+        now = datetime.now(timezone.utc).isoformat()
+        self.db.conn.execute(
+            """INSERT INTO tools (server, nick, tool_name, disabled, timestamp)
+               VALUES (?, ?, ?, 0, ?)
+               ON CONFLICT(server, nick, tool_name) DO UPDATE SET
+                   disabled = 0, timestamp = ?""",
+            (server, nick, tool_name, now, now)
+        )
+        self.db.conn.commit()
+
+    def list_tools(self, server: str, nick: str) -> list[dict]:
+        """List all tools and their enabled/disabled status for a user."""
+        rows = self.db.conn.execute(
+            "SELECT tool_name, disabled FROM tools WHERE server = ? AND nick = ?",
+            (server, nick)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def is_tool_disabled(self, server: str, nick: str, tool_name: str) -> bool:
+        """Check if a specific tool is disabled for a user."""
+        row = self.db.conn.execute(
+            "SELECT disabled FROM tools WHERE server = ? AND nick = ? AND tool_name = ?",
+            (server, nick, tool_name)
+        ).fetchone()
+        return bool(row["disabled"]) if row else False
 
     def _upsert(self, server: str, nick: str, **kwargs):
         now = datetime.now(timezone.utc).isoformat()

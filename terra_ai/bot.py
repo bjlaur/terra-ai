@@ -104,9 +104,25 @@ class TerraAI:
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
-            logger.info("AI_REQUEST: model=%s effort=%s messages=%d", provider._model, self.prompts.effort, len(msg_objs))
+            # Filter out disabled tools per user.
+            # Only applies to local tools (those with "function" key).
+            # Server-side tools (e.g. openrouter:web_search) can't be disabled.
+            disabled = {
+                t["tool_name"] for t in self.user.list_tools(server, nick)
+                if t["disabled"]
+            }
+            tools = [
+                t for t in AVAILABLE_TOOLS
+                if "function" not in t or t["function"]["name"] not in disabled
+            ]
+            tool_names = [
+                t["function"]["name"] if "function" in t else t.get("type", "unknown")
+                for t in tools
+            ]
+            logger.info("AI_REQUEST: model=%s effort=%s messages=%d tools=%s",
+                        provider._model, self.prompts.effort, len(msg_objs), tool_names)
             response = provider.chat(
-                msg_objs, effort=self.prompts.effort, tools=AVAILABLE_TOOLS,
+                msg_objs, effort=self.prompts.effort, tools=tools,
                 noisy_callback=noisy_callback,
             )
             logger.info("AI_RESPONSE: model=%s length=%d", provider._model, len(response or ""))

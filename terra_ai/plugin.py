@@ -236,6 +236,62 @@ def cmd_setlocation(bot, trigger):
         bot.say(response)
 
 
+@sopel_plugin.command("disable-tool")
+@_irc_error_handler
+def cmd_disable_tool(bot, trigger):
+    """Disable a tool. Usage: -disable-tool <tool_name>"""
+    terra = _get_terra()
+    server = _server_name(bot)
+    nick = _nick(trigger)
+    args = (trigger.group(2) or "").strip()
+    if not args:
+        bot.say("Usage: -disable-tool <tool_name>")
+        return
+    valid = terra.user.valid_tool_names()
+    if args not in valid:
+        bot.say(f"Unknown tool '{args}'. Valid: {', '.join(sorted(valid))}")
+        return
+    terra.user.disable_tool(server, nick, args)
+    bot.say(f"Tool '{args}' disabled.")
+
+
+@sopel_plugin.command("enable-tool")
+@_irc_error_handler
+def cmd_enable_tool(bot, trigger):
+    """Enable a tool. Usage: -enable-tool <tool_name>"""
+    terra = _get_terra()
+    server = _server_name(bot)
+    nick = _nick(trigger)
+    args = (trigger.group(2) or "").strip()
+    if not args:
+        bot.say("Usage: -enable-tool <tool_name>")
+        return
+    valid = terra.user.valid_tool_names()
+    if args not in valid:
+        bot.say(f"Unknown tool '{args}'. Valid: {', '.join(sorted(valid))}")
+        return
+    terra.user.enable_tool(server, nick, args)
+    bot.say(f"Tool '{args}' enabled.")
+
+
+@sopel_plugin.command("list-tools")
+@_irc_error_handler
+def cmd_listtools(bot, trigger):
+    """List tools and their enabled/disabled status. Usage: -list-tools"""
+    terra = _get_terra()
+    server = _server_name(bot)
+    nick = _nick(trigger)
+    rows = terra.user.list_tools(server, nick)
+    if not rows:
+        bot.say("No tool overrides set. All tools enabled.")
+        return
+    parts = [
+        f"{r['tool_name']}: {'disabled' if r['disabled'] else 'enabled'}"
+        for r in rows
+    ]
+    bot.say("Tools: " + "; ".join(parts))
+
+
 # ── Unknown -command fallback: route to AI ─────────────────────────────────
 
 
