@@ -92,6 +92,8 @@ class TerraAI:
         try:
             start = time.time()
 
+            logger.info("AI_PROMPT: nick=%s channel=%s text=%r", nick, channel, text)
+
             if include_history:
                 messages = self.context.compose_context(server, channel, text, nick)
             else:
@@ -103,6 +105,17 @@ class TerraAI:
 
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
+
+            # DEBUG: the full payload sent to the provider — system prompt,
+            # fake-conversation seed, real history, and the user's message.
+            # Only emitted with -d; the bare prompt + response are info-level.
+            logger.debug(
+                "AI_SENT: model=%s effort=%s\n%s",
+                provider._model, self.prompts.effort,
+                "\n".join(
+                    f"[{m.role}] {m.content}" for m in msg_objs
+                ),
+            )
 
             # Filter out disabled tools per user.
             # Only applies to local tools (those with "function" key).
@@ -125,7 +138,10 @@ class TerraAI:
                 msg_objs, effort=self.prompts.effort, tools=tools,
                 noisy_callback=noisy_callback,
             )
-            logger.info("AI_RESPONSE: model=%s length=%d", provider._model, len(response or ""))
+            logger.info(
+                "AI_RESPONSE: model=%s length=%d text=%.500s",
+                provider._model, len(response or ""), response or "",
+            )
 
             elapsed_ms = int((time.time() - start) * 1000)
 
