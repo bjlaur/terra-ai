@@ -263,6 +263,13 @@ def _is_registered_sopel_command(bot, command: str) -> bool:
     return bot.rules.has_command(command, follow_alias=True)
 
 
+def _match_prefixed_command(bot, text: str):
+    """Match Sopel's configured prefix against raw message text."""
+    prefix = bot.settings.core.prefix
+    pattern = rf'^(?:{prefix})(?P<command>\S+)(?:\s+(?P<args>.*))?$'
+    return re.match(pattern, text)
+
+
 @sopel_plugin.rule_lazy(_prefix_fallback_loader)
 @sopel_plugin.priority('low')
 @sopel_plugin.thread(False)
@@ -330,6 +337,10 @@ def unknown_prefixed_command_to_ai(bot, trigger):
 @_irc_error_handler
 def addressed_freeform(bot, trigger):
     """Handle freeform messages addressed to the bot by nick."""
+    # PMs are owned by pm_text_to_ai. In PMs, users do not need to address the bot.
+    if trigger.is_privmsg:
+        return
+
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
@@ -361,15 +372,81 @@ def addressed_freeform(bot, trigger):
         bot.say(response)
 
 
-# ── PM catch-all: bare text in private messages ─────────────────────────────
-# DISABLED — this was causing duplicate responses and opt-in/opt-out issues.
-# PM routing needs a proper redesign. For now, PMs use the same prefixed
-# commands (.ai, .optin, etc) as channel messages.
-#
-# @sopel_plugin.rule(r"(.+)")
-# @sopel_plugin.priority('low')
-# def pm_catch_all(bot, trigger):
-#     ...
+# ── PM fallback: bare PMs and unknown prefixed PM commands ──────────────────
+
+
+@sopel_plugin.rule(r"(.+)")
+@sopel_plugin.priority('low')
+@sopel_plugin.thread(False)
+@_irc_error_handler
+def pm_text_to_ai(bot, trigger):
+    """Handle PM text that was not handled by a registered Sopel command.
+
+    Owns:
+      hello                  -> AI sees "hello"
+      -weather Detroit       -> AI sees "weather Detroit"
+      TerraAI: hello         -> AI sees "TerraAI: hello" (AI figures it out)
+
+    Does NOT own:
+      -help                  -> @sopel_plugin.command('help')
+      -optin                 -> @sopel_plugin.command('optin')
+      -ai hello              -> @sopel_plugin.command('ai')
+      any other registered Sopel command
+    """
+    if not trigger.is_privmsg:
+        return
+
+    raw = (trigger.group(1) or "").strip()
+    if not raw:
+        return
+
+    terra = _get_terra()
+    server = _server_name(bot)
+    nick = _nick(trigger)
+
+    # For PM history, use a per-user conversation key.
+    channel = nick
+
+    m = _match_prefixed_command(bot, raw)
+    if m:
+        command = (m.group("command") or "").strip()
+        args = (m.group("args") or "").strip()
+
+        if not command:
+            return
+
+        command_lc = command.lower()
+
+        # Known commands are owned by @sopel_plugin.command().
+        # This prevents duplicate replies for -help, -optin, -ai, etc.
+        if _is_registered_sopel_command(bot, command_lc):
+            logger.debug(
+                "TerraAI PM fallback skipping registered command: %s",
+                command_lc,
+            )
+            return
+
+        # Unknown prefixed PM: "-weather Detroit" -> "weather Detroit"
+        text = f"{command} {args}".strip()
+    else:
+        # Bare PM: send as-is. AI can figure out addressing.
+        text = raw
+
+    if not text:
+        return
+
+    if not terra.should_respond(server, nick):
+        return
+
+    def _noisy_notify(msg):
+        if terra.user.is_noisy(server, nick):
+            bot.notice(msg, nick)
+
+    logger.info("TerraAI PM fallback handling text as AI: %r", text)
+    response = terra.handle_ai_message(server, channel, nick, text,
+                                       noisy_callback=_noisy_notify)
+    if response:
+        bot.say(response)
 
 
 # ── Test-console routing entry point ─────────────────────────────────────────
@@ -395,7 +472,7 @@ def dispatch_line(bot, nick, line, is_pm=False):
     from sopel.trigger import PreTrigger, Trigger
     from sopel.bot import SopelWrapper
 
-    target = nick if is_pm else "#terra-ai"
+    target = bot.settings.core.nick if is_pm else "#terra-ai"
     # Build a minimal IRC PRIVMSG line that PreTrigger can parse.
     # Format: :nick!user@host PRIVMSG <target> :<text>
     irc_line = f":{nick}!user@host PRIVMSG {target} :{line}"
