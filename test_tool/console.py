@@ -46,7 +46,12 @@ def _default_test_config():
     comes from _Core.nick — no separate YAML or .cfg needed.
     """
     c = SimpleNamespace()
-    c.model = os.environ.get("TERRAI_MODEL", "openrouter/owl-alpha")
+    from tests.conftest import _load_sopel_test_cfg
+    try:
+        terrai_model, _ = _load_sopel_test_cfg()
+    except RuntimeError as e:
+        raise SystemExit(str(e))
+    c.model = terrai_model
     c.api_key = os.environ.get("OPENROUTER_API_KEY", "")
     c.base_url = "https://openrouter.ai/api/v1"
     c.provider_timeout = 30

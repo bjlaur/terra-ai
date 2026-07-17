@@ -166,10 +166,9 @@ class TestEffortWire:
         """GPT-4o should not get reasoning (unsupported)."""
         assert _reasoning_for_model("openai/gpt-4o", "high") is None
 
-    def test_reasoning_for_model_owl_gets_effort(self):
-        """owl-alpha: user opted in to experimental effort — should get reasoning.effort."""
-        r = _reasoning_for_model("openrouter/owl-alpha", "high")
-        # owl-alpha is not in _NO_REASONING_MODELS, so it falls through to None
-        # per the final "return None" catch-all (no prefix match).
-        # If we add owl-specific handling, this test updates accordingly.
-        assert r is None  # Currently no prefix match — change if owl gets effort support
+    def test_reasoning_for_model_unknown_falls_through_none(self):
+        """An unrecognized model must NOT get reasoning controls (avoids 422)."""
+        r = _reasoning_for_model("openrouter/some-future-model", "high")
+        # Not in _NO_REASONING_MODELS and matches no known prefix, so the
+        # catch-all returns None — no reasoning field is sent to unknown models.
+        assert r is None

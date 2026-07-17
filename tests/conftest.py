@@ -38,15 +38,50 @@ def pytest_addoption(parser):
     )
 
 
+def _load_sopel_test_cfg():
+    """Parse config/sopel-test.cfg (the live test config, not .example).
+
+    The model is config, not environment: it lives in the [terraai] section
+    of the SOPEL .cfg, exactly as a real bot reads it. The API key stays a
+    secret in .env and is referenced from the .cfg as ${OPENROUTER_API_KEY}.
+
+    Returns (model, api_key) or raises if the .cfg is missing/unconfigured.
+    """
+    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "config", "sopel-test.cfg")
+    if not os.path.exists(cfg_path):
+        raise RuntimeError(
+            "config/sopel-test.cfg not found. Copy config/sopel-test.cfg.example "
+            "to config/sopel-test.cfg and set [terraai] model (and "
+            "api_key = ${OPENROUTER_API_KEY}). TerraAI is model-agnostic: no "
+            "model is hardcoded."
+        )
+    import configparser
+    cp = configparser.ConfigParser()
+    cp.read(cfg_path)
+    model = cp.get("terraai", "model", fallback="").strip()
+    # The secret key is interpolated from env by SOPEL at load time; in tests
+    # we read it straight from the environment (never from the .cfg file).
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not model:
+        raise RuntimeError(
+            "[terraai] model is empty in config/sopel-test.cfg. TerraAI is "
+            "model-agnostic — set it explicitly (e.g. 'tencent/hy3:free')."
+        )
+    return model, api_key
+
+
 def _make_test_config(**overrides):
     """Create a lightweight config with TerraAISection defaults.
 
     Tests don't have a running SOPEL bot, so we use a SimpleNamespace
-    with the same attributes as TerraAISection.
+    with the same attributes as TerraAISection. The model comes from the
+    SOPEL test config (config/sopel-test.cfg), not a hardcoded default.
     """
+    model, api_key = _load_sopel_test_cfg()
     defaults = dict(
-        model="openrouter/owl-alpha",
-        api_key=os.environ.get("OPENROUTER_API_KEY", "test-key"),
+        model=model,
+        api_key=api_key or "test-key",
         base_url="https://openrouter.ai/api/v1",
         provider_timeout=30,
         bot_nick="",

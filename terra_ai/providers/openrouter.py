@@ -17,9 +17,8 @@ MAX_TOOL_ROUNDS = 3
 
 # Models that do NOT support reasoning controls via chat-completions.
 # Sending reasoning fields to these models causes 422 errors or silent ignore.
-# Note: owl-alpha is experimental — Claude Code path may translate effort
-# through Anthropic compat layer even if chat-completions metadata doesn't
-# advertise it. User may remove owl-alpha from this set to experiment.
+# TerraAI is model-agnostic: add a model here only when you have verified it
+# rejects reasoning controls (unknown models fall through to None below).
 _NO_REASONING_MODELS = {
     "google/gemini-2.0-flash-001",
     "openai/gpt-4o",
@@ -71,7 +70,7 @@ class OpenRouterProvider(AIProvider):
     local tool-call loop is needed for search.
     """
 
-    def __init__(self, model: str = "openrouter/owl-alpha", api_key: str | None = None,
+    def __init__(self, model: str, api_key: str | None = None,
                  base_url: str = "https://openrouter.ai/api/v1",
                  timeout: int = 30):
         self._model = model
@@ -130,6 +129,9 @@ class OpenRouterProvider(AIProvider):
         reasoning = _reasoning_for_model(self._model, effort)
         if reasoning:
             payload["reasoning"] = reasoning
+            logger.info("OpenRouter chat: applying reasoning=%s", reasoning)
+        else:
+            logger.info("OpenRouter chat: no reasoning config for model=%s", self._model)
 
         # Build tools list: always include server-side web_search, plus any
         # local function tools the caller passed in.
@@ -153,6 +155,7 @@ class OpenRouterProvider(AIProvider):
         with httpx.Client(timeout=self._timeout) as client:
             for round_idx in range(max_tool_rounds + 1):
                 # Notify caller: waiting for AI response.
+                logger.info("OpenRouter chat: round=%d — waiting on API response", round_idx)
                 if noisy_callback:
                     noisy_callback("Thinking...")
 
@@ -176,11 +179,16 @@ class OpenRouterProvider(AIProvider):
 
                 if not tool_calls:
                     # Final text answer — done.
-                    return message.get("content") or ""
+                    content = message.get("content")
+                    logger.info(
+                        "OpenRouter final: content_type=%s content_len=%s",
+                        type(content).__name__, len(content) if content else 0,
+                    )
+                    return content or ""
 
                 # Has tool calls — execute them and feed results back.
                 logger.info(
-                    "OpenRouter tool_calls: round=%d count=%d",
+                    "OpenRouter tool_calls: round=%d count=%d — executing tools",
                     round_idx, len(tool_calls),
                 )
                 # Append the assistant message with tool_calls as-is.
@@ -191,7 +199,12 @@ class OpenRouterProvider(AIProvider):
                     function = call.get("function") or {}
                     name = function.get("name", "")
                     raw_args = function.get("arguments", "{}")
-                    logger.info("Tool call: id=%s name=%s", call_id, name)
+                    # Log the argument type/value — a None/missing arguments
+                    # string is a common source of downstream .replace() errors.
+                    logger.info(
+                        "Tool call: id=%s name=%s args_type=%s args=%r",
+                        call_id, name, type(raw_args).__name__, raw_args,
+                    )
 
                     # Forward noisy_callback so the tool can report what it does.
                     result_str = execute_tool(name, raw_args,

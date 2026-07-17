@@ -15,7 +15,7 @@ HAS_API_KEY = bool(os.environ.get("OPENROUTER_API_KEY"))
 
 class TestOpenRouterProvider:
     def test_name(self):
-        provider = OpenRouterProvider(model="openrouter/owl-alpha", api_key="test-key")
+        provider = OpenRouterProvider(model="openrouter/test-model", api_key="test-key")
         assert provider.name == "openrouter"
 
     def test_is_available_with_key(self):
@@ -98,7 +98,7 @@ class TestOpenRouterProviderMockAPI:
         from unittest.mock import patch, MagicMock
 
         provider = OpenRouterProvider(
-            model="openrouter/owl-alpha",
+            model="openrouter/test-model",
             api_key="test-key",
         )
         mock_response = MagicMock()
@@ -117,7 +117,7 @@ class TestOpenRouterProviderMockAPI:
         from unittest.mock import patch, MagicMock
 
         provider = OpenRouterProvider(
-            model="openrouter/owl-alpha",
+            model="openrouter/test-model",
             api_key="test-key",
         )
         mock_response = MagicMock()
@@ -146,8 +146,10 @@ class TestOpenRouterProviderRealAPI:
 
     def test_real_chat(self):
         """Test a real API call to OpenRouter."""
+        from tests.conftest import _load_sopel_test_cfg
+        model, _ = _load_sopel_test_cfg()
         provider = OpenRouterProvider(
-            model="openrouter/owl-alpha",
+            model=model,
             api_key=os.environ["OPENROUTER_API_KEY"],
         )
         messages = [Message("user", "Say hello in one word.")]
@@ -157,8 +159,10 @@ class TestOpenRouterProviderRealAPI:
 
     def test_real_chat_with_system_prompt(self):
         """Test a real API call with system prompt."""
+        from tests.conftest import _load_sopel_test_cfg
+        model, _ = _load_sopel_test_cfg()
         provider = OpenRouterProvider(
-            model="openrouter/owl-alpha",
+            model=model,
             api_key=os.environ["OPENROUTER_API_KEY"],
         )
         messages = [Message("user", "What is 2+2? Answer with just the number.")]

@@ -40,7 +40,7 @@ extra =
 
 [terraai]
 # AI provider
-model = openrouter/owl-alpha
+model = tencent/hy3:free
 api_key = ${OPENROUTER_API_KEY}
 base_url = https://openrouter.ai/api/v1
 provider_timeout = 30
@@ -48,7 +48,6 @@ provider_timeout = 30
 # Bot behavior
 trigger_phrase = TerraAI:
 bot_nick = TerraAI
-trigger_char = .
 effort = high
 
 # Storage

@@ -46,8 +46,13 @@ def openmeteo_client():
 @pytest.fixture
 def openrouter_provider():
     from terra_ai.providers.openrouter import OpenRouterProvider
+    from tests.conftest import _load_sopel_test_cfg
     key = _require_openrouter_key()
-    return OpenRouterProvider(api_key=key)
+    try:
+        model, _ = _load_sopel_test_cfg()
+    except RuntimeError as e:
+        raise RuntimeError(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
+    return OpenRouterProvider(model=model, api_key=key)
 
 
 # ---------------------------------------------------------------------------

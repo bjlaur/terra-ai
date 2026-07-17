@@ -34,6 +34,17 @@ class TerraAI:
         self.user = UserCommands(self.db, self.prompts)
 
         # Set up provider
+        if not config.model:
+            raise ValueError(
+                "No AI model configured. TerraAI is model-agnostic: set "
+                "[terraai] model in your SOPEL .cfg (e.g. 'tencent/hy3:free'). "
+                "Refusing to start with an empty model."
+            )
+        if not config.api_key:
+            raise ValueError(
+                "No OpenRouter API key configured. Set [terraai] api_key "
+                "or the OPENROUTER_API_KEY env var."
+            )
         provider = OpenRouterProvider(
             model=config.model,
             api_key=config.api_key,
@@ -116,5 +127,10 @@ class TerraAI:
             return response
 
         except Exception as e:
-            logger.error(f"AI call failed: {e}")
+            logger.error(
+                "AI call failed: model=%s effort=%s tools=%d error=%s",
+                provider._model, self.prompts.effort,
+                len(tools) if 'tools' in dir() else -1, e,
+                exc_info=True,
+            )
             return f"Error: {e}"

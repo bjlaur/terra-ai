@@ -26,9 +26,14 @@ class TerraAISection(types.StaticSection):
     # ── Provider settings ──────────────────────────────────────────────
 
     model = types.ValidatedAttribute(
-        'model', default='openrouter/owl-alpha',
+        'model', default=None,
     )
-    """AI model to use via OpenRouter."""
+    """AI model to use via OpenRouter. REQUIRED — no default.
+
+    TerraAI is model-agnostic: the operator MUST set ``model`` in the
+    [terraai] section (e.g. ``tencent/hy3:free``). An empty model fails
+    loudly at startup rather than silently sending an invalid request.
+    """
 
     api_key = types.SecretAttribute(
         'api_key', default='',

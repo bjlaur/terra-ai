@@ -1,5 +1,35 @@
 # CHANGELOG.md
 
+## 0.0.3 — Model-agnostic + test-infra hardening
+
+### Model-agnostic (no hardcoded model default)
+- `terra_ai/config.py` — `[terraai] model` default is now `None`; TerraAI is
+  model-agnostic and the operator MUST set `model` in the SOPEL `.cfg`.
+- `terra_ai/providers/openrouter.py` — `OpenRouterProvider.__init__(model=...)`
+  is now a required positional arg (no default). Unknown models fall through
+  to no reasoning config.
+- `terra_ai/bot.py` — fail loudly at startup if `model` or `api_key` is empty
+  (no silent invalid requests).
+- Tests/readers get the model from the live `config/sopel-test.cfg`
+  `[terraai] model` (single source of truth), not a hardcoded literal or env
+  var. The secret key stays in `.env` and is referenced as
+  `api_key = ${OPENROUTER_API_KEY}` in the `.cfg`.
+
+### Test-infra hardening
+- `tests/test_ergo.py` — removed blind `time.sleep()`s; waits are now
+  event-driven (break on success) and the bot-startup wait polls for
+  "Channel joined". All timeouts route through `TERRAI_TEST_TIMEOUT`
+  (default 5s, overridable) so broken bots fail fast instead of hiding behind
+  60–90s waits. Added `[wait] …` prints so you can see what each test is
+  blocked on.
+- `terra_ai/bot.py` / `openrouter.py` — added diagnostics: `AI call failed`
+  now logs a full traceback (`exc_info=True`), and the provider logs
+  reasoning application, response content type, and per-tool-call args.
+- `env.example` / `.env` — `export` added so plain `source` propagates the key
+  to child processes.
+
+— OWL
+
 ## 0.0.2 — In Progress
 
 ### Agent 1 (OWL) — Carry-over: SOPEL dispatch fix + package rename

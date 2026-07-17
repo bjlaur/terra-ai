@@ -30,6 +30,14 @@ def ergo_available():
 
 ERGO_AVAILABLE = ergo_available()
 
+# Fail fast by default. Long timeouts only mask real failures (a broken bot,
+# a dead model, a crashed provider) — if the bot doesn't answer in a few
+# seconds, it's broken, not thinking. Override with TERRAI_TEST_TIMEOUT for
+# genuinely slow models/networks: e.g. TERRAI_TEST_TIMEOUT=30 pytest ...
+def _test_timeout(multiplier=1.0):
+    """Base test timeout (seconds), from TERRAI_TEST_TIMEOUT (default 5)."""
+    return int(os.environ.get("TERRAI_TEST_TIMEOUT", "5")) * multiplier
+
 pytestmark = pytest.mark.skipif(
     not ERGO_AVAILABLE,
     reason="ergochat not running on localhost:6667"
@@ -86,7 +94,7 @@ class TestErgoIRCProtocol:
     register, join channels, and exchange messages.
     """
 
-    IRC_TIMEOUT = 10  # seconds
+    IRC_TIMEOUT = _test_timeout()  # seconds
 
     def _connect_and_register(self, nick="TerraAITest"):
         """Connect to ergo and register a nick. Returns the socket."""
@@ -121,6 +129,9 @@ class TestErgoIRCProtocol:
                 if decoded.startswith("PING"):
                     pong = decoded.replace("PING", "PONG", 1)
                     sock.sendall(f"{pong}\r\n".encode())
+            # Success: stop waiting the rest of the timeout window.
+            if welcome_received:
+                break
 
         assert welcome_received, f"Did not receive 001 RPL_WELCOME from ergo"
         return sock
@@ -151,15 +162,20 @@ class TestErgoIRCProtocol:
                 if decoded.startswith("PING"):
                     pong = decoded.replace("PING", "PONG", 1)
                     sock.sendall(f"{pong}\r\n".encode())
+            # Success: stop waiting the rest of the timeout window.
+            if joined:
+                break
 
         assert joined, f"Did not receive JOIN confirmation for {channel}"
         return sock
 
-    def _read_until(self, sock, predicate, timeout=10):
+    def _read_until(self, sock, predicate, timeout=None):
         """Read from socket until predicate matches a line. Returns matching line or None."""
         import socket
+        timeout = timeout or self.IRC_TIMEOUT
         buf = b""
         deadline = time.time() + timeout
+        print(f"[wait] _read_until: blocking up to {timeout}s for an IRC line", flush=True)
         while time.time() < deadline:
             sock.settimeout(2)
             try:
@@ -207,7 +223,7 @@ class TestErgoIRCProtocol:
         self._join_channel(sender, "#terra-ai-msg")
 
         # Give sender time to join and ergo to relay NAMES
-        time.sleep(2)
+        # (no fixed sleep — _read_until below waits event-driven for the msg)
 
         # Sender sends a message
         sender.sendall(b"PRIVMSG #terra-ai-msg :hello from sender\r\n")
@@ -216,7 +232,7 @@ class TestErgoIRCProtocol:
         msg = self._read_until(
             listener,
             lambda line: "PRIVMSG" in line and "hello from sender" in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert msg is not None, "Listener did not receive the message from sender"
 
@@ -230,16 +246,14 @@ class TestErgoIRCProtocol:
         recipient = self._connect_and_register("TerraAIPriv1")
         sender = self._connect_and_register("TerraAIPriv2")
 
-        time.sleep(1)
-
-        # Sender sends private message
+        # Sender sends private message (no fixed sleep — _read_until waits)
         sender.sendall(b"PRIVMSG TerraAIPriv1 :private hello\r\n")
 
         # Recipient should see it
         msg = self._read_until(
             recipient,
             lambda line: "TerraAIPriv2" in line and "private hello" in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert msg is not None, "Recipient did not receive private message"
 
@@ -256,8 +270,8 @@ class TestErgoSopelBot:
     connect to ergo via SSL, and verify end-to-end behavior.
     """
 
-    IRC_TIMEOUT = 15
-    BOT_STARTUP_WAIT = 10  # seconds to wait for bot to connect and join
+    IRC_TIMEOUT = _test_timeout()
+    BOT_STARTUP_WAIT = _test_timeout()  # seconds to wait for bot to connect and join
     ERGO_HOST = "127.0.0.1"
     ERGO_PORT = 6667  # plaintext for testing (SSL+CAP broken with self-signed cert)
     TEST_CHANNEL = "#terra-ai-agent1"
@@ -270,7 +284,17 @@ class TestErgoSopelBot:
 
     @pytest.fixture(scope="session")
     def sopel_config(self, tmp_path_factory):
-        """Create a minimal SOPEL config file for testing."""
+        """Create a minimal SOPEL config file for testing.
+
+        The model is read from the live config/sopel-test.cfg (the same
+        source the real bot uses) — TerraAI is model-agnostic, so it is
+        never hardcoded here.
+        """
+        from tests.conftest import _load_sopel_test_cfg
+        try:
+            terrai_model, _ = _load_sopel_test_cfg()
+        except RuntimeError as e:
+            pytest.skip(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
         tmp = tmp_path_factory.mktemp("sopel")
         db_path = tmp / "terra_ai.db"
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -291,10 +315,10 @@ enable =
     {plugins_lines}
 
 [terraai]
-model = openrouter/owl-alpha
+model = {terrai_model}
 api_key = {api_key}
 base_url = https://openrouter.ai/api/v1
-provider_timeout = 30
+provider_timeout = {_test_timeout(6)}
 bot_nick = TerraAI
 effort = high
 sqlite_path = {db_path}
@@ -324,8 +348,12 @@ sqlite_path = {db_path}
             stdin=subprocess.DEVNULL,
             env=env,
         )
-        # Wait for the bot to start up and connect
-        time.sleep(self.BOT_STARTUP_WAIT)
+        # Wait until the bot has actually connected and joined (event-driven),
+        # capped at BOT_STARTUP_WAIT so we never wait longer than before.
+        self._wait_for_bot_ready(
+            os.path.join(tempfile.gettempdir(), "sopel_stderr.log"),
+            timeout=self.BOT_STARTUP_WAIT,
+        )
         yield proc
         # Cleanup
         proc.terminate()
@@ -346,7 +374,13 @@ sqlite_path = {db_path}
 
         The provider has an API key but points at a non-existent endpoint,
         so the HTTP call itself will error — exercising the real error path.
+        The model is read from the live config/sopel-test.cfg.
         """
+        from tests.conftest import _load_sopel_test_cfg
+        try:
+            terrai_model, _ = _load_sopel_test_cfg()
+        except RuntimeError as e:
+            pytest.skip(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
         tmp = tmp_path_factory.mktemp("sopel-badprov")
         db_path = tmp / "terra_ai.db"
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -366,10 +400,10 @@ enable =
     {plugins_lines}
 
 [terraai]
-model = openrouter/owl-alpha
+model = {terrai_model}
 api_key = sk-or-test-key-that-exists
 base_url = http://127.0.0.1:1/nonexistent
-provider_timeout = 30
+provider_timeout = {_test_timeout(6)}
 effort = high
 sqlite_path = {db_path}
 """
@@ -396,7 +430,12 @@ sqlite_path = {db_path}
             stdin=subprocess.DEVNULL,
             env=env,
         )
-        time.sleep(self.BOT_STARTUP_WAIT)
+        # Wait until the bot has connected and joined (event-driven),
+        # capped at BOT_STARTUP_WAIT so we never wait longer than before.
+        self._wait_for_bot_ready(
+            os.path.join(tempfile.gettempdir(), "sopel_errbot_stderr.log"),
+            timeout=self.BOT_STARTUP_WAIT,
+        )
         yield proc
         # Kill immediately — don't let SOPEL send QUIT to ergo, which can
         # interfere with the main bot's connection.
@@ -411,6 +450,7 @@ sqlite_path = {db_path}
         deadline = time.time() + timeout
         buf = b""
         lines = []
+        print(f"[wait] _read_irc_until: blocking up to {timeout:.0f}s for bot reply", flush=True)
         while time.time() < deadline:
             sock.settimeout(max(0.1, min(1.0, deadline - time.time())))
             try:
@@ -472,6 +512,59 @@ sqlite_path = {db_path}
             pass
         sock.close()
 
+    def _wait_for_bot_ready(self, log_path, timeout):
+        """Block until the SOPEL bot has connected and joined its channel.
+
+        Polls the bot's stderr log for the 'Channel joined' line (the real
+        readiness signal) instead of sleeping a blind fixed interval. Returns
+        as soon as the bot is ready, or once ``timeout`` seconds elapse so we
+        never wait longer than the old BOT_STARTUP_WAIT.
+        """
+        import time as _time
+        deadline = _time.time() + timeout
+        print(f"[wait] _wait_for_bot_ready: polling {log_path} for 'Channel joined' (up to {timeout:.0f}s)", flush=True)
+        while _time.time() < deadline:
+            try:
+                with open(log_path, "r", errors="replace") as f:
+                    if "Channel joined" in f.read():
+                        print("[wait] _wait_for_bot_ready: bot ready", flush=True)
+                        return
+            except FileNotFoundError:
+                pass
+            _time.sleep(0.25)
+
+    def _assert_no_bot_reply(self, sock, window=3):
+        """Assert the bot sends NO PRIVMSG on this socket within ``window`` s.
+
+        Event-driven: returns as soon as a bot PRIVMSG arrives (failing) or
+        the window elapses cleanly (passing). Replaces blind time.sleep()s
+        that only *hoped* the bot stayed silent.
+        """
+        import socket
+        deadline = time.time() + window
+        print(f"[wait] _assert_no_bot_reply: confirming bot stays silent for {window:.0f}s", flush=True)
+        while time.time() < deadline:
+            sock.settimeout(max(0.1, min(1.0, deadline - time.time())))
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not chunk:
+                break
+            for line in chunk.decode(errors="replace").split("\r\n"):
+                if not line:
+                    continue
+                if line.startswith("PING "):
+                    token = line.split(" ", 1)[1]
+                    sock.sendall(f"PONG {token}\r\n".encode())
+                    continue
+                if "PRIVMSG" in line and self.BOT_NICK in line:
+                    raise AssertionError(
+                        f"Bot replied when it should have stayed silent: {line}"
+                    )
+
     def test_sopel_connects_to_ergo(self, sopel_bot_process):
         """Test that SOPEL bot connects to ergochat via SSL."""
         # If the bot process is still running, it connected successfully
@@ -489,7 +582,7 @@ sqlite_path = {db_path}
         names_lines = self._read_irc_until(
             sock,
             lambda line: "353" in line and self.TEST_CHANNEL in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert names_lines is not None, "Did not receive NAMES reply"
         names_text = " ".join(names_lines)
@@ -507,7 +600,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line and self.TEST_CHANNEL in line,
-            timeout=15
+            timeout=_test_timeout(3)
         )
         assert response is not None, "Bot did not respond to help command"
 
@@ -525,7 +618,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=30
+            timeout=_test_timeout(4)
         )
         assert response is not None, "Bot did not respond to TerraAI: trigger"
 
@@ -541,7 +634,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=30
+            timeout=_test_timeout(4)
         )
         assert response is not None, "Bot did not respond to unknown command"
 
@@ -555,15 +648,15 @@ sqlite_path = {db_path}
         # Send a regular message — should be ignored
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :just regular chatter\r\n".encode())
 
-        # Bot should NOT respond — read for a short window and confirm no bot message
-        # We send a help command after to verify bot is still alive
-        time.sleep(3)
+        # Bot should NOT respond — verify no bot PRIVMSG arrives, then send
+        # help to confirm the bot is still alive.
+        self._assert_no_bot_reply(sock, window=3)
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}help\r\n".encode())
 
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=15
+            timeout=_test_timeout(3)
         )
         assert response is not None, "Bot did not respond to help (may have crashed?)"
 
@@ -581,7 +674,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "Noisy" in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert response is not None, "Bot did not respond to .noisy toggle"
 
@@ -602,7 +695,7 @@ sqlite_path = {db_path}
         self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "Noisy" in line,
-            timeout=10,
+            timeout=_test_timeout(),
         )
 
         # Send a weather query — this triggers the tool-call loop.
@@ -655,21 +748,20 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "opted out" in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert response is not None, "Bot did not confirm opt-out"
 
-        # Now send trigger — should NOT respond
-        time.sleep(1)
+        # Now send trigger — should NOT respond (verify silence, don't just hope)
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: hello\r\n".encode())
-        time.sleep(3)
+        self._assert_no_bot_reply(sock, window=3)
 
         # Opt back in
         sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}optin\r\n".encode())
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "opted in" in line,
-            timeout=10
+            timeout=_test_timeout()
         )
         assert response is not None, "Bot did not confirm opt-in"
 
@@ -691,7 +783,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=60,  # web_search + AI roundtrip can be slow
+            timeout=_test_timeout(4),  # AI reply; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to weather query"
 
@@ -717,7 +809,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=60,  # AI roundtrip can be slow
+            timeout=_test_timeout(4),  # AI reply; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to bare PM"
 
@@ -740,7 +832,7 @@ sqlite_path = {db_path}
         response = self._read_irc_until(
             sock,
             lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=90,  # tool loop + two AI calls can be slow
+            timeout=_test_timeout(8),  # tool loop + AI calls; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to weather query"
 
