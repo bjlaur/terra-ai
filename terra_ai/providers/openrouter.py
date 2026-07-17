@@ -163,9 +163,16 @@ class OpenRouterProvider(AIProvider):
                 response.raise_for_status()
                 data = response.json()
 
-                # Log server-side tool usage if available
+                # Log server-side tool usage if available.
+                # OpenRouter returns this under `server_tool_use_details` (note
+                # the _details suffix) on some responses — check both names so
+                # older and newer response shapes both surface the notice.
                 usage = data.get("usage") or {}
-                server_tool_use = usage.get("server_tool_use") or {}
+                server_tool_use = (
+                    usage.get("server_tool_use_details")
+                    or usage.get("server_tool_use")
+                    or {}
+                )
                 if server_tool_use.get("web_search_requests"):
                     logger.info(
                         "OpenRouter web_search: requests=%d",

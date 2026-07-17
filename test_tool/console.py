@@ -167,6 +167,27 @@ class FakeBot:
 
     def notice(self, message, destination=None):
         self.notices.append((destination or "", message))
+        # Stream the notice live to the UI during a dispatch (noisy mode).
+        # Without this, notices only reach the screen in a clump right before
+        # the final response renders — the callback is otherwise only fired by
+        # dispatch_line's *post*-loop flush, after the whole AI call returned.
+        live = getattr(self, "live_notice", None)
+        if live is not None:
+            self._stream_live_notice(live, message, destination)
+
+    def _stream_live_notice(self, live, message, destination):
+        """Forward a queued notice to the UI thread-safely.
+
+        Called from provider callbacks that can run on a worker thread
+        (asyncio.to_thread). `live_notice` is itself a thread-safe bridge
+        into the asyncio loop, so this just delegates to it.
+        """
+        try:
+            live(message)
+        except RuntimeError:
+            # No running loop on this worker thread — drop silently; the
+            # post-loop flush in dispatch_line will still deliver it.
+            pass
 
 
 class TerraAITestClient:
@@ -458,32 +479,86 @@ class TerraAIApp(App):
     async def _dispatch(self, text, is_pm, target):
         """Run AI dispatch in a thread pool so the UI stays responsive.
 
-        Uses asyncio.to_thread() to offload the synchronous AI call,
-        then updates the UI directly (we're back on the main thread).
+        Uses asyncio.to_thread() to offload the synchronous AI call.
+        Notices ("Thinking...", tool progress) are streamed live to the
+        UI via an asyncio.Queue — a concurrent reader task pulls notices
+        and renders them immediately, yielding to the event loop between
+        each one so the TUI actually refreshes.
         """
+        # Queue for streaming notices from the worker thread to the UI.
+        notice_queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        # Live notice callback: called from the worker when the bot sends a
+        # NOTICE (noisy mode). Must be thread-safe — the provider callbacks
+        # fire inside asyncio.to_thread, off the event loop. We bridge back
+        # with call_soon_threadsafe so the reader (main thread) can render
+        # each notice as it happens, instead of a clump right before the
+        # final response.
+        def _live_notice(msg):
+            try:
+                loop.call_soon_threadsafe(notice_queue.put_nowait, msg)
+            except RuntimeError:
+                # Loop already closed (e.g. app exiting) — ignore.
+                pass
+
+        # Attach the live callback so FakeBot.notice() streams through it and
+        # so plugin.py's dispatch_line can fall back to it. The flag tells
+        # dispatch_line not to re-flush buffered notices post-loop (they've
+        # already been streamed live).
+        self.client.bot.live_notice = _live_notice
+        self.client.bot._notice_streamed_live = True
+
+        # Reader task: pulls notices from the queue and renders them
+        # immediately on the main thread, yielding to the event loop after
+        # each one so Textual can repaint. Terminates when it sees the None
+        # sentinel.
+        async def _read_notices():
+            while True:
+                msg = await notice_queue.get()
+                if msg is None:
+                    return
+                self._append_to_tab(target, f"{self._ts()} -!- {msg}")
+                await asyncio.sleep(0)  # yield so Textual repaints
+
+        reader = asyncio.create_task(_read_notices())
+
         try:
             if is_pm:
                 result = await asyncio.to_thread(
                     self.client.send_pm, self.client.nick, text
                 )
                 responses = result["say"]
-                notices = result["notice"]
             else:
                 result = await asyncio.to_thread(self.client.send_message, text)
                 responses = result["say"]
-                notices = result["notice"]
         except Exception as e:
             logger.exception("dispatch failed")
             self._append_to_tab(target, f"{self._ts()} -!- Error: {e}")
             return
+        finally:
+            # Signal the reader to stop and WAIT for it to drain. Cancelling
+            # the reader before it sees the sentinel would drop buffered
+            # notices (the old timing/live-notice bug).
+            try:
+                await asyncio.wait_for(notice_queue.put(None), timeout=5.0)
+            except (asyncio.TimeoutError, RuntimeError):
+                reader.cancel()
+            try:
+                await reader
+            except asyncio.CancelledError:
+                pass
+            if hasattr(self.client.bot, "live_notice"):
+                del self.client.bot.live_notice
+            # Keep notices so dispatch_line's result includes them for
+            # non-streaming consumers (tests that inspect bot.notices), but
+            # clear the streamed flag.
+            self.client.bot.__dict__.pop("_notice_streamed_live", None)
 
         # Update UI directly (we're back on the main thread)
         ts = self._ts()
         for r in responses:
             self._append_to_tab(target, f"{ts} <{self.botnick}> {r}")
-
-        for _dest, msg in notices:
-            self._append_to_tab(target, f"{ts} -!- {msg}")
 
     def action_quit(self):
         self.exit()

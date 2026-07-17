@@ -53,11 +53,8 @@ Do not claim you lack access to real-time information when provider-side web sea
 You have local weather tools (client-side function calls):
 - geocode: resolve a place name to coordinates. Use when the user gives a location that may need disambiguation, or to cache coordinates for follow-up weather queries.
 - weather_forecast: current or future weather (current conditions, forecast, rain, snow, wind, sunrise/sunset, hourly, daily).
-- weather_history: past weather by date or date range (yesterday, last week, historical).
-- air_quality: AQI, PM2.5, PM10, ozone, smoke, UV index, pollen.
-- weather_reference: developer/debug inventory of Open-Meteo API capabilities.
 
-For weather questions, prefer the local weather tools over web search — they return structured data. Choose the smallest preset that answers the user. Be concise for IRC. If the user omits location, ask for it."""
+For weather questions, you MUST use the weather_forecast tool (or geocode first to resolve the location) — do not answer weather from memory, as forecasts change constantly. Prefer the local weather tools over web search, since they return structured current data. Choose the smallest preset that answers the user. Be concise for IRC. If the user omits location, ask for it."""
 
 # Effort levels
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")

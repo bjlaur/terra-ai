@@ -83,7 +83,11 @@ class TerraAI:
         """
         provider = self.registry.get()
         if not provider:
-            return "Error: AI provider not configured."
+            return (
+                "Error: AI provider not configured. "
+                "Set api_key in the [terraai] section of your Sopel config "
+                "or export OPENROUTER_API_KEY before starting Sopel."
+            )
 
         try:
             start = time.time()

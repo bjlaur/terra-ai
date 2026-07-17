@@ -481,9 +481,25 @@ def dispatch_line(bot, nick, line, is_pm=False):
     bot.messages.clear()
     bot.notices.clear()
 
+    # If the bot has a live_notice callback (set by the console TUI),
+    # wire it so that bot.notice() also triggers an immediate UI update.
+    live_notice = getattr(bot, "live_notice", None)
+
     for rule, match in bot.rules.get_triggered_rules(bot, pretrigger):
         trigger = Trigger(bot.settings, pretrigger, match, account=None)
         wrapper = SopelWrapper(bot, trigger)
         rule.execute(wrapper, trigger)
 
-    return {"say": list(bot.messages), "notice": list(bot.notices)}
+    result = {"say": list(bot.messages), "notice": list(bot.notices)}
+
+    # Deliver any buffered notices immediately after dispatch completes — but
+    # only if they weren't already streamed live during dispatch. When the
+    # TUI's FakeBot.notice() is relaying notices in real time (live_notice +
+    # the _notice_streamed_live flag), re-forwarding here would double-serve
+    # every notice. In the live IRC bot there is no flag, so notices still
+    # flush through sobot path.
+    if live_notice and not getattr(bot, "_notice_streamed_live", False):
+        for dest, msg in bot.notices:
+            live_notice(msg)
+
+    return result
