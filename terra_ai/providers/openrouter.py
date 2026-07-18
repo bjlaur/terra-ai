@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 
 import httpx
 
@@ -152,6 +153,13 @@ class OpenRouterProvider(AIProvider):
 
         logger.info("OpenRouter chat: model=%s tools=%d", self._model, len(request_tools))
 
+        # DEBUG: the exact JSON request body sent to OpenRouter, including
+        # tools and reasoning — the true wire payload. Only with -d.
+        logger.debug(
+            "OpenRouter REQUEST BODY: model=%s\n%s",
+            self._model, json.dumps(payload, indent=2),
+        )
+
         with httpx.Client(timeout=self._timeout) as client:
             for round_idx in range(max_tool_rounds + 1):
                 # Notify caller: waiting for AI response.
@@ -159,9 +167,15 @@ class OpenRouterProvider(AIProvider):
                 if noisy_callback:
                     noisy_callback("Thinking...")
 
+                api_start = time.time()
                 response = client.post(url, json=payload, headers=headers)
+                api_ms = int((time.time() - api_start) * 1000)
                 response.raise_for_status()
                 data = response.json()
+                logger.info(
+                    "OpenRouter chat: round=%d API call took %d ms",
+                    round_idx, api_ms,
+                )
 
                 # Log server-side tool usage if available.
                 # OpenRouter returns this under `server_tool_use_details` (note

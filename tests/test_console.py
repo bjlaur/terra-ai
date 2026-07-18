@@ -340,8 +340,8 @@ class TestNoisy:
             f"Expected multiple notices, got {len(client.bot.notices)}: {client.bot.notices}"
         all_notices = " ".join(msg for _, msg in client.bot.notices)
         assert "Thinking" in all_notices
-        # Should contain a tool-specific notice (geocode or weather).
-        tool_words = ["weather", "Geocoding", "Fetching", "forecast"]
+        # Should contain a tool-specific notice (weather fetch).
+        tool_words = ["weather", "Fetching", "forecast"]
         assert any(w.lower() in all_notices.lower() for w in tool_words), \
             f"Expected tool-specific notice, got: {client.bot.notices}"
 

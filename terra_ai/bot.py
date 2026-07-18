@@ -94,28 +94,25 @@ class TerraAI:
 
             logger.info("AI_PROMPT: nick=%s channel=%s text=%r", nick, channel, text)
 
+            # Prefix the user message with <nick> exactly ONCE, here — this is
+            # the single chokepoint. The prefixed form is what the AI sees and
+            # what gets stored in history, so replayed history matches live.
+            model_text = f"<{nick}> {text}"
+
             if include_history:
-                messages = self.context.compose_context(server, channel, text, nick)
+                messages = self.context.compose_context(server, channel, model_text, nick)
             else:
-                # Context-free (.ai command)
-                messages = [
-                    {"role": "system", "content": self.prompts.get_system_prompt()},
-                    {"role": "user", "content": text},
-                ]
+                # Context-free (.ai command): the system prompt is the whole
+                # prompt — no history. Still prefix with <nick> for consistency.
+                messages = self.context.prompts.get_context_seed(server, channel)
+                messages.append({"role": "user", "content": model_text})
 
             # Convert to Message objects
             msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
-            # DEBUG: the full payload sent to the provider — system prompt,
-            # fake-conversation seed, real history, and the user's message.
-            # Only emitted with -d; the bare prompt + response are info-level.
-            logger.debug(
-                "AI_SENT: model=%s effort=%s\n%s",
-                provider._model, self.prompts.effort,
-                "\n".join(
-                    f"[{m.role}] {m.content}" for m in msg_objs
-                ),
-            )
+            # The full JSON wire payload (messages + tools + reasoning) is
+            # dumped by the provider as DEBUG "OpenRouter REQUEST BODY" — no
+            # need to duplicate the messages array here.
 
             # Filter out disabled tools per user.
             # Only applies to local tools (those with "function" key).
@@ -145,9 +142,9 @@ class TerraAI:
 
             elapsed_ms = int((time.time() - start) * 1000)
 
-            # Save to history
+            # Save to history (model_text is already <nick>-prefixed)
             if include_history:
-                self.context.save_exchange(server, channel, nick, text, response)
+                self.context.save_exchange(server, channel, nick, model_text, response)
 
             # Log performance
             self.db.conn.execute(

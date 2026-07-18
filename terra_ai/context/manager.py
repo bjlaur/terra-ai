@@ -22,12 +22,7 @@ class ContextManager:
         """
         messages = []
 
-        # 1. System prompt
-        system_prompt = self.prompts.get_system_prompt()
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-
-        # 2. Context seed (fake conversation)
+        # 1. System prompt: one `system` message per rule from SYSTEM_PROMPTS.
         seed = self.prompts.get_context_seed(server, channel)
         messages.extend(seed)
 
@@ -51,16 +46,21 @@ class ContextManager:
                 "content": msg["content"],
             })
 
-        # 5. Current user message — prefix with <nick> so the AI knows
-        # who's talking (matches the fake conversation context seed).
-        messages.append({"role": "user", "content": f"<{nick}> {user_message}"})
+        # 5. Current user message — already <nick>-prefixed by the caller
+        # (single chokepoint in TerraAI.handle_ai_message), so store as-is.
+        messages.append({"role": "user", "content": user_message})
 
         return messages
 
     def save_exchange(self, server: str, channel: str, nick: str,
                       user_message: str, assistant_response: str,
                       source: str = "user"):
-        """Save a user/assistant exchange to history."""
+        """Save a user/assistant exchange to history.
+
+        `user_message` is expected to already be <nick>-prefixed by the
+        caller (single chokepoint in TerraAI.handle_ai_message); stored
+        verbatim so replayed history matches what the AI saw at prompt time.
+        """
         session_id = self._get_or_create_session(server, channel)
         self.history.append(server, channel, nick, "user", user_message, source=source)
         self.history.append(server, channel, nick, "assistant", assistant_response, source=source)

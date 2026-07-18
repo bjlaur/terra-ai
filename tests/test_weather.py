@@ -171,24 +171,6 @@ class TestWeatherForecastTool:
         assert "cape" in hour or "soil_temperature_0cm" in hour
 
 
-class TestGeocodeTool:
-    """execute_geocode: the standalone geocode tool."""
-
-    def test_geocode_tool(self, openmeteo_client):
-        from terra_ai.tools.openmeteo.geocode_tool import execute_geocode
-        result = execute_geocode({"location": "Detroit, MI"}, client=openmeteo_client)
-        assert result.ok is True
-        assert result.tool == "geocode"
-        assert result.data["latitude"] is not None
-        assert result.summary_hint is not None
-
-    def test_geocode_tool_no_location(self, openmeteo_client):
-        from terra_ai.tools.openmeteo.geocode_tool import execute_geocode
-        result = execute_geocode({}, client=openmeteo_client)
-        assert result.ok is False
-        assert "No location" in result.error
-
-
 class TestExecutor:
     """execute_tool: the name -> callable dispatcher."""
 
@@ -201,14 +183,6 @@ class TestExecutor:
         parsed = json.loads(result_str)
         assert parsed["ok"] is True
         assert parsed["tool"] == "weather_forecast"
-
-    def test_dispatch_geocode(self, openmeteo_client):
-        from terra_ai.tools.executor import execute_tool
-        args_json = json.dumps({"location": "Chicago, IL"})
-        result_str = execute_tool("geocode", args_json)
-        parsed = json.loads(result_str)
-        assert parsed["ok"] is True
-        assert parsed["tool"] == "geocode"
 
     def test_dispatch_unknown_tool(self):
         from terra_ai.tools.executor import execute_tool
@@ -232,14 +206,7 @@ class TestSchemas:
         assert "parameters" in func
         assert "preset" in func["parameters"]["properties"]
 
-    def test_geocode_schema_valid(self):
-        from terra_ai.tools.openmeteo.schemas import GEOCODE_TOOL
-        assert GEOCODE_TOOL["type"] == "function"
-        func = GEOCODE_TOOL["function"]
-        assert func["name"] == "geocode"
-        assert "location" in func["parameters"]["properties"]
-
-    def test_available_tools_includes_weather_and_geocode(self):
+    def test_available_tools_includes_weather(self):
         from terra_ai.tools.schemas import AVAILABLE_TOOLS
         names = []
         for t in AVAILABLE_TOOLS:
@@ -248,8 +215,9 @@ class TestSchemas:
             elif t["type"] == "openrouter:web_search":
                 names.append("openrouter:web_search")
         assert "weather_forecast" in names
-        assert "geocode" in names
         assert "openrouter:web_search" in names
+        # geocode is NOT a standalone tool — weather_forecast geocodes internally.
+        assert "geocode" not in names
 
 
 # ---------------------------------------------------------------------------

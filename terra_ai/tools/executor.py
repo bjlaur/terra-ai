@@ -7,17 +7,17 @@ function tools are executed here.
 
 import json
 import logging
+import time
 
 from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
-from terra_ai.tools.openmeteo.geocode_tool import execute_geocode
 
 logger = logging.getLogger("terraai")
 
 # Local function tools. OpenRouter server tools (like web_search) are
-# executed server-side and never reach this dict.
+# executed server-side and never reach this dict. weather_forecast geocodes
+# internally, so there is no standalone geocode tool registered here.
 TOOL_FUNCTIONS = {
     "weather_forecast": execute_weather_forecast,
-    "geocode": execute_geocode,
 }
 
 
@@ -40,7 +40,10 @@ def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
         return f"Error: unknown tool '{name}'"
 
     try:
+        tool_start = time.time()
         result = handler(arguments, noisy_callback=noisy_callback)
+        tool_ms = int((time.time() - tool_start) * 1000)
+        logger.info("Tool %r executed in %d ms", name, tool_ms)
         # ToolResult -> JSON string for the model.
         if hasattr(result, "to_dict"):
             return json.dumps(result.to_dict())

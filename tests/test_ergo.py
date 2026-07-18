@@ -310,6 +310,7 @@ owner = agent1
 channels = {self.TEST_CHANNEL}
 prefix = -
 help_prefix = -
+logging_level = DEBUG
 extra = {project_dir}
 enable =
     {plugins_lines}
@@ -328,6 +329,65 @@ sqlite_path = {db_path}
 
         return config_file
 
+    def _assert_channel_vacant(self, channel, bot_nick):
+        """Fail loudly if `bot_nick` is already present in `channel` on ergo.
+
+        A second SOPEL instance sharing the channel (leftover from a crashed
+        run, or another agent's bot) competes for PRIVMSG replies and silently
+        contaminates test results. We refuse to launch our bot on top of it.
+        We do NOT kill the other process — it may belong to another agent.
+        """
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect(("127.0.0.1", self.ERGO_PORT))
+        except OSError as e:
+            pytest.fail(f"Cannot connect to ergo on :{self.ERGO_PORT} to check channel occupancy: {e}")
+        probe = f"TerraAIProbe{int(time.time()) % 100000}"
+        sock.sendall(f"NICK {probe}\r\n".encode())
+        sock.sendall(f"USER {probe} 0 * :probe\r\n".encode())
+        sock.sendall(f"NAMES {channel}\r\n".encode())
+
+        buf = b""
+        deadline = time.time() + 6
+        while time.time() < deadline:
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            # Respond to PING so ergo doesn't drop us mid-check.
+            for line in buf.split(b"\r\n"):
+                if line.startswith(b"PING"):
+                    pong = line.replace(b"PING", b"PONG", 1)
+                    sock.sendall(pong + b"\r\n")
+            # 353 is RPL_NAMREPLY — the channel member list.
+            if b" 353 " in buf:
+                break
+        sock.close()
+
+        names_blob = buf.decode(errors="replace")
+        # Only the 353 (RPL_NAMREPLY) line carries the channel member list, in
+        # the form ":server 353 <my-nick> = #chan :nick1 nick2 ...". Do NOT
+        # match bot_nick anywhere in the buffer — it also appears in welcome /
+        # capability lines and would cause a false positive. Parse the 353 line.
+        members = ""
+        for line in names_blob.split("\r\n"):
+            if " 353 " in line and channel in line:
+                # Take the text after the last ':', which is the nick list.
+                members = line.split(":", 1)[-1].strip()
+                break
+        if bot_nick in members.split():
+            pytest.fail(
+                f"Refusing to launch: bot nick '{bot_nick}' is ALREADY in "
+                f"{channel} on ergo. Another SOPEL instance is already connected "
+                f"(leftover test run or another agent's bot). Kill/clean it up "
+                f"before running the suite — do NOT start a second competing bot."
+            )
+
     @pytest.fixture(scope="session")
     def sopel_bot_process(self, sopel_config):
         """Start a SOPEL bot subprocess and yield its handle.
@@ -339,8 +399,26 @@ sqlite_path = {db_path}
         env = os.environ.copy()
         env["PYTHONPATH"] = project_dir
 
-        stdout_file = open(os.path.join(tempfile.gettempdir(), "sopel_stdout.log"), "w")
-        stderr_file = open(os.path.join(tempfile.gettempdir(), "sopel_stderr.log"), "w")
+        # Fail loudly if a bot with our nick is ALREADY connected to the test
+        # channel. A leftover SOPEL instance (e.g. from a prior crashed test
+        # run, or another agent's bot) shares the channel and competes for
+        # replies, which silently contaminates results. We do NOT kill it —
+        # it may belong to another agent. We just refuse to launch on top of
+        # it so the failure is obvious instead of confusing.
+        self._assert_channel_vacant(self.TEST_CHANNEL, self.BOT_NICK)
+
+        # Timestamp the log files so each test run keeps its own history
+        # instead of overwriting /tmp/sopel_stderr.log (which made it
+        # impossible to compare runs or inspect a previous failure).
+        run_stamp = time.strftime("%Y%m%d-%H%M%S")
+        stderr_path = os.path.join(
+            tempfile.gettempdir(), f"sopel_stderr-{run_stamp}.log"
+        )
+        stdout_path = os.path.join(
+            tempfile.gettempdir(), f"sopel_stdout-{run_stamp}.log"
+        )
+        stdout_file = open(stdout_path, "w")
+        stderr_file = open(stderr_path, "w")
         proc = subprocess.Popen(
             ["sopel", "-c", str(sopel_config)],
             stdout=stdout_file,
@@ -351,7 +429,7 @@ sqlite_path = {db_path}
         # Wait until the bot has actually connected and joined (event-driven),
         # capped at BOT_STARTUP_WAIT so we never wait longer than before.
         self._wait_for_bot_ready(
-            os.path.join(tempfile.gettempdir(), "sopel_stderr.log"),
+            stderr_path,
             timeout=self.BOT_STARTUP_WAIT,
         )
         yield proc
@@ -421,8 +499,15 @@ sqlite_path = {db_path}
         env["PYTHONPATH"] = project_dir
         env.pop("OPENROUTER_API_KEY", None)
 
-        stdout_file = open(os.path.join(tempfile.gettempdir(), "sopel_errbot_stdout.log"), "w")
-        stderr_file = open(os.path.join(tempfile.gettempdir(), "sopel_errbot_stderr.log"), "w")
+        err_stamp = time.strftime("%Y%m%d-%H%M%S")
+        err_stdout_path = os.path.join(
+            tempfile.gettempdir(), f"sopel_errbot_stdout-{err_stamp}.log"
+        )
+        err_stderr_path = os.path.join(
+            tempfile.gettempdir(), f"sopel_errbot_stderr-{err_stamp}.log"
+        )
+        stdout_file = open(err_stdout_path, "w")
+        stderr_file = open(err_stderr_path, "w")
         proc = subprocess.Popen(
             ["sopel", "-c", str(sopel_config_bad_provider)],
             stdout=stdout_file,
@@ -433,7 +518,7 @@ sqlite_path = {db_path}
         # Wait until the bot has connected and joined (event-driven),
         # capped at BOT_STARTUP_WAIT so we never wait longer than before.
         self._wait_for_bot_ready(
-            os.path.join(tempfile.gettempdir(), "sopel_errbot_stderr.log"),
+            err_stderr_path,
             timeout=self.BOT_STARTUP_WAIT,
         )
         yield proc
@@ -565,6 +650,59 @@ sqlite_path = {db_path}
                         f"Bot replied when it should have stayed silent: {line}"
                     )
 
+    def _reply_text(self, privmsg_line):
+        """Extract the message body from a bot PRIVMSG IRC line.
+
+        `privmsg_line` is the list of lines returned by `_read_irc_until`
+        (which yields every line seen). We pick the first bot PRIVMSG line
+        and return its body. Format: `:TerraAI!~u@host PRIVMSG #chan :<text>`
+        → returns `<text>`.
+        """
+        if isinstance(privmsg_line, (list, tuple)):
+            line = next(
+                (l for l in privmsg_line
+                 if self.BOT_NICK in l and "PRIVMSG" in l),
+                privmsg_line[-1] if privmsg_line else "",
+            )
+        else:
+            line = privmsg_line
+        # Split on the first " PRIVMSG ", body is the rest.
+        parts = line.split(" PRIVMSG ", 1)
+        if len(parts) < 2:
+            return ""
+        tail = parts[1]
+        # tail looks like "#chan :body" — strip channel and leading ':'
+        body = tail.split(":", 1)[1] if ":" in tail else tail
+        return body.strip()
+
+    def _assert_no_nick_prefix(self, reply_text, nick=None):
+        """Fail if a bot reply leaks the user-turn <nick> prefix.
+
+        User messages arrive as `<Nick> text`; that prefix is part of the
+        USER turn only. The bot's reply must never echo it (e.g. it must
+        say `TestUnknown: 2+2 = 4`, NOT `<TestUnknown> 2+2 = 4`).
+
+        We only flag the *leak pattern*: a `<Nick>` token at the very start of
+        the reply (the model prefixing its own answer with the user-turn
+        marker), or the specific triggering user's `<nick>`. We do NOT reject
+        angle-bracket placeholders that legitimately appear in help/syntax text
+        such as `<prompt>` or `<city, state>` — those are documentation, not leaks.
+        """
+        import re
+        # Leak = a <Word> token at the start of the reply, optionally followed
+        # by ':' or whitespace (i.e. the model answering as "<Nick>: ...").
+        lead = re.match(r"\s*<\s*(\w[\w\-]*)\s*>[\s:]?", reply_text)
+        if lead:
+            raise AssertionError(
+                f"Bot reply leaked a <nick>-style prefix (user-turn marker) "
+                f"at the start: {reply_text!r} (matched <{lead.group(1)}>)"
+            )
+        # Specifically the triggering user's prefix anywhere in the reply.
+        if nick and re.search(rf"<\s*{re.escape(nick)}\s*>", reply_text):
+            raise AssertionError(
+                f"Bot reply echoed the user's <{nick}> prefix: {reply_text!r}"
+            )
+
     def test_sopel_connects_to_ergo(self, sopel_bot_process):
         """Test that SOPEL bot connects to ergochat via SSL."""
         # If the bot process is still running, it connected successfully
@@ -621,6 +759,8 @@ sqlite_path = {db_path}
             timeout=_test_timeout(4)
         )
         assert response is not None, "Bot did not respond to TerraAI: trigger"
+        # Bot replies must never echo the <nick> user-turn prefix.
+        self._assert_no_nick_prefix(self._reply_text(response), nick="TestTrigger")
 
         self._irc_quit(sock)
 
@@ -637,6 +777,35 @@ sqlite_path = {db_path}
             timeout=_test_timeout(4)
         )
         assert response is not None, "Bot did not respond to unknown command"
+        # The reply must not leak the <nick> user-turn prefix back out.
+        self._assert_no_nick_prefix(self._reply_text(response), nick="TestUnknown")
+
+        self._irc_quit(sock)
+
+    def test_bot_reply_not_nick_prefixed(self, sopel_bot_process):
+        """Bot replies must never echo the <nick> user-turn prefix.
+
+        User turns arrive as `<Nick> text`; that angle-bracket prefix is part
+        of the user turn only. If the model echoes it into its reply (e.g.
+        `<TestReply> 2+2 = 4` instead of `TestReply: 2+2 = 4`), the stored
+        history gets poisoned and the prefix leaks into future context. This
+        test fails if any bot reply carries a `<Word>`-style prefix.
+        """
+        sock = self._irc_connect("TestReply")
+        self._irc_join(sock, "TestReply", self.TEST_CHANNEL)
+
+        # A plain addressed trigger exercises the normal reply path.
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: what is 2+2\r\n".encode())
+
+        response = self._read_irc_until(
+            sock,
+            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
+            timeout=_test_timeout(4)
+        )
+        assert response is not None, "Bot did not respond to trigger"
+        reply_text = self._reply_text(response)
+        # First line of the reply must not contain a <nick> prefix.
+        self._assert_no_nick_prefix(reply_text, nick="TestReply")
 
         self._irc_quit(sock)
 
@@ -786,6 +955,8 @@ sqlite_path = {db_path}
             timeout=_test_timeout(4),  # AI reply; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to weather query"
+        # Bot replies must never echo the <nick> user-turn prefix.
+        self._assert_no_nick_prefix(self._reply_text(response), nick="TestWeather")
 
         full_text = "\n".join(response).lower()
         assert "traverse" in full_text or "weather" in full_text \
@@ -812,6 +983,8 @@ sqlite_path = {db_path}
             timeout=_test_timeout(4),  # AI reply; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to bare PM"
+        # Bot replies must never echo the <nick> user-turn prefix.
+        self._assert_no_nick_prefix(self._reply_text(response), nick="TestBarePM")
 
         self._irc_quit(sock)
 
@@ -835,6 +1008,8 @@ sqlite_path = {db_path}
             timeout=_test_timeout(8),  # tool loop + AI calls; bump TERRAI_TEST_TIMEOUT if slow
         )
         assert response is not None, "Bot did not respond to weather query"
+        # Bot replies must never echo the <nick> user-turn prefix.
+        self._assert_no_nick_prefix(self._reply_text(response), nick="TestWeatherTool")
 
         full_text = "\n".join(response).lower()
         assert "detroit" in full_text, \

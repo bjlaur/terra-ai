@@ -42,12 +42,52 @@ def setup(bot):
     """Called by Sopel when the plugin is loaded."""
     global _terrai
 
+    # SOPEL's setup_logging() uses logging.config.dictConfig with
+    # disable_existing_loggers=True, which disables the `terraai` logger
+    # (not named in its config) and never attaches it to a handler. Wire
+    # it to SOPEL's own console StreamHandler so our logs land in the same
+    # stream as `-d` output, and honor the configured logging level
+    # (WARNING by default, DEBUG under `sopel -d`).
+    _configure_logging(bot)
+
     # SOPEL already parsed the [terraai] section into bot.config.terraai
     # (a TerraAISection instance). Use it directly — no separate YAML needed.
     config = bot.config.terraai
     logger.info("TerraAI setup starting; model=%r", config.model)
     _terrai = TerraAI(config)
     logger.info("TerraAI setup complete")
+
+
+def _configure_logging(bot):
+    """Attach the `terraai` logger to SOPEL's console handler.
+
+    Without this, our logger is disabled by setup_logging()'s dictConfig and
+    emits nothing. Mirror the bot's configured logging_level so `-d` also
+    surfaces our DEBUG lines.
+    """
+    level = getattr(bot.settings.core, "logging_level", None) or "WARNING"
+    level = logging.getLevelName(level) if isinstance(level, str) else level
+    logger.setLevel(level)
+
+    # Borrow SOPEL's console handler if present so output shares one stream.
+    root = logging.getLogger()
+    console = None
+    for handler in root.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        ):
+            console = handler
+            break
+    if console is None:
+        # Fallback: SOPEL didn't install a console handler (e.g. non-TTY
+        # launch). Add our own so plugin logs are never silently dropped.
+        console = logging.StreamHandler()
+        console.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+    if console not in logger.handlers:
+        logger.addHandler(console)
+        logger.propagate = False
 
 
 def shutdown(bot=None):
@@ -229,8 +269,9 @@ def cmd_setlocation(bot, trigger):
     args = (trigger.group(2) or "").strip()
     # Store locally as custom prompt — no prefix, SOPEL already stripped it
     terra.prompts.add_prompt(server, "setlocation", args, nick)
-    # Forward to AI for the response (hybrid behavior)
-    text = f"{nick} setlocation {args}"
+    # Forward to AI for the response (hybrid behavior). The <nick> prefix is
+    # added by the single chokepoint in handle_ai_message, so pass bare text.
+    text = f"setlocation {args}"
     response = terra.handle_ai_message(server, channel, nick, text)
     if response:
         bot.say(response)

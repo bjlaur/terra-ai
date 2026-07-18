@@ -8,8 +8,7 @@ logger = logging.getLogger("terraai")
 from terra_ai.prompts.defaults import (
     DEFAULT_EFFORT,
     EFFORT_LEVELS,
-    FAKE_CONVERSATION,
-    SYSTEM_PROMPT_TEMPLATE,
+    SYSTEM_PROMPTS,
 )
 
 
@@ -33,26 +32,17 @@ class PromptManager:
             return True
         return False
 
-    def get_system_prompt(self) -> str:
-        """Get the system prompt with variables interpolated."""
-        botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
-        return SYSTEM_PROMPT_TEMPLATE.format(botnick=botnick)
-
     def get_context_seed(self, server: str, channel: str) -> list[dict]:
-        """Get the fake conversation as context seed.
+        """Get the prompt as a list of system messages (one per rule).
 
-        Uses source='system' so the AI knows it's context, not user messages.
+        Each entry in SYSTEM_PROMPTS becomes its own `system` turn so the
+        model weights every rule as an authoritative instruction.
         """
         botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
-        seed = []
-        for msg in FAKE_CONVERSATION:
-            content = msg["content"].replace("{botnick}", botnick)
-            seed.append({
-                "role": msg["role"],
-                "content": content,
-                "source": "system",
-            })
-        return seed
+        return [
+            {"role": "system", "content": tmpl.format(botnick=botnick)}
+            for tmpl in SYSTEM_PROMPTS
+        ]
 
     def add_prompt(self, server: str, trigger: str, response: str,
                    created_by: str | None = None) -> bool:

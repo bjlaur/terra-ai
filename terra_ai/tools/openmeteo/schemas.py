@@ -162,29 +162,6 @@ AIR_QUALITY_TOOL = {
     },
 }
 
-GEOCODE_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "geocode",
-        "description": (
-            "Resolve a place name to coordinates. Use when the user gives a "
-            "location that may need disambiguation, or when you want to cache "
-            "coordinates for follow-up weather queries. Returns latitude, "
-            "longitude, timezone, and admin info."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "City/place to resolve, e.g. 'Detroit, MI'.",
-                },
-            },
-            "required": ["location"],
-        },
-    },
-}
-
 WEATHER_REFERENCE_TOOL = {
     "type": "function",
     "function": {
@@ -214,11 +191,12 @@ WEATHER_REFERENCE_TOOL = {
 }
 
 # All Open-Meteo tools. The first milestone wires in weather_forecast; the
-# others are registered as they are implemented.
+# others are registered as they are implemented. geocode is intentionally
+# absent — weather_forecast geocodes internally, so a standalone geocode
+# tool is not exposed to the model.
 ALL_OPENMETEO_TOOLS = [
     WEATHER_FORECAST_TOOL,
     WEATHER_HISTORY_TOOL,
     AIR_QUALITY_TOOL,
     WEATHER_REFERENCE_TOOL,
-    GEOCODE_TOOL,
 ]
