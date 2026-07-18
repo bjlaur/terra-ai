@@ -12,6 +12,7 @@ This is the handoff state immediately before implementation begins:
 - The next action is Phase 0 only. Stop for review at its gate before beginning Phase 1.
 - The initial genuinely offline core subset passed with `76 passed, 4 deselected`. The mocked console subset exposed 22 failures because `TerraAITestClient` creates an unintended real `TerraAI` instance before tests replace it; this is a test-harness defect assigned to Phase 1, not a production regression baseline.
 - The ignored local environment contains a development OpenRouter key. Its presence is acknowledged and the user plans to rotate it later; do not print, edit, delete, or move it during cleanup.
+- The development key is explicitly authorized for credential-backed OpenRouter and Open-Meteo end-to-end tests when the applicable phase calls for them. Never print or commit it; default and fast suites remain offline, while real-service tests remain explicitly selected with `--real`.
 - `setlocation` is intentionally AI-driven. Stabilization must enforce opt-out before its AI call, but its persistence belongs to the deferred prompt-management redesign.
 - Prompt management, statistics/telemetry semantics, `-clear`/`-compact`, effort/reasoning controls, provider selection/fallback, container/package implementation, and future Open-Meteo tools are deferred.
 - Deleting deferred code always requires a specific proposal and user permission. The only pre-approved deferred deletion is the standalone Gemini provider scope documented under Implementation Permissions.
@@ -22,6 +23,7 @@ This is the handoff state immediately before implementation begins:
 ### Work
 
 - Record the current test inventory, marker behavior, execution time, network use, and known failures without changing production behavior.
+- Run the existing Ergo/Sopel suite when its local prerequisites are available, and review the harness itself rather than treating skipped collection as system coverage.
 - Add focused characterization tests for the highest-risk existing behavior: ordinary channel silence, addressed messages, commands, PM routing, opt-out, identity prefixing, history, tool dispatch, visible errors, and response length.
 - Prove ordinary channel messages never reach `TerraAI`, providers, tools, history, or any prompt/trace log.
 - Establish correlation-ID and logging tests before changing logging implementation.
@@ -33,6 +35,9 @@ This is the handoff state immediately before implementation begins:
 - Characterization tests pass through `plugin.py`.
 - Privacy failures are treated as blocking failures, not expected test drift.
 - Baseline results and known external prerequisites are documented.
+- The Ergo/Sopel suite has a recorded result or a concrete prerequisite blocker; an import-time skip alone is not accepted as execution.
+
+Phase 0 implementation results are recorded in [`code-review-phase-0-baseline.md`](code-review-phase-0-baseline.md). Stop for user review at this gate.
 
 ## Phase 1: Deterministic Test Harness
 
@@ -41,9 +46,12 @@ This is the handoff state immediately before implementation begins:
 - Refactor `TerraAITestClient` to accept injected `TerraAI`, provider, database, and bot state instead of constructing hidden duplicates or parsing `.env`.
 - Centralize fixtures for temporary databases, plugin global state, fake SOPEL dispatch, provider transports, and Open-Meteo transports.
 - Make all fast E2E tests traverse `plugin.py` while mocking only external service boundaries.
+- Consolidate paired mock/real copies into one scenario body whose fixture selects scripted or live external transports. Keep shared routing and contract assertions in that body; isolate only unavoidable live-output validation differences in small helpers.
 - Script OpenRouter HTTP responses so tests execute the real request builder, tool-call loop, executor, and final plugin response without reproducing that logic.
 - Replace real Open-Meteo calls in the default suite with deterministic response fixtures.
-- Normalize pytest markers: default runs are offline; `--real` enables credential-backed service tests through the same plugin route; Ergo remains an explicitly optional system dependency.
+- Normalize pytest markers: default runs are offline; `--real` enables credential-backed in-process service tests through the same plugin route; Ergo remains an explicitly selected system dependency and always uses real APIs.
+- Give Ergo an explicit system-test selection path with no import-time socket probe or accidental default API use. Own Ergo/Sopel startup, readiness failure, temporary configs/logs, sockets, and teardown deterministically.
+- Keep Ergo as a real-service-only system E2E suite. Never add a mocked Ergo mode or fold it into the in-process fast/real fixture. Similar scenarios may exist at both tiers because Ergo proves the distinct IRC/server/Sopel-process boundary; remove only duplication within Ergo that proves no additional behavior.
 - Remove duplicate tests that assert the same behavior through less complete paths, while retaining narrow unit tests for pure logic.
 - Diagnose and remove console/screenshot stalls and leaked workers/resources.
 
@@ -51,6 +59,7 @@ This is the handoff state immediately before implementation begins:
 
 - Default `pytest` performs no DNS or network access.
 - Fast E2E coverage enters through `plugin.py` and verifies downstream calls rather than recreating decisions.
+- Every behavior shared by fast and real E2E modes has one scenario/test body rather than parallel mock/real copies.
 - Tests close databases, clients, workers, and plugin globals reliably.
 - The complete offline suite passes with duration reporting and no multi-minute unexplained stalls.
 

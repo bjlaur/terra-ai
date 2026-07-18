@@ -16,6 +16,7 @@ OpenRouter remains the only configured production provider. The provider interfa
 - Make every end-to-end test enter through `plugin.py` and SOPEL dispatch in both fast and `--real` modes.
 - Fast E2E tests exercise the real plugin, `TerraAI`, provider tool loop, executor, and response routing while mocking only external HTTP transports.
 - `--real` runs equivalent plugin-routed scenarios against actual OpenRouter and Open-Meteo services.
+- Fast and real variants share one scenario/test body. A fixture or mode parameter selects scripted versus actual external transports; do not maintain parallel `_mock` and `_real` copies of the same routing assertion. Keep any unavoidable live-output assertion differences in small mode-aware assertion helpers.
 - Keep direct internal calls only in clearly named unit/component tests; never recreate production routing or tool-loop behavior inside tests.
 - Make default `pytest` fully offline and centralize real-test marker/credential handling.
 - Inject fixtures into `TerraAITestClient`; stop each test client from creating a hidden database/provider and parsing `.env`.
@@ -117,7 +118,7 @@ These rules are the source of truth for review and refactoring decisions. If exi
 
 13. **Errors are transparent for this private deployment.** IRC error messages retain useful underlying details instead of vague generic replacements. Error reporting must still avoid accidentally printing configured secrets.
 14. **IRC output remains deliverable.** Final replies respect the configured UTF-8 byte budget. Concise rewrites are bounded, retain the relevant conversation, and have a deterministic final fallback.
-15. **Fast and real E2E tests follow the same path.** Both enter through `plugin.py`. Fast tests replace external HTTP transports with deterministic fixtures; `--real` uses actual configured services. Default tests never use DNS or the network.
+15. **Fast and real E2E tests are the same scenarios on the same path.** Both enter through `plugin.py` and use one shared test body per behavior. A fixture or mode parameter selects deterministic external HTTP transports for fast mode or actual configured services for `--real`; do not duplicate tests by appending `_mock` and `_real`. Small mode-specific output validators are allowed when live model wording cannot be deterministic. Default tests never use DNS or the network.
 16. **There is one implementation of each decision.** Tests, console helpers, providers, and command wrappers may adapt inputs or capture outputs, but must not duplicate routing, history, capability, tool-loop, or command semantics.
 17. **Logging is correlated, levelled, and intentionally routed.** Assign one unique correlation ID when an inbound IRC event begins and propagate it through plugin routing, `TerraAI`, provider calls, tool calls, retries, errors, and the final response.
 
@@ -148,7 +149,7 @@ Prompt management is a separate follow-up after the current feature set is stabi
 - Component tests with mock HTTP transports that run actual OpenRouter request construction and tool-loop code.
 - Fast plugin E2E tests for channel messages, PMs, management commands, opt-in/out, noisy notices, weather calls, web-search availability, disabled tools, visible errors, history, and concise rewrites.
 - `--real` plugin E2E tests for chat, current-information search, weather/geographic disambiguation, noisy progress, and external-service errors.
-- Preserve Ergo/SOPEL process tests as the optional highest-level system suite.
+- Preserve Ergo/SOPEL process tests as the optional highest-level system E2E suite. Ergo always uses real APIs and never has a mocked mode; overlap with in-process tests is allowed when it proves the distinct IRC/server/process boundary.
 - Run compilation checks, the complete offline suite with duration reporting, and then the credential-backed real suite. Offline tests must make no network calls and must eliminate the current multi-minute stalls.
 
 ## Assumptions

@@ -266,6 +266,9 @@ def cmd_setlocation(bot, trigger):
     server = _server_name(bot)
     channel = _channel_name(trigger)
     nick = _nick(trigger)
+    if not _guard(server, nick):
+        return
+
     args = (trigger.group(2) or "").strip()
     # Store locally as custom prompt — no prefix, SOPEL already stripped it
     terra.prompts.add_prompt(server, "setlocation", args, nick)
