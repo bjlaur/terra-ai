@@ -42,13 +42,6 @@ class TestTerraAI:
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
 
-    @pytest.mark.real
-    def test_handle_ai_message_real(self, terra):
-        """Real version: handle_ai_message hits the real provider."""
-        result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
-        assert result is not None
-        assert result.strip() != ""
-
     def test_handle_optin(self, terra):
         result = terra.user.handle_optin("irc.example.com", "nick")
         assert "opted in" in result
@@ -64,13 +57,6 @@ class TestPluginRules:
     @pytest.mark.mock
     def test_addressed_freeform_allows_bots_mock(self):
         """$nick rule must allow bot-tagged messages."""
-        from terra_ai import plugin as terra_plugin
-        assert getattr(terra_plugin.addressed_freeform, 'allow_bots', False), \
-            "addressed_freeform.allow_bots must be True for IRCv3 bot tag compatibility"
-
-    @pytest.mark.real
-    def test_addressed_freeform_allows_bots_real(self):
-        """$nick rule must allow bot-tagged messages (real API)."""
         from terra_ai import plugin as terra_plugin
         assert getattr(terra_plugin.addressed_freeform, 'allow_bots', False), \
             "addressed_freeform.allow_bots must be True for IRCv3 bot tag compatibility"

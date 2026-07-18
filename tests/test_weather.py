@@ -1,41 +1,19 @@
-"""Tests for the Open-Meteo weather tools.
+"""Deterministic component tests for Open-Meteo weather behavior.
 
-Two layers:
-1. Unit-of-logic tests: real Open-Meteo HTTP, no AI. These call the tool
-   functions directly and validate the normalization / error handling.
-2. End-to-end tests: real OpenRouter AI + real Open-Meteo. These feed a
-   weather question to a live provider with tools=[...] and assert the
-   model calls weather_forecast and the final answer contains real data.
-
-ALL tests use real HTTP. No mocks, including no AI mocks.
-Source ~/.terra-ai/.env before running:
-    source ~/.terra-ai/.env && pytest tests/test_weather.py -v
+HTTP is replaced at the transport boundary, while production geocoding,
+forecast request construction, normalization, and tool execution remain real.
+Plugin-routed fast/real weather coverage lives in ``test_plugin_e2e.py``.
 """
 
 import json
-import os
-
 import pytest
+
+
+pytestmark = pytest.mark.usefixtures("scripted_services")
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-def _require_openmeteo():
-    """Open-Meteo needs no API key, but we skip if the network is blocked."""
-    # No key needed — Open-Meteo is keyless. Tests just need internet.
-    return True
-
-
-def _require_openrouter_key():
-    key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY not set. Source it from ~/.terra-ai/.env first:\n"
-            "    source ~/.terra-ai/.env"
-        )
-    return key
-
 
 @pytest.fixture
 def openmeteo_client():
@@ -43,24 +21,12 @@ def openmeteo_client():
     return OpenMeteoClient(timeout_s=10)
 
 
-@pytest.fixture
-def openrouter_provider():
-    from terra_ai.providers.openrouter import OpenRouterProvider
-    from tests.conftest import _load_sopel_test_cfg
-    key = _require_openrouter_key()
-    try:
-        model, _ = _load_sopel_test_cfg()
-    except RuntimeError as e:
-        raise RuntimeError(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
-    return OpenRouterProvider(model=model, api_key=key)
-
-
 # ---------------------------------------------------------------------------
-# 1. Unit-of-logic tests (real Open-Meteo HTTP, no AI)
+# Component tests (scripted Open-Meteo HTTP, no AI)
 # ---------------------------------------------------------------------------
 
 class TestGeocode:
-    """geocode_location: real Open-Meteo geocoding HTTP."""
+    """Geocoding request, selection, and normalization behavior."""
 
     def test_geocode_detroit(self, openmeteo_client):
         from terra_ai.tools.openmeteo.geocode import geocode_location
@@ -102,7 +68,7 @@ class TestGeocode:
 
 
 class TestWeatherForecastTool:
-    """execute_weather_forecast: real Open-Meteo forecast HTTP."""
+    """Forecast request, normalization, and error behavior."""
 
     def test_basic_forecast_detroit(self, openmeteo_client):
         from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
@@ -236,54 +202,3 @@ class TestSchemas:
         assert "openrouter:web_search" in names
         # geocode is NOT a standalone tool — weather_forecast geocodes internally.
         assert "geocode" not in names
-
-
-# ---------------------------------------------------------------------------
-# 2. End-to-end tests (real AI + real Open-Meteo)
-# ---------------------------------------------------------------------------
-
-class TestEndToEndWeatherForecast:
-    """Feed a real weather question to a live OpenRouter provider with tools.
-
-    Asserts the model calls weather_forecast and the final answer contains
-    real weather content.
-    """
-
-    def test_weather_detroit(self, openrouter_provider):
-        from terra_ai.tools.schemas import AVAILABLE_TOOLS
-        from terra_ai.providers.base import Message
-
-        messages = [
-            Message("system", "You are a concise IRC bot. Answer weather questions briefly."),
-            Message("user", "<tester> weather Detroit"),
-        ]
-        response = openrouter_provider.chat(
-            messages,
-            tools=AVAILABLE_TOOLS,
-        )
-        assert response, "Provider returned empty response"
-        lower = response.lower()
-        # The answer should mention Detroit and some weather detail.
-        assert "detroit" in lower, f"Response should mention Detroit:\n{response}"
-        # Should contain at least one weather-ish word.
-        weather_words = ["°", "temperature", "high", "low", "cloud", "rain",
-                        "clear", "wind", "forecast", "fahrenheit", "sunny",
-                        "partly", "mostly"]
-        assert any(w in lower for w in weather_words), \
-            f"Response should contain weather info:\n{response}"
-
-    def test_rain_tonight(self, openrouter_provider):
-        from terra_ai.tools.schemas import AVAILABLE_TOOLS
-        from terra_ai.providers.base import Message
-
-        messages = [
-            Message("system", "You are a concise IRC bot."),
-            Message("user", "<tester> rain tonight in Detroit?"),
-        ]
-        response = openrouter_provider.chat(
-            messages,
-            tools=AVAILABLE_TOOLS,
-        )
-        assert response, "Provider returned empty response"
-        lower = response.lower()
-        assert "detroit" in lower, f"Response should mention Detroit:\n{response}"

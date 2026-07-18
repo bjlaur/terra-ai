@@ -41,9 +41,17 @@ Phase 0 implementation results are recorded in [`code-review-phase-0-baseline.md
 
 ## Phase 1: Deterministic Test Harness
 
+Implementation note: removal of the Textual developer console, its UI and
+screenshot tests, and its dedicated dependency was explicitly approved during
+Phase 1. The fake SOPEL rule-manager support is retained as test-only code.
+Deleted non-UI scenarios must be covered by plugin-routed tests or, where they
+prove the external IRC/process boundary, by the always-real Ergo suite. The
+console remains recoverable from repository history; no replacement UI is
+planned.
+
 ### Work
 
-- Refactor `TerraAITestClient` to accept injected `TerraAI`, provider, database, and bot state instead of constructing hidden duplicates or parsing `.env`.
+- Remove the approved Textual console and retain only a minimal test-only fake SOPEL bot/client with no hidden `TerraAI`, provider, database, environment, or logging state.
 - Centralize fixtures for temporary databases, plugin global state, fake SOPEL dispatch, provider transports, and Open-Meteo transports.
 - Make all fast E2E tests traverse `plugin.py` while mocking only external service boundaries.
 - Consolidate paired mock/real copies into one scenario body whose fixture selects scripted or live external transports. Keep shared routing and contract assertions in that body; isolate only unavoidable live-output validation differences in small helpers.
@@ -133,10 +141,12 @@ Phase 0 implementation results are recorded in [`code-review-phase-0-baseline.md
 
 - Consolidate repeated plugin AI-response/noisy-callback handling without creating a second router.
 - Remove blocking provider work from SOPEL's non-threaded dispatcher path without weakening command precedence, duplicate prevention, or ordinary-channel privacy.
+- Audit the plugin against SOPEL's public lifecycle, configuration, rule and command precedence, trigger parsing, nickname addressing, permission checks, threading model, and output APIs. Remove home-grown equivalents or bypasses unless TerraAI has a documented domain-specific requirement that SOPEL does not provide.
+- Audit module and layer ownership across plugin, core, commands, prompts/context, providers, tools, database, configuration, and test support. Flag behavior implemented in the wrong module, provider or SOPEL details leaking across boundaries, convenience imports that invert dependencies, and modules with mixed reasons to change. Move code only when it establishes a clearer owner or removes coupling; do not reshuffle files for cosmetic architecture.
 - Remove `_KNOWN_NICK_COMMANDS`, its addressed-command suppression, and documentation/tests for nonexistent addressed management aliases. Keep management commands prefix-only.
 - Preserve prefixed `setlocation` as the single documented hybrid command.
 - Remove duplicated imports/logs, unused state, misleading names, stale comments, unnecessary broad catches, and redundant tests/helpers.
-- Review every production and console module for validation, ownership, side effects, concurrency assumptions, and dead or contradictory paths.
+- Review every production module and retained test helper for validation, ownership, side effects, concurrency assumptions, SOPEL emulation, and dead or contradictory paths.
 - Keep unregistered Open-Meteo schemas and retained experimental provider modules unless a specific removal is separately proposed and approved; clearly label their status in the meantime.
 - Correct active README sections affected by implemented behavior, configuration examples, test commands, architecture descriptions, and logging documentation. Leave historical plans and the unimplemented container/package plan for a future iteration.
 
@@ -201,3 +211,19 @@ Begin this only after the stabilization and cleanup phases above are green and r
 - Later decide whether effort is global, per-user, per-request, or admin-controlled; how it persists; and what happens when a provider or model does not support it.
 - Preserve the provider-neutral possibility of reasoning controls without adding it to the current provider contract or repairing dormant adapters for it.
 - If effort code makes an active cleanup materially harder, propose the precise code, commands, tests, state, and documentation to delete and request explicit permission first. After approval, leave a concise reimplementation note rather than maintaining a misleading partial feature.
+
+## Deferred Follow-Up: Explicit Web Search Instead of Weather Tool
+
+- Define how a user explicitly requests provider-native web search instead of
+  the local Open-Meteo weather tool for a weather question.
+- Add one shared plugin-routed fast/real scenario that proves web search ran,
+  no local weather tool ran, and the final reply was returned normally. Fast
+  mode should script OpenRouter's server-tool usage metadata; real mode should
+  observe actual provider usage rather than infer it from response wording.
+- Extend the always-real Ergo suite only if the IRC/SOPEL boundary adds useful
+  coverage, using noisy notices or correlated logs to distinguish
+  `Searching web...` from `Fetching weather...`.
+- The existing Ergo test named `test_bot_uses_web_search_for_weather` does not
+  establish this behavior: it only checks for weather-related reply text and
+  may pass after Open-Meteo use. Rename or replace it when this deferred item
+  is implemented; do not treat it as web-search selection coverage now.

@@ -15,8 +15,6 @@ A SOPEL plugin that turns an IRC bot into a provider-agnostic AI assistant.
 - Context-free AI prompts (`.ai <prompt>`)
 - Context compaction with AI-driven pruning, history `.clear`
 - Noisy mode (`.noisy`) — shows a "Thinking..." notice before AI responses
-- Test tool (`test_tool/chat.py`) — irssi-style Textual terminal UI
-- Screenshot regression tests (`test_tool/screenshot_test.py`) outputting SVGs
 - Performance stats tracking
 
 ## Requirements
@@ -56,14 +54,23 @@ docker run -v ./data:/home/terra-ai/data -v ./config:/home/terra-ai/config terra
 ## Development
 
 ```bash
-# Unit tests (fast; no external services)
-pytest tests/ --ignore=tests/test_ergo.py
+# Complete deterministic suite; .env is not loaded and network is blocked
+./test.sh fast
 
-# Integration tests (requires ergochat running on localhost:6667)
-ERGO_TEST=1 pytest tests/test_ergo.py -v
+# The same plugin E2E scenarios using OpenRouter and Open-Meteo from .env
+./test.sh real
+
+# Always-real IRC → Ergo → SOPEL → plugin → service → IRC system tests
+./test.sh ergo
+
+# Keep the system-test Ergo/SOPEL bot running for manual irssi testing
+./test.sh manual
+
+# All three gates in order
+./test.sh all
 
 # Check compilation
-python -m py_compile terra_ai/*.py terra_ai/**/*.py
+python -m compileall -q terra_ai tests
 ```
 
 ## Commands

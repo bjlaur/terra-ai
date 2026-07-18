@@ -1,6 +1,5 @@
 """Tests for TerraAI providers."""
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,9 +7,6 @@ import pytest
 from terra_ai.providers.base import AIProvider, Message
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
-
-# Skip real API tests unless OPENROUTER_API_KEY is set
-HAS_API_KEY = bool(os.environ.get("OPENROUTER_API_KEY"))
 
 
 class TestOpenRouterProvider:
@@ -134,38 +130,3 @@ class TestOpenRouterProviderMockAPI:
             call_kwargs = mock_post.call_args[1]
             body = call_kwargs.get("json", {})
             assert any(m.get("role") == "system" for m in body.get("messages", []))
-
-
-@pytest.mark.real
-@pytest.mark.skipif(not HAS_API_KEY, reason="OPENROUTER_API_KEY not set")
-class TestOpenRouterProviderRealAPI:
-    """Integration tests that hit the real OpenRouter API.
-
-    Only run when OPENROUTER_API_KEY environment variable is set.
-    """
-
-    def test_real_chat(self):
-        """Test a real API call to OpenRouter."""
-        from tests.conftest import _load_sopel_test_cfg
-        model, _ = _load_sopel_test_cfg()
-        provider = OpenRouterProvider(
-            model=model,
-            api_key=os.environ["OPENROUTER_API_KEY"],
-        )
-        messages = [Message("user", "Say hello in one word.")]
-        result = provider.chat(messages)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_real_chat_with_system_prompt(self):
-        """Test a real API call with system prompt."""
-        from tests.conftest import _load_sopel_test_cfg
-        model, _ = _load_sopel_test_cfg()
-        provider = OpenRouterProvider(
-            model=model,
-            api_key=os.environ["OPENROUTER_API_KEY"],
-        )
-        messages = [Message("user", "What is 2+2? Answer with just the number.")]
-        result = provider.chat(messages, system_prompt="You are a helpful math assistant.")
-        assert isinstance(result, str)
-        assert "4" in result

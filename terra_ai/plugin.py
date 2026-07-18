@@ -549,17 +549,17 @@ def pm_text_to_ai(bot, trigger):
         bot.say(response)
 
 
-# ── Test-console routing entry point ─────────────────────────────────────────
+# ── In-process test routing entry point ──────────────────────────────────────
 #
-# The test console (test_tool/console.py) routes through SOPEL's real rule
-# dispatcher via ``dispatch_line``.  The legacy manual-routing shims
+# Plugin tests route through SOPEL's real rule dispatcher via ``dispatch_line``.
+# The legacy manual-routing shims
 # (``handle_channel_message``, ``handle_pm_message``, ``_cmd_word``,
 # ``_notify_thinking``) have been removed — SOPEL's decorators now handle
 # all routing.
 
 
 def dispatch_line(bot, nick, line, is_pm=False):
-    """Route a user line through SOPEL's rule dispatcher (test-console entry point).
+    """Route a user line through SOPEL's rule dispatcher for tests.
 
     *bot* must have ``settings`` (with ``core.nick`` / ``core.prefix``) and
     ``rules`` (a populated :class:`sopel.plugins.rules.Manager``).  *line* is

@@ -1,8 +1,5 @@
 """Tests for TerraAI prompt and context managers."""
 
-import os
-import tempfile
-
 import pytest
 
 from terra_ai.context.manager import ContextManager
@@ -11,13 +8,13 @@ from terra_ai.prompts.manager import PromptManager
 
 
 @pytest.fixture
-def db():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
+def db(tmp_path):
+    config = DBConfig(path=str(tmp_path / "terraai.db"), wal=False)
     database = Database(config)
-    yield database
-    os.unlink(path)
+    try:
+        yield database
+    finally:
+        database.conn.close()
 
 
 @pytest.fixture

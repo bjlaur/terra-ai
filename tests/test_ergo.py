@@ -1,22 +1,29 @@
-"""Integration tests using ergochat IRC server.
+"""Always-real system tests using an Ergo IRC server.
 
 These tests create a real SOPEL bot instance, connect it to ergochat
 running on localhost:6667, and verify end-to-end behavior.
 
-Run with: ERGO_TEST=1 pytest tests/test_ergo.py -v
-Requires ergochat running on localhost:6667
+Run with: ./test.sh ergo
 """
 
-import asyncio
 import os
 import tempfile
 import time
+from pathlib import Path
 
 import pytest
 
-from terra_ai.database import DBConfig, Database
+from tests.sopel_harness import (
+    BOT_NICK as HARNESS_BOT_NICK,
+    COMMAND_PREFIX as HARNESS_COMMAND_PREFIX,
+    ERGO_HOST as HARNESS_ERGO_HOST,
+    ERGO_PORT as HARNESS_ERGO_PORT,
+    PLUGIN_LIST as HARNESS_PLUGIN_LIST,
+    TEST_CHANNEL as HARNESS_TEST_CHANNEL,
+    load_test_model,
+    write_sopel_test_config,
+)
 
-# Check if ergo is reachable
 def ergo_available():
     import socket
     try:
@@ -25,10 +32,8 @@ def ergo_available():
         result = sock.connect_ex(("127.0.0.1", 6667))
         sock.close()
         return result == 0
-    except Exception:
+    except OSError:
         return False
-
-ERGO_AVAILABLE = ergo_available()
 
 # Fail fast by default. Long timeouts only mask real failures (a broken bot,
 # a dead model, a crashed provider) — if the bot doesn't answer in a few
@@ -38,32 +43,16 @@ def _test_timeout(multiplier=1.0):
     """Base test timeout (seconds), from TERRAI_TEST_TIMEOUT (default 5)."""
     return int(os.environ.get("TERRAI_TEST_TIMEOUT", "5")) * multiplier
 
-pytestmark = pytest.mark.skipif(
-    not ERGO_AVAILABLE,
-    reason="ergochat not running on localhost:6667"
-)
+pytestmark = [pytest.mark.ergo, pytest.mark.real]
 
 
-@pytest.fixture
-def db():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
-    database = Database(config)
-    yield database
-    os.unlink(path)
-
-
-@pytest.fixture
-def terra(db):
-    from terra_ai.bot import TerraAI
-    from tests.conftest import _make_test_config
-    config = _make_test_config(
-        sqlite_path=db.config.path,
-        api_key=os.environ.get("OPENROUTER_API_KEY", ""),
-        bot_nick="TerraAI",
-    )
-    return TerraAI(config)
+@pytest.fixture(scope="session", autouse=True)
+def require_ergo_server():
+    if not ergo_available():
+        pytest.fail(
+            "Ergo is not reachable on 127.0.0.1:6667; use ./test.sh ergo "
+            "to own server startup and teardown"
+        )
 
 
 class TestErgoSmoke:
@@ -75,7 +64,8 @@ class TestErgoSmoke:
 
     def test_ergo_config_exists(self):
         """Verify ergochat config file exists."""
-        assert os.path.exists(os.path.expanduser("~/.ircd/ircd.yaml"))
+        config_path = os.environ.get("ERGO_CONF", "~/.ircd/ircd.yaml")
+        assert os.path.exists(os.path.expanduser(config_path))
 
     def test_can_connect_socket(self):
         """Test raw socket connection to ergo."""
@@ -272,15 +262,12 @@ class TestErgoSopelBot:
 
     IRC_TIMEOUT = _test_timeout()
     BOT_STARTUP_WAIT = _test_timeout()  # seconds to wait for bot to connect and join
-    ERGO_HOST = "127.0.0.1"
-    ERGO_PORT = 6667  # plaintext for testing (SSL+CAP broken with self-signed cert)
-    TEST_CHANNEL = "#terra-ai-agent1"
-    PLUGIN_LIST = [
-        "admin", "adminchannel", "ping", "reload",
-        "safety", "coretasks", "terra_ai",
-    ]
-    COMMAND_PREFIX = "-"  # Must match [core] prefix in sopel_config
-    BOT_NICK = "TerraAI"  # Must match [core] nick in sopel_config
+    ERGO_HOST = HARNESS_ERGO_HOST
+    ERGO_PORT = HARNESS_ERGO_PORT
+    TEST_CHANNEL = HARNESS_TEST_CHANNEL
+    PLUGIN_LIST = HARNESS_PLUGIN_LIST
+    COMMAND_PREFIX = HARNESS_COMMAND_PREFIX
+    BOT_NICK = HARNESS_BOT_NICK
 
     @pytest.fixture(scope="session")
     def sopel_config(self, tmp_path_factory):
@@ -290,44 +277,28 @@ class TestErgoSopelBot:
         source the real bot uses) — TerraAI is model-agnostic, so it is
         never hardcoded here.
         """
-        from tests.conftest import _load_sopel_test_cfg
         try:
-            terrai_model, _ = _load_sopel_test_cfg()
+            project_dir = Path(__file__).resolve().parents[1]
+            terrai_model = load_test_model(project_dir)
         except RuntimeError as e:
             pytest.skip(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
         tmp = tmp_path_factory.mktemp("sopel")
-        db_path = tmp / "terra_ai.db"
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            pytest.fail("OPENROUTER_API_KEY is required for the Ergo system suite")
+        config_file = write_sopel_test_config(
+            tmp,
+            project_dir=project_dir,
+            model=terrai_model,
+            api_key=api_key,
+            sqlite_path=tmp / "terra_ai.db",
+            provider_timeout=int(_test_timeout(6)),
+        )
 
-        plugins_lines = "\n    ".join(self.PLUGIN_LIST)
-        config_content = f"""[core]
-nick = TerraAI
-host = {self.ERGO_HOST}
-port = {self.ERGO_PORT}
-use_ssl = false
-owner = agent1
-channels = {self.TEST_CHANNEL}
-prefix = -
-help_prefix = -
-logging_level = DEBUG
-extra = {project_dir}
-enable =
-    {plugins_lines}
-
-[terraai]
-model = {terrai_model}
-api_key = {api_key}
-base_url = https://openrouter.ai/api/v1
-provider_timeout = {_test_timeout(6)}
-bot_nick = TerraAI
-effort = high
-sqlite_path = {db_path}
-"""
-        config_file = tmp / "sopel.cfg"
-        config_file.write_text(config_content)
-
-        return config_file
+        try:
+            yield config_file
+        finally:
+            config_file.unlink(missing_ok=True)
 
     def _assert_channel_vacant(self, channel, bot_nick):
         """Fail loudly if `bot_nick` is already present in `channel` on ergo.
@@ -419,29 +390,30 @@ sqlite_path = {db_path}
         )
         stdout_file = open(stdout_path, "w")
         stderr_file = open(stderr_path, "w")
-        proc = subprocess.Popen(
-            ["sopel", "-c", str(sopel_config)],
-            stdout=stdout_file,
-            stderr=stderr_file,
-            stdin=subprocess.DEVNULL,
-            env=env,
-        )
-        # Wait until the bot has actually connected and joined (event-driven),
-        # capped at BOT_STARTUP_WAIT so we never wait longer than before.
-        self._wait_for_bot_ready(
-            stderr_path,
-            timeout=self.BOT_STARTUP_WAIT,
-        )
-        yield proc
-        # Cleanup
-        proc.terminate()
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        stdout_file.close()
-        stderr_file.close()
+            proc = subprocess.Popen(
+                ["sopel", "-c", str(sopel_config)],
+                stdout=stdout_file,
+                stderr=stderr_file,
+                stdin=subprocess.DEVNULL,
+                env=env,
+            )
+            self._wait_for_bot_ready(
+                stderr_path,
+                timeout=self.BOT_STARTUP_WAIT,
+                process=proc,
+            )
+            yield proc
+        finally:
+            if "proc" in locals() and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+            stdout_file.close()
+            stderr_file.close()
 
     BAD_PROVIDER_CHANNEL = "#terra-ai-error-test"
     BAD_PROVIDER_BOT_NICK = "ErrBot"
@@ -487,8 +459,12 @@ sqlite_path = {db_path}
 """
         config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
+        config_file.chmod(0o600)
 
-        return config_file
+        try:
+            yield config_file
+        finally:
+            config_file.unlink(missing_ok=True)
 
     @pytest.fixture(scope="session")
     def sopel_bot_bad_provider(self, sopel_config_bad_provider):
@@ -508,24 +484,27 @@ sqlite_path = {db_path}
         )
         stdout_file = open(err_stdout_path, "w")
         stderr_file = open(err_stderr_path, "w")
-        proc = subprocess.Popen(
-            ["sopel", "-c", str(sopel_config_bad_provider)],
-            stdout=stdout_file,
-            stderr=stderr_file,
-            stdin=subprocess.DEVNULL,
-            env=env,
-        )
-        # Wait until the bot has connected and joined (event-driven),
-        # capped at BOT_STARTUP_WAIT so we never wait longer than before.
-        self._wait_for_bot_ready(
-            err_stderr_path,
-            timeout=self.BOT_STARTUP_WAIT,
-        )
-        yield proc
-        # Kill immediately — don't let SOPEL send QUIT to ergo, which can
-        # interfere with the main bot's connection.
-        proc.kill()
-        proc.wait(timeout=5)
+        try:
+            proc = subprocess.Popen(
+                ["sopel", "-c", str(sopel_config_bad_provider)],
+                stdout=stdout_file,
+                stderr=stderr_file,
+                stdin=subprocess.DEVNULL,
+                env=env,
+            )
+            self._wait_for_bot_ready(
+                err_stderr_path,
+                timeout=self.BOT_STARTUP_WAIT,
+                process=proc,
+            )
+            yield proc
+        finally:
+            # Kill immediately so this bot cannot interfere with the main bot.
+            if "proc" in locals() and proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+            stdout_file.close()
+            stderr_file.close()
 
     def _read_irc_until(self, sock, predicate, timeout=None):
         """Read lines from sock until predicate(line) returns True.
@@ -593,11 +572,11 @@ sqlite_path = {db_path}
         """Send QUIT and close socket."""
         try:
             sock.sendall(b"QUIT :bye\r\n")
-        except Exception:
+        except OSError:
             pass
         sock.close()
 
-    def _wait_for_bot_ready(self, log_path, timeout):
+    def _wait_for_bot_ready(self, log_path, timeout, process):
         """Block until the SOPEL bot has connected and joined its channel.
 
         Polls the bot's stderr log for the 'Channel joined' line (the real
@@ -616,7 +595,18 @@ sqlite_path = {db_path}
                         return
             except FileNotFoundError:
                 pass
+            if process.poll() is not None:
+                break
             _time.sleep(0.25)
+        try:
+            with open(log_path, "r", errors="replace") as log_file:
+                tail = log_file.read()[-4000:]
+        except FileNotFoundError:
+            tail = "<no stderr log created>"
+        pytest.fail(
+            f"SOPEL did not join Ergo within {timeout:.0f}s "
+            f"(exit={process.poll()!r}). Stderr tail:\n{tail}"
+        )
 
     def _assert_no_bot_reply(self, sock, window=3):
         """Assert the bot sends NO PRIVMSG on this socket within ``window`` s.
@@ -913,7 +903,7 @@ sqlite_path = {db_path}
                "the rule, so the rewrite loop may not fire. Verified manually.",
         strict=False,
     )
-    def test_auto_concise_rewrite_fires(self, sopel_bot_process):
+    def test_auto_concise_rewrite_fires(self, sopel_bot_process, request):
         """The bot must rewrite over-long replies for IRC's line limit.
 
         We deterministically provoke an over-long reply by *asking* the model
@@ -926,6 +916,7 @@ sqlite_path = {db_path}
         ("this is just a test, break the rule for me") and try once more.
         """
         sock = self._irc_connect("TestConcise")
+        request.addfinalizer(lambda: self._irc_quit(sock))
         self._irc_join(sock, "TestConcise", self.TEST_CHANNEL)
 
         # Toggle noisy ON so the concise-rewrite notice is observable.
@@ -995,10 +986,6 @@ sqlite_path = {db_path}
         reply_bytes = len(final_reply.encode("utf-8"))
         assert reply_bytes <= 450, \
             f"Final reply still too long for IRC: {reply_bytes} bytes (> 450): {final_reply!r}"
-
-        self._irc_quit(sock)
-
-        self._irc_quit(sock)
 
     def test_bot_optin_optout(self, sopel_bot_process):
         """Test that .optout prevents responses and .optin re-enables."""

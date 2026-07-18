@@ -1,8 +1,5 @@
 """Tests for TerraAI database layer."""
 
-import os
-import tempfile
-
 import pytest
 
 from terra_ai.database import (
@@ -17,14 +14,14 @@ from terra_ai.database import (
 
 
 @pytest.fixture
-def db():
-    """Create a temporary in-memory database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
+def db(tmp_path):
+    """Create one temporary database and close it after each test."""
+    config = DBConfig(path=str(tmp_path / "terraai.db"), wal=False)
     database = Database(config)
-    yield database
-    os.unlink(path)
+    try:
+        yield database
+    finally:
+        database.conn.close()
 
 
 @pytest.fixture

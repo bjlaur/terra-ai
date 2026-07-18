@@ -1,156 +1,180 @@
-"""Shared test fixtures.
+"""Shared pytest configuration and explicitly owned application fixtures."""
 
-Mock vs Real provider:
-
-- By default, all routing tests use a mocked OpenRouterProvider.chat()
-  that returns instantly — no real API calls, ~0.01s per test.
-
-- To run against the real API, pass --real on the command line.
-  Only tests marked @pytest.mark.real will hit the real provider.
-  Requires OPENROUTER_API_KEY to be set.
-
-- Tests marked @pytest.mark.mock always use the mock provider,
-  even when --real is passed.
-
-- Tests with no marker default to mock behavior.
-
-Run mock tests (default):  pytest
-Run real API tests:         pytest --real -m real
-Run everything:              pytest --real
-"""
-
+import configparser
 import os
-import tempfile
+import socket
+from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
-from terra_ai.bot import TerraAI
-from terra_ai.database import DBConfig, Database
-from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai import plugin as terra_plugin
+from terra_ai.bot import TerraAI
+from tests.support import PluginTestClient, build_fake_bot
+from tests.http_fakes import ScriptedServices
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--real", action="store_true", default=False,
-        help="Run tests that hit the real OpenRouter API",
+        "--real",
+        action="store_true",
+        default=False,
+        help="Use real external services for selected service E2E tests",
     )
+    parser.addoption(
+        "--ergo",
+        action="store_true",
+        default=False,
+        help="Run the always-real Ergo/SOPEL system tests",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Make external-service selection explicit and independent of addopts."""
+    run_real = config.getoption("--real")
+    run_ergo = config.getoption("--ergo")
+    skip_real = pytest.mark.skip(reason="real-service test requires --real")
+    skip_ergo = pytest.mark.skip(reason="Ergo system test requires --ergo")
+
+    for item in items:
+        is_ergo = Path(str(item.fspath)).name == "test_ergo.py"
+        if is_ergo:
+            item.add_marker("ergo")
+            item.add_marker("real")
+            if not run_ergo:
+                item.add_marker(skip_ergo)
+            continue
+        if item.get_closest_marker("real") and not run_real:
+            item.add_marker(skip_real)
 
 
 def _load_sopel_test_cfg():
-    """Parse config/sopel-test.cfg (the live test config, not .example).
-
-    The model is config, not environment: it lives in the [terraai] section
-    of the SOPEL .cfg, exactly as a real bot reads it. The API key stays a
-    secret in .env and is referenced from the .cfg as ${OPENROUTER_API_KEY}.
-
-    Returns (model, api_key) or raises if the .cfg is missing/unconfigured.
-    """
-    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            "config", "sopel-test.cfg")
-    if not os.path.exists(cfg_path):
+    """Return the configured real-service model and current API key."""
+    cfg_path = PROJECT_ROOT / "config" / "sopel-test.cfg"
+    if not cfg_path.exists():
         raise RuntimeError(
-            "config/sopel-test.cfg not found. Copy config/sopel-test.cfg.example "
-            "to config/sopel-test.cfg and set [terraai] model (and "
-            "api_key = ${OPENROUTER_API_KEY}). TerraAI is model-agnostic: no "
-            "model is hardcoded."
+            "config/sopel-test.cfg not found. Copy the example and set "
+            "[terraai] model before running real-service tests."
         )
-    import configparser
-    cp = configparser.ConfigParser()
-    cp.read(cfg_path)
-    model = cp.get("terraai", "model", fallback="").strip()
-    # The secret key is interpolated from env by SOPEL at load time; in tests
-    # we read it straight from the environment (never from the .cfg file).
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    parser = configparser.ConfigParser()
+    parser.read(cfg_path)
+    model = parser.get("terraai", "model", fallback="").strip()
     if not model:
-        raise RuntimeError(
-            "[terraai] model is empty in config/sopel-test.cfg. TerraAI is "
-            "model-agnostic — set it explicitly (e.g. 'tencent/hy3:free')."
-        )
-    return model, api_key
+        raise RuntimeError("[terraai] model is empty in config/sopel-test.cfg")
+    return model, os.environ.get("OPENROUTER_API_KEY", "")
 
 
 def _make_test_config(**overrides):
-    """Create a lightweight config with TerraAISection defaults.
+    """Build deterministic application configuration without reading secrets."""
+    values = {
+        "model": "test/model",
+        "api_key": "test-key",
+        "base_url": "https://openrouter.ai/api/v1",
+        "provider_timeout": 30,
+        "bot_nick": "TerraAI",
+        "effort": "high",
+        "sqlite_path": "data/test-terraai.db",
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
 
-    Tests don't have a running SOPEL bot, so we use a SimpleNamespace
-    with the same attributes as TerraAISection. The model comes from the
-    SOPEL test config (config/sopel-test.cfg), not a hardcoded default.
-    """
-    model, api_key = _load_sopel_test_cfg()
-    defaults = dict(
-        model=model,
-        api_key=api_key or "test-key",
-        base_url="https://openrouter.ai/api/v1",
-        provider_timeout=30,
-        bot_nick="",
-        effort="high",
-        sqlite_path="data/terraai.db",
+
+@pytest.fixture(autouse=True)
+def deny_unselected_network(request, monkeypatch):
+    """Fail immediately if an offline test attempts a network connection."""
+    is_real = bool(
+        request.node.get_closest_marker("real")
+        or request.node.get_closest_marker("e2e")
     )
-    defaults.update(overrides)
-    return SimpleNamespace(**defaults)
+    is_ergo = Path(str(request.node.fspath)).name == "test_ergo.py"
+    if (is_real and request.config.getoption("--real")) or (
+        is_ergo and request.config.getoption("--ergo")
+    ):
+        return
+
+    def blocked_connect(sock, address):
+        raise AssertionError(
+            f"offline test attempted network connection to {address!r}; "
+            "mock the external transport or mark/select it as real"
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", blocked_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", blocked_connect)
 
 
 @pytest.fixture
-def db():
-    """Temp SQLite database — cleaned up after test."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    config = DBConfig(path=path, wal=False)
-    database = Database(config)
-    yield database
-    os.unlink(path)
+def terra(tmp_path, request):
+    """One TerraAI instance, one database connection, and deterministic teardown."""
+    use_real = bool(
+        (
+            request.node.get_closest_marker("real")
+            or request.node.get_closest_marker("e2e")
+        )
+        and request.config.getoption("--real")
+        and not request.node.get_closest_marker("mock")
+    )
+    if use_real:
+        model, api_key = _load_sopel_test_cfg()
+        if not api_key:
+            pytest.fail("OPENROUTER_API_KEY is required with --real")
+    else:
+        model, api_key = "test/model", "test-key"
+
+    config = _make_test_config(
+        model=model,
+        api_key=api_key,
+        sqlite_path=str(tmp_path / "terraai.db"),
+    )
+    instance = TerraAI(config)
+    previous = terra_plugin._terrai
+    terra_plugin._terrai = instance
+    try:
+        yield instance
+    finally:
+        terra_plugin._terrai = previous
+        instance.db.conn.close()
 
 
 @pytest.fixture
-def terra(db, request):
-    """TerraAI instance — mock or real depending on markers.
+def plugin_bot(terra):
+    """Fresh SOPEL-compatible bot backed by the owned TerraAI fixture."""
+    return build_fake_bot()
 
-    Rules:
-    - @pytest.mark.mock → mock provider (always, even with --real)
-    - @pytest.mark.real + --real + key → real provider
-    - @pytest.mark.real without --real or key → skip
-    - No marker → mock provider (default)
-    """
-    has_key = bool(os.environ.get("OPENROUTER_API_KEY"))
-    marker_real = request.node.get_closest_marker("real")
-    marker_mock = request.node.get_closest_marker("mock")
 
-    if marker_real is not None:
-        if not request.config.getoption("--real"):
-            pytest.skip("@pytest.mark.real requires --real flag")
-        if not has_key:
-            pytest.skip("@pytest.mark.real requires OPENROUTER_API_KEY")
-        use_real = True
-    elif marker_mock is not None:
-        use_real = False
-    else:
-        # No marker → default mock
-        use_real = False
+@pytest.fixture
+def plugin_client(plugin_bot):
+    return PluginTestClient(plugin_bot)
 
-    config = _make_test_config(sqlite_path=db.config.path)
-    t = TerraAI(config)
 
-    if not use_real:
-        # Mock — patch provider.chat() to return instantly
-        original_chat = OpenRouterProvider.chat
+def _install_scripted_services(monkeypatch):
+    real_client = httpx.Client
+    scripted = ScriptedServices()
+    transport = httpx.MockTransport(scripted)
 
-        def mock_chat(self, messages, system_prompt=None, effort="high",
-                      tools=None, max_tool_rounds=3, noisy_callback=None):
-            # Simulate the real loop: notify "Thinking..." on each call.
-            if noisy_callback:
-                noisy_callback("Thinking...")
-            return "mocked AI response"
+    def client_with_scripted_transport(*args, **kwargs):
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)
 
-        OpenRouterProvider.chat = mock_chat
-        request.addfinalizer(lambda: setattr(OpenRouterProvider, "chat", original_chat))
-    else:
-        # Real API — set effort to low for speed
-        t.prompts.set_effort("low")
+    monkeypatch.setattr(httpx, "Client", client_with_scripted_transport)
+    return scripted
 
-    # So plugin handlers (_get_terra()) work in tests
-    terra_plugin._terrai = t
-    request.addfinalizer(lambda: setattr(terra_plugin, "_terrai", None))
 
-    return t
+@pytest.fixture
+def scripted_services(monkeypatch):
+    """Always use deterministic HTTP, including during a broader real run."""
+    return _install_scripted_services(monkeypatch)
+
+
+@pytest.fixture
+def service_transport(request, monkeypatch):
+    """Select real services or deterministic HTTP at the transport boundary."""
+    if (
+        request.config.getoption("--real")
+        and not request.node.get_closest_marker("mock")
+    ):
+        return None
+    return _install_scripted_services(monkeypatch)

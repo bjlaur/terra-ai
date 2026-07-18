@@ -13,15 +13,6 @@ import pytest
 
 from terra_ai import plugin as terra_plugin
 from terra_ai.prompts.defaults import IRC_SAFE_BYTES
-from test_tool.console import _build_fake_bot
-
-
-@pytest.fixture
-def plugin_bot(terra):
-    """A SOPEL-compatible bot with the production plugin rules registered."""
-    return _build_fake_bot()
-
-
 def dispatch(plugin_bot, text, *, nick="tester", is_pm=False):
     """Send one IRC message through the production plugin dispatcher."""
     return terra_plugin.dispatch_line(
@@ -117,6 +108,20 @@ def test_registered_management_command_does_not_also_route_to_ai(
     assert len(result["say"]) == 1
     assert "opted in" in result["say"][0]
     terra.handle_ai_message.assert_not_called()
+
+
+@pytest.mark.mock
+def test_tool_management_commands_use_plugin_state(terra, plugin_bot):
+    disabled = dispatch(plugin_bot, "-disable-tool weather_forecast")
+    listed = dispatch(plugin_bot, "-list-tools")
+    enabled = dispatch(plugin_bot, "-enable-tool weather_forecast")
+    unknown = dispatch(plugin_bot, "-disable-tool not_a_tool")
+
+    assert "disabled" in disabled["say"][0].lower()
+    assert "weather_forecast" in listed["say"][0]
+    assert "disabled" in listed["say"][0].lower()
+    assert "enabled" in enabled["say"][0].lower()
+    assert "unknown tool" in unknown["say"][0].lower()
 
 
 @pytest.mark.mock
