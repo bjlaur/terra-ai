@@ -102,6 +102,17 @@ class TestHistoryStore:
             history.append("irc.example.com", "#chan", "nick", "user", f"msg{i}")
         recent = history.recent("irc.example.com", "#chan", limit=5)
         assert len(recent) == 5
+        assert [r["content"] for r in recent] == [
+            "msg5", "msg6", "msg7", "msg8", "msg9"
+        ]
+
+    def test_recent_default_is_unbounded(self, history):
+        for i in range(55):
+            history.append("irc.example.com", "#chan", "nick", "user", f"msg{i}")
+        recent = history.recent("irc.example.com", "#chan")
+        assert len(recent) == 55
+        assert recent[0]["content"] == "msg0"
+        assert recent[-1]["content"] == "msg54"
 
     def test_clear_channel(self, history):
         history.append("irc.example.com", "#chan", "nick", "user", "hello")

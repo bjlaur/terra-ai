@@ -77,6 +77,24 @@ class TestGeocode:
         assert result["country_code"] == "US"
         assert abs(result["latitude"] - 41.88) < 0.1
 
+    def test_geocode_north_branch_mi(self, openmeteo_client):
+        """North Branch, MI must resolve to MICHIGAN, not Minnesota.
+
+        Open-Meteo ranks North Branch, MN above North Branch, MI by default,
+        and _clean_location_query strips the ', MI' state hint before the
+        query, so the geocoder never sees that Michigan was requested. This
+        test captures that bug: the requested state should disambiguate.
+        """
+        from terra_ai.tools.openmeteo.geocode import geocode_location
+        result = geocode_location(openmeteo_client, "North Branch, MI")
+        # Michigan, not Minnesota.
+        assert result["admin1"] == "Michigan", \
+            f"Expected Michigan, got {result['admin1']!r} ({result['name']})"
+        assert result["country_code"] == "US"
+        # North Branch, MI is near (43.23, -83.20).
+        assert abs(result["latitude"] - 43.23) < 0.1
+        assert abs(result["longitude"] - (-83.20)) < 0.1
+
     def test_geocode_unknown_raises(self, openmeteo_client):
         from terra_ai.tools.openmeteo.geocode import geocode_location
         with pytest.raises(ValueError, match="No location found"):

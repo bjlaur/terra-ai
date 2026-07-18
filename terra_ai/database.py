@@ -252,13 +252,25 @@ class HistoryStore:
         )
         self.db.conn.commit()
 
-    def recent(self, server: str, channel: str, limit: int = 50) -> list[dict]:
-        """Get recent messages for a channel, ordered oldest first."""
+    def recent(self, server: str, channel: str, limit: int | None = None) -> list[dict]:
+        """Get active-session messages for a channel, ordered oldest first."""
         session_id = self._get_active_session(server, channel)
+        if limit is None:
+            rows = self.db.conn.execute(
+                """SELECT * FROM conversation_history
+                   WHERE server = ? AND channel = ? AND session_id = ?
+                   ORDER BY id ASC""",
+                (server, channel, session_id)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
         rows = self.db.conn.execute(
-            """SELECT * FROM conversation_history
-               WHERE server = ? AND channel = ? AND session_id = ?
-               ORDER BY id ASC LIMIT ?""",
+            """SELECT * FROM (
+                   SELECT * FROM conversation_history
+                   WHERE server = ? AND channel = ? AND session_id = ?
+                   ORDER BY id DESC LIMIT ?
+               )
+               ORDER BY id ASC""",
             (server, channel, session_id, limit)
         ).fetchall()
         return [dict(r) for r in rows]

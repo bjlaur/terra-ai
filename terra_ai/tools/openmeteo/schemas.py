@@ -21,8 +21,12 @@ WEATHER_FORECAST_TOOL = {
                 "location": {
                     "type": ["string", "null"],
                     "description": (
-                        "City/place to check, e.g. 'Detroit, MI' or 'Chicago, IL'. "
-                        "If omitted, the tool will ask the model to request a location."
+                        "Location to pass to Open-Meteo geocoding. Preserve geographic "
+                        "qualifiers and normalize abbreviations to full administrative names. "
+                        "For example, when the user says 'North Branch, MI', send "
+                        "'North Branch, Michigan'. When needed, include the country, such as "
+                        "'London, Ontario, Canada'. Do not use US or Canadian postal "
+                        "abbreviations after the comma."
                     ),
                 },
                 "preset": {
@@ -77,7 +81,14 @@ WEATHER_HISTORY_TOOL = {
             "properties": {
                 "location": {
                     "type": ["string", "null"],
-                    "description": "City/place to check.",
+                    "description": (
+                        "Location to pass to Open-Meteo geocoding. Preserve geographic "
+                        "qualifiers and normalize abbreviations to full administrative names. "
+                        "For example, when the user says 'North Branch, MI', send "
+                        "'North Branch, Michigan'. When needed, include the country, such as "
+                        "'London, Ontario, Canada'. Do not use US or Canadian postal "
+                        "abbreviations after the comma."
+                    ),
                 },
                 "start_date": {
                     "type": "string",
@@ -125,7 +136,14 @@ AIR_QUALITY_TOOL = {
             "properties": {
                 "location": {
                     "type": ["string", "null"],
-                    "description": "City/place to check.",
+                    "description": (
+                        "Location to pass to Open-Meteo geocoding. Preserve geographic "
+                        "qualifiers and normalize abbreviations to full administrative names. "
+                        "For example, when the user says 'North Branch, MI', send "
+                        "'North Branch, Michigan'. When needed, include the country, such as "
+                        "'London, Ontario, Canada'. Do not use US or Canadian postal "
+                        "abbreviations after the comma."
+                    ),
                 },
                 "preset": {
                     "type": "string",
