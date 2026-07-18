@@ -90,7 +90,6 @@ Overall suite time: **204s (3m 24s)** excluding ergo tests.
 | TestPromptManager::test_effort | 0.01 | Fast |
 | TestContextManager::test_compose_context | 0.02 | Fast |
 | TestContextManager::test_save_exchange | 0.05 | Fast |
-| TestContextManager::test_save_system_message | 0.04 | Fast |
 | TestContextManager::test_compact | 0.07 | Fast |
 
 ### test_database.py (27 tests) — FAST

@@ -4,6 +4,10 @@ __pycache__/
 config/terraai.yaml
 config/terraai-test.yaml
 config/sopel-test.cfg
+config/unsafedomains.txt
+config/sopel-test.db
+config/sopel-test.tell.db
+config/sopel-sopel-test.pid
 *.log
 .env
 ircd/

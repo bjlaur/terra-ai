@@ -29,7 +29,6 @@ enable =
     ping
     reload
     safety
-    tell
     coretasks
     terra_ai
 

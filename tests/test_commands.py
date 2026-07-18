@@ -84,12 +84,6 @@ class TestContextManager:
         assert history[0]["content"] == "hello"
         assert history[1]["content"] == "hi there"
 
-    def test_save_system_message(self, context):
-        context.save_system_message("irc.example.com", "#chan", "nick", "location: chicago")
-        history = context.history.recent("irc.example.com", "#chan")
-        assert len(history) == 1
-        assert history[0]["source"] == "system"
-
     def test_compact(self, context):
         context.save_exchange("irc.example.com", "#chan", "nick", "hello", "hi")
         new_session = context.compact("irc.example.com", "#chan")

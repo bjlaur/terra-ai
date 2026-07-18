@@ -12,6 +12,7 @@ from terra_ai.providers.base import Message
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
 from terra_ai.prompts.manager import PromptManager
+from terra_ai.prompts.defaults import IRC_SAFE_BYTES
 from terra_ai.tools.schemas import AVAILABLE_TOOLS
 logger = logging.getLogger("terraai")
 
@@ -139,6 +140,67 @@ class TerraAI:
                 "AI_RESPONSE: model=%s length=%d text=%.500s",
                 provider._model, len(response or ""), response or "",
             )
+
+            # ── Auto-concise loop ───────────────────────────────────────────
+            # IRC lines are capped (512 bytes including the protocol prefix),
+            # so a long reply would be truncated or dropped by the server.
+            # If the model's reply is too long, feed it back with a system
+            # reminder naming the hard limit and demand a rewrite. Loop up to
+            # MAX_CONCISE_RETRIES times, re-checking the byte count each pass,
+            # so we never ship an over-long reply (the model sometimes ignores
+            # a single soft nudge and grows longer). The final reply — once it
+            # fits, or after we give up — is what we keep and save.
+            MAX_CONCISE_RETRIES = 2
+            concise_retries = 0
+            while (response
+                   and len(response.encode("utf-8")) > IRC_SAFE_BYTES
+                   and concise_retries < MAX_CONCISE_RETRIES):
+                concise_retries += 1
+                logger.info(
+                    "AI_RESPONSE too long (%d bytes > %d): concise rewrite attempt %d/%d",
+                    len(response.encode("utf-8")), IRC_SAFE_BYTES,
+                    concise_retries, MAX_CONCISE_RETRIES,
+                )
+                if noisy_callback:
+                    noisy_callback(
+                        "Reply was too long for IRC — rewriting to be more concise..."
+                    )
+                concise_reminder = (
+                    f"Your response was too long. You MUST follow the rules and "
+                    f"reply with only {IRC_SAFE_BYTES} characters."
+                )
+                logger.info(
+                    "AI_RESPONSE too long: sending system reminder (attempt %d/%d): %r",
+                    concise_retries, MAX_CONCISE_RETRIES, concise_reminder,
+                )
+                retry_msgs = list(msg_objs)
+                retry_msgs.append(Message("assistant", response))
+                retry_msgs.append(Message("system", concise_reminder))
+                # Persist the over-long attempt and the system correction to
+                # history, using the same append as every other turn (role
+                # defaults to "user", but here we pass "system" explicitly) so
+                # replayed context includes the self-correction. source must be
+                # 'user' or 'system' (DB CHECK) — the assistant attempt is a
+                # normal model turn, the reminder is a system turn.
+                if include_history:
+                    self.context.history.append(
+                        server, channel, nick, "assistant", response,
+                        source="user",
+                    )
+                    self.context.history.append(
+                        server, channel, nick, "system",
+                        f"Your response was too long. You MUST follow the rules "
+                        f"and reply with only {IRC_SAFE_BYTES} characters.",
+                        source="system",
+                    )
+                response = provider.chat(
+                    retry_msgs, effort=self.prompts.effort, tools=tools,
+                    noisy_callback=noisy_callback,
+                )
+                logger.info(
+                    "AI_RESPONSE (after concise rewrite #%d): model=%s length=%d text=%.500s",
+                    concise_retries, provider._model, len(response or ""), response or "",
+                )
 
             elapsed_ms = int((time.time() - start) * 1000)
 

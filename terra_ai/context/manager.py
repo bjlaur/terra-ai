@@ -65,12 +65,6 @@ class ContextManager:
         self.history.append(server, channel, nick, "user", user_message, source=source)
         self.history.append(server, channel, nick, "assistant", assistant_response, source=source)
 
-    def save_system_message(self, server: str, channel: str,
-                            nick: str, content: str):
-        """Save a system message to history (e.g. .setlocation)."""
-        session_id = self._get_or_create_session(server, channel)
-        self.history.append(server, channel, nick, "user", content, source="system")
-
     def compact(self, server: str, channel: str) -> str:
         """Mark current session as compacted and create a new one.
 
