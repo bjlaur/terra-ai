@@ -14,7 +14,7 @@ class _Core:
     prefix = r"\-"
     help_prefix = "-"
     alias_nicks = ()
-    owner = ""
+    owner = "admin"
     admins = ()
     admin_accounts = ()
     owner_account = ""

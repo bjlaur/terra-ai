@@ -142,10 +142,10 @@ def test_registered_command_does_not_fall_through_to_ai(
 
 
 def test_tool_management_round_trip(plugin_client, service_transport):
-    disabled = plugin_client.send_message("-disable-tool weather_forecast")
-    listed_disabled = plugin_client.send_message("-list-tools")
-    enabled = plugin_client.send_message("-enable-tool weather_forecast")
-    listed_enabled = plugin_client.send_message("-list-tools")
+    disabled = plugin_client.send_as("admin", "-disable-tool weather_forecast")
+    listed_disabled = plugin_client.send_as("admin", "-list-tools")
+    enabled = plugin_client.send_as("admin", "-enable-tool weather_forecast")
+    listed_enabled = plugin_client.send_as("admin", "-list-tools")
 
     assert "disabled" in disabled["say"][0].lower()
     assert "weather_forecast: disabled" in listed_disabled["say"][0].lower()
@@ -205,7 +205,7 @@ def test_context_free_ai_excludes_history_and_does_not_persist(
 def test_disabled_weather_tool_is_absent_from_provider_request(
     terra, plugin_client, service_transport, monkeypatch
 ):
-    disabled = plugin_client.send_message("-disable-tool weather_forecast")
+    disabled = plugin_client.send_as("admin", "-disable-tool weather_forecast")
     assert "disabled" in disabled["say"][0].lower()
 
     provider = terra.registry.get()

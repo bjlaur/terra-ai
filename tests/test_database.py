@@ -1,7 +1,9 @@
 """Tests for TerraAI database layer."""
 
-import pytest
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+
+import pytest
 
 from terra_ai.database import (
     CommandStats,
@@ -10,6 +12,7 @@ from terra_ai.database import (
     HistoryStore,
     PerformanceStats,
     PromptStore,
+    ToolPolicyStore,
     UserStore,
 )
 from terra_ai.commands.user import UserCommands
@@ -101,6 +104,64 @@ class TestUserStore:
         recreated = UserCommands(db, PromptManager(db))
         assert recreated.is_noisy("irc.example.com", "nick") is True
         assert recreated.handle_noisy("irc.example.com", "nick") == "Noisy mode OFF."
+
+
+class TestToolPolicyStore:
+    def test_policy_is_server_wide_and_isolated_between_servers(self, db):
+        policy = ToolPolicyStore(db)
+        policy.disable("irc.example.com", "weather_forecast")
+
+        assert policy.is_disabled("irc.example.com", "weather_forecast") is True
+        assert policy.is_disabled("irc.other.com", "weather_forecast") is False
+        assert policy.disabled_names("irc.example.com") == {"weather_forecast"}
+
+        policy.enable("irc.example.com", "weather_forecast")
+        assert policy.disabled_names("irc.example.com") == set()
+
+    def test_legacy_tool_table_is_replaced_without_losing_other_data(self, tmp_path):
+        path = tmp_path / "legacy.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            """
+            CREATE TABLE users (
+                server TEXT NOT NULL,
+                nick TEXT NOT NULL,
+                opted_in BOOLEAN NOT NULL DEFAULT 1,
+                noisy BOOLEAN NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (server, nick)
+            );
+            INSERT INTO users (server, nick) VALUES ('irc.example.com', 'keeper');
+            CREATE TABLE tools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server TEXT NOT NULL,
+                nick TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                disabled INTEGER NOT NULL DEFAULT 0,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(server, nick, tool_name)
+            );
+            INSERT INTO tools (server, nick, tool_name, disabled)
+                VALUES ('irc.example.com', 'old-user', 'weather_forecast', 1);
+            """
+        )
+        conn.close()
+
+        migrated = Database(DBConfig(path=str(path), wal=False))
+        try:
+            assert UserStore(migrated).get_user("irc.example.com", "keeper") is not None
+            tables = {
+                row["name"]
+                for row in migrated.fetchall(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            assert "tools" not in tables
+            assert "disabled_tools" in tables
+            assert ToolPolicyStore(migrated).disabled_names("irc.example.com") == set()
+        finally:
+            migrated.close()
 
 
 class TestHistoryStore:

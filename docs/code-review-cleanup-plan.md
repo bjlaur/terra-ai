@@ -162,6 +162,7 @@ Prompt management is a separate follow-up after the current feature set is stabi
 - Active README/configuration/test documentation is corrected; historical planning documents remain unchanged.
 - Deferred code is not automatically entitled to preservation or repair. If removing it would simplify stabilization, present the exact proposed deletion and its reimplementation note for user approval first. Do not delete deferred commands, modules, tests, documentation, or schema merely because they are unfinished.
 - SQLite compatibility is not mandatory, but it may be broken only after obtaining explicit user permission for the specific schema/reset change. Never delete, overwrite, migrate destructively, or instruct automatic recreation merely because a cleaner design is possible. Until permission is granted, preserve existing files and use compatible changes. Any approved reset must identify the exact files affected, document recovery/backup implications, and keep file deletion as a separate deliberate action.
+- Phase 5 permission was granted to discard only the legacy per-user `tools` table and replace it automatically with an empty server-wide `disabled_tools` table. No database file or unrelated table may be deleted; existing tool overrides intentionally reset to enabled.
 
 ## Deferred Effort/Reasoning Controls
 

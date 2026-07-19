@@ -15,6 +15,7 @@ from terra_ai.providers.base import Message
 from terra_ai.providers.registry import ProviderRegistry
 from terra_ai.prompts.manager import PromptManager
 from terra_ai.prompts.defaults import IRC_SAFE_BYTES
+from terra_ai.tools.policy import ToolPolicy
 from terra_ai.tools.schemas import LOCAL_TOOLS
 logger = logging.getLogger("terraai")
 
@@ -37,6 +38,7 @@ class TerraAI:
         self.context = ContextManager(self.db, self.prompts)
         self.management = ManagementCommands(self.db, self.prompts, help_prefix="-")
         self.user = UserCommands(self.db, self.prompts)
+        self.tool_policy = ToolPolicy(self.db)
         self.registry = registry
 
     def is_opted_in(self, server: str, nick: str) -> bool:
@@ -97,14 +99,7 @@ class TerraAI:
 
         # The provider owns exact wire logging and native feature schemas.
 
-        # Apply the current persisted local-tool overrides. Their accidental
-        # per-user storage and missing admin ownership are deferred for an
-        # explicit server-wide schema correction; do not treat that shape as
-        # part of the provider contract.
-        disabled = {
-            t["tool_name"] for t in self.user.list_tools(server, nick)
-            if t["disabled"]
-        }
+        disabled = self.tool_policy.disabled_names(server)
         tools = None
         if provider.capabilities.local_tools:
             tools = [

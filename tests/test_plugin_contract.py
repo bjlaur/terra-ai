@@ -156,16 +156,39 @@ def test_registered_management_command_does_not_also_route_to_ai(
 
 @pytest.mark.mock
 def test_tool_management_commands_use_plugin_state(terra, plugin_bot):
-    disabled = dispatch(plugin_bot, "-disable-tool weather_forecast")
-    listed = dispatch(plugin_bot, "-list-tools")
-    enabled = dispatch(plugin_bot, "-enable-tool weather_forecast")
-    unknown = dispatch(plugin_bot, "-disable-tool not_a_tool")
+    disabled = dispatch(plugin_bot, "-disable-tool weather_forecast", nick="admin")
+    listed = dispatch(plugin_bot, "-list-tools", nick="admin")
+    enabled = dispatch(plugin_bot, "-enable-tool weather_forecast", nick="admin")
+    unknown = dispatch(plugin_bot, "-disable-tool not_a_tool", nick="admin")
 
     assert "disabled" in disabled["say"][0].lower()
     assert "weather_forecast" in listed["say"][0]
     assert "disabled" in listed["say"][0].lower()
     assert "enabled" in enabled["say"][0].lower()
     assert "unknown tool" in unknown["say"][0].lower()
+
+
+@pytest.mark.mock
+@pytest.mark.parametrize(
+    "command",
+    ["disable-tool weather_forecast", "enable-tool weather_forecast", "list-tools"],
+)
+def test_tool_management_is_admin_only(terra, plugin_bot, command):
+    result = dispatch(plugin_bot, f"-{command}")
+
+    assert result["say"] == ["Permission denied. Tool management is admin-only."]
+    assert terra.tool_policy.disabled_names("test-network") == set()
+
+
+@pytest.mark.mock
+def test_tool_policy_is_server_wide(terra, plugin_bot):
+    dispatch(plugin_bot, "-disable-tool weather_forecast", nick="admin")
+
+    assert terra.tool_policy.disabled_names("test-network") == {"weather_forecast"}
+    terra.handle_ai_message = MagicMock(return_value="tool-disabled response")
+    result = dispatch(plugin_bot, "TerraAI: weather Detroit", nick="someone-else")
+
+    assert result["say"] == ["tool-disabled response"]
 
 
 @pytest.mark.mock

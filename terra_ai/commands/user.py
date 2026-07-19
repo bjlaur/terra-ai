@@ -2,18 +2,6 @@
 
 from terra_ai.database import Database
 from terra_ai.prompts.manager import PromptManager
-from terra_ai.tools.schemas import LOCAL_TOOLS
-
-
-def _valid_tool_names() -> set[str]:
-    """Return provider-neutral local tool names managed by commands."""
-    return {
-        t["function"]["name"]
-        for t in LOCAL_TOOLS
-        if "function" in t
-    }
-
-
 class UserCommands:
     """User-facing commands."""
 
@@ -59,29 +47,6 @@ class UserCommands:
     def is_noisy(self, server: str, nick: str) -> bool:
         """Check if user has noisy mode enabled."""
         return self._users().is_noisy(server, nick)
-
-    def disable_tool(self, server: str, nick: str, tool_name: str):
-        """Use the legacy override store pending server-wide admin redesign."""
-        self._users().disable_tool(server, nick, tool_name)
-
-    def enable_tool(self, server: str, nick: str, tool_name: str):
-        """Use the legacy override store pending server-wide admin redesign."""
-        self._users().enable_tool(server, nick, tool_name)
-
-    def list_tools(self, server: str, nick: str) -> list[dict]:
-        """Read the legacy override store pending server-wide redesign."""
-        return self._users().list_tools(server, nick)
-
-    def is_tool_disabled(self, server: str, nick: str, tool_name: str) -> bool:
-        """Read one legacy override pending server-wide redesign."""
-        return self._users().is_tool_disabled(server, nick, tool_name)
-
-    def valid_tool_names(self) -> set[str]:
-        """Return the set of tool names that can be disabled/enabled.
-
-        Delegates to the module-level helper so the logic lives in one place.
-        """
-        return _valid_tool_names()
 
     def handle_effort(self, args: str) -> str:
         """Handle .effort [level] command."""

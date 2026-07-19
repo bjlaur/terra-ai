@@ -174,18 +174,18 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_stats_server_command
                 ON command_stats (server, command, timestamp);
 
-            CREATE TABLE IF NOT EXISTS tools (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                server TEXT NOT NULL,
-                nick TEXT NOT NULL,
-                tool_name TEXT NOT NULL,
-                disabled INTEGER NOT NULL DEFAULT 0,
-                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(server, nick, tool_name)
-            );
+            -- Approved cleanup: legacy per-user tool overrides had the wrong
+            -- ownership and semantics. Discard only that table and replace it
+            -- with server-wide disabled-tool policy.
+            DROP INDEX IF EXISTS idx_tools_server_nick;
+            DROP TABLE IF EXISTS tools;
 
-            CREATE INDEX IF NOT EXISTS idx_tools_server_nick
-                ON tools (server, nick);
+            CREATE TABLE IF NOT EXISTS disabled_tools (
+                server TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (server, tool_name)
+            );
         """)
 
 
@@ -232,48 +232,6 @@ class UserStore:
         user = self.get_user(server, nick)
         return bool(user["noisy"]) if user else False
 
-    # ── Tool management ──────────────────────────────────────────────────
-
-    def disable_tool(self, server: str, nick: str, tool_name: str):
-        """Disable a tool for a user on a server."""
-        now = datetime.now(timezone.utc).isoformat()
-        with self.db.transaction() as conn:
-            conn.execute(
-                """INSERT INTO tools (server, nick, tool_name, disabled, timestamp)
-                   VALUES (?, ?, ?, 1, ?)
-                   ON CONFLICT(server, nick, tool_name) DO UPDATE SET
-                       disabled = 1, timestamp = ?""",
-                (server, nick, tool_name, now, now),
-            )
-
-    def enable_tool(self, server: str, nick: str, tool_name: str):
-        """Enable a tool for a user on a server."""
-        now = datetime.now(timezone.utc).isoformat()
-        with self.db.transaction() as conn:
-            conn.execute(
-                """INSERT INTO tools (server, nick, tool_name, disabled, timestamp)
-                   VALUES (?, ?, ?, 0, ?)
-                   ON CONFLICT(server, nick, tool_name) DO UPDATE SET
-                       disabled = 0, timestamp = ?""",
-                (server, nick, tool_name, now, now),
-            )
-
-    def list_tools(self, server: str, nick: str) -> list[dict]:
-        """List all tools and their enabled/disabled status for a user."""
-        rows = self.db.fetchall(
-            "SELECT tool_name, disabled FROM tools WHERE server = ? AND nick = ?",
-            (server, nick)
-        )
-        return [dict(r) for r in rows]
-
-    def is_tool_disabled(self, server: str, nick: str, tool_name: str) -> bool:
-        """Check if a specific tool is disabled for a user."""
-        row = self.db.fetchone(
-            "SELECT disabled FROM tools WHERE server = ? AND nick = ? AND tool_name = ?",
-            (server, nick, tool_name)
-        )
-        return bool(row["disabled"]) if row else False
-
     def _upsert(self, server: str, nick: str, **kwargs):
         now = datetime.now(timezone.utc).isoformat()
         with self.db.transaction() as conn:
@@ -288,6 +246,45 @@ class UserStore:
                  kwargs.get("opted_in"), kwargs.get("noisy"), now, now,
                  kwargs.get("opted_in"), kwargs.get("noisy"), now),
             )
+
+
+class ToolPolicyStore:
+    """Persistence for server-wide disabled local tools."""
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    def disable(self, server: str, tool_name: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.db.transaction() as conn:
+            conn.execute(
+                """INSERT INTO disabled_tools (server, tool_name, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(server, tool_name) DO UPDATE SET
+                       updated_at = excluded.updated_at""",
+                (server, tool_name, now),
+            )
+
+    def enable(self, server: str, tool_name: str) -> None:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "DELETE FROM disabled_tools WHERE server = ? AND tool_name = ?",
+                (server, tool_name),
+            )
+
+    def disabled_names(self, server: str) -> set[str]:
+        rows = self.db.fetchall(
+            "SELECT tool_name FROM disabled_tools WHERE server = ?",
+            (server,),
+        )
+        return {str(row["tool_name"]) for row in rows}
+
+    def is_disabled(self, server: str, tool_name: str) -> bool:
+        row = self.db.fetchone(
+            "SELECT 1 FROM disabled_tools WHERE server = ? AND tool_name = ?",
+            (server, tool_name),
+        )
+        return row is not None
 
 
 class HistoryStore:

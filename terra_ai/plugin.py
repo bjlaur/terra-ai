@@ -304,57 +304,57 @@ def cmd_setlocation(bot, trigger):
 
 
 @sopel_plugin.command("disable-tool")
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
 def cmd_disable_tool(bot, trigger):
-    """Disable a tool. Usage: -disable-tool <tool_name>"""
+    """Disable a local tool server-wide. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
-    nick = _nick(trigger)
     args = (trigger.group(2) or "").strip()
     if not args:
         bot.say("Usage: -disable-tool <tool_name>")
         return
-    valid = terra.user.valid_tool_names()
+    valid = terra.tool_policy.valid_names()
     if args not in valid:
         bot.say(f"Unknown tool '{args}'. Valid: {', '.join(sorted(valid))}")
         return
-    terra.user.disable_tool(server, nick, args)
+    terra.tool_policy.disable(server, args)
     bot.say(f"Tool '{args}' disabled.")
 
 
 @sopel_plugin.command("enable-tool")
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
 def cmd_enable_tool(bot, trigger):
-    """Enable a tool. Usage: -enable-tool <tool_name>"""
+    """Enable a local tool server-wide. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
-    nick = _nick(trigger)
     args = (trigger.group(2) or "").strip()
     if not args:
         bot.say("Usage: -enable-tool <tool_name>")
         return
-    valid = terra.user.valid_tool_names()
+    valid = terra.tool_policy.valid_names()
     if args not in valid:
         bot.say(f"Unknown tool '{args}'. Valid: {', '.join(sorted(valid))}")
         return
-    terra.user.enable_tool(server, nick, args)
+    terra.tool_policy.enable(server, args)
     bot.say(f"Tool '{args}' enabled.")
 
 
 @sopel_plugin.command("list-tools")
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
 def cmd_listtools(bot, trigger):
-    """List tools and their enabled/disabled status. Usage: -list-tools"""
+    """List server-wide local-tool policy. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
-    nick = _nick(trigger)
-    rows = terra.user.list_tools(server, nick)
-    if not rows:
+    statuses = terra.tool_policy.statuses(server)
+    if not statuses:
         bot.say("No tool overrides set. All tools enabled.")
         return
     parts = [
-        f"{r['tool_name']}: {'disabled' if r['disabled'] else 'enabled'}"
-        for r in rows
+        f"{name}: {'disabled' if disabled else 'enabled'}"
+        for name, disabled in statuses
     ]
     bot.say("Tools: " + "; ".join(parts))
 
