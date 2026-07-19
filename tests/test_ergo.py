@@ -890,9 +890,11 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
         combined = " ".join(all_notices).lower()
         assert "thinking" in combined, \
             f"Expected 'Thinking...' notice, got: {all_notices}"
-        tool_words = ["weather", "geocoding", "fetching", "forecast"]
-        assert any(w in combined for w in tool_words), \
-            f"Expected tool-specific notice, got: {all_notices}"
+        assert "fetching weather" in combined, \
+            f"Expected weather-tool progress notice, got: {all_notices}"
+        assert "(basic_forecast)" in combined, \
+            "Generic weather requests must select basic_forecast; " \
+            f"got notices: {all_notices}"
 
         self._irc_quit(sock)
 

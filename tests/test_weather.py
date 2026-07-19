@@ -226,6 +226,9 @@ class TestSchemas:
         assert func["name"] == "weather_forecast"
         assert "parameters" in func
         assert "preset" in func["parameters"]["properties"]
+        preset_description = func["parameters"]["properties"]["preset"]["description"]
+        assert "basic_forecast is the default for generic weather" in preset_description
+        assert "Use current only when the user explicitly asks" in preset_description
 
     def test_available_tools_includes_weather(self):
         from terra_ai.tools.schemas import LOCAL_TOOLS

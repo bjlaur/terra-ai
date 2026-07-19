@@ -43,7 +43,10 @@ WEATHER_FORECAST_TOOL = {
                     ],
                     "description": (
                         "Choose the smallest preset that answers the user. "
-                        "current=right now, basic_forecast=generic, "
+                        "basic_forecast is the default for generic weather requests "
+                        "such as 'weather Detroit' or 'what's the weather?'. "
+                        "Use current only when the user explicitly asks for right now, "
+                        "current conditions, or the current temperature. "
                         "rain=rain/snow/storms, hourly=hour-by-hour, "
                         "daily=multi-day, sun=sunrise/sunset, wind=wind/gusts, "
                         "full_debug=developer inspection only."
