@@ -1,6 +1,6 @@
 """Plugin-level characterization tests for TerraAI's routing contract.
 
-These tests enter through :func:`terra_ai.plugin.dispatch_line` and SOPEL's
+These tests enter through the test-only dispatcher and SOPEL's
 rule manager. External provider behavior is replaced at the boundary; routing,
 guards, identity handling, history, and plugin error handling remain real.
 """
@@ -13,9 +13,12 @@ import pytest
 
 from terra_ai import plugin as terra_plugin
 from terra_ai.prompts.defaults import IRC_SAFE_BYTES
+from tests.support import dispatch_line
+
+
 def dispatch(plugin_bot, text, *, nick="tester", is_pm=False):
     """Send one IRC message through the production plugin dispatcher."""
-    return terra_plugin.dispatch_line(
+    return dispatch_line(
         plugin_bot,
         nick,
         text,
@@ -65,6 +68,20 @@ def test_addressed_channel_prompt_routes_exactly_once(terra, plugin_bot):
 
 
 @pytest.mark.mock
+def test_addressed_command_word_is_an_ai_prompt(terra, plugin_bot):
+    """Nick addressing does not invent a second management-command syntax."""
+    terra.handle_ai_message = MagicMock(return_value="AI response")
+
+    result = dispatch(plugin_bot, "TerraAI: optin")
+
+    assert result["say"] == ["AI response"]
+    terra.handle_ai_message.assert_called_once()
+    assert terra.handle_ai_message.call_args.args == (
+        "test-network", "#terra-ai", "tester", "optin"
+    )
+
+
+@pytest.mark.mock
 def test_unknown_prefixed_channel_prompt_routes_exactly_once(terra, plugin_bot):
     terra.handle_ai_message = MagicMock(return_value="prefixed response")
 
@@ -75,6 +92,33 @@ def test_unknown_prefixed_channel_prompt_routes_exactly_once(terra, plugin_bot):
     args, kwargs = terra.handle_ai_message.call_args
     assert args == ("test-network", "#terra-ai", "tester", "explain sqlite")
     assert callable(kwargs["noisy_callback"])
+
+
+@pytest.mark.mock
+def test_unknown_prefix_uses_sopel_privmsg_detection(terra, plugin_bot):
+    """Non-# channel types must not be mistaken for private messages."""
+    terra.handle_ai_message = MagicMock(return_value="channel response")
+
+    result = dispatch_line(
+        plugin_bot,
+        "tester",
+        "-explain sqlite",
+        channel="&local",
+    )
+
+    assert result["say"] == ["channel response"]
+    assert terra.handle_ai_message.call_args.args == (
+        "test-network", "&local", "tester", "explain sqlite"
+    )
+
+
+def test_provider_calling_fallbacks_use_sopel_default_threading():
+    assert getattr(terra_plugin.unknown_prefixed_command_to_ai, "thread", True) is True
+    assert getattr(terra_plugin.pm_text_to_ai, "thread", True) is True
+
+
+def test_production_plugin_has_no_test_dispatcher():
+    assert not hasattr(terra_plugin, "dispatch_line")
 
 
 @pytest.mark.mock

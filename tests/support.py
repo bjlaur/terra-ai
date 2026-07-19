@@ -3,6 +3,8 @@
 from sopel.plugins import exceptions as plugin_exceptions
 from sopel.plugins import rules as plugin_rules
 from sopel.plugins.rules import Manager
+from sopel.bot import SopelWrapper
+from sopel.trigger import PreTrigger, Trigger
 
 from terra_ai import plugin as terra_plugin
 
@@ -91,8 +93,24 @@ def build_fake_bot() -> FakeBot:
     return bot
 
 
+def dispatch_line(bot, nick, line, is_pm=False, channel="#terra-ai"):
+    """Route a synthetic IRC line through Sopel's real rule dispatcher."""
+    target = bot.settings.core.nick if is_pm else channel
+    irc_line = f":{nick}!user@host PRIVMSG {target} :{line}"
+    pretrigger = PreTrigger(bot.settings.core.nick, irc_line)
+
+    bot.messages.clear()
+    bot.notices.clear()
+    for rule, match in bot.rules.get_triggered_rules(bot, pretrigger):
+        trigger = Trigger(bot.settings, pretrigger, match, account=None)
+        wrapper = SopelWrapper(bot, trigger)
+        rule.execute(wrapper, trigger)
+
+    return {"say": list(bot.messages), "notice": list(bot.notices)}
+
+
 class PluginTestClient:
-    """Convenience wrapper around :func:`terra_ai.plugin.dispatch_line`."""
+    """Convenience wrapper around the test-only Sopel dispatcher."""
 
     def __init__(self, bot: FakeBot | None = None):
         self.server = "test-network"
@@ -101,10 +119,10 @@ class PluginTestClient:
         self.bot = bot or build_fake_bot()
 
     def send_message(self, text: str) -> dict:
-        return terra_plugin.dispatch_line(self.bot, self.nick, text, is_pm=False)
+        return dispatch_line(self.bot, self.nick, text, is_pm=False)
 
     def send_as(self, nick: str, text: str) -> dict:
-        return terra_plugin.dispatch_line(self.bot, nick, text, is_pm=False)
+        return dispatch_line(self.bot, nick, text, is_pm=False)
 
     def send_pm(self, nick: str, text: str) -> dict:
-        return terra_plugin.dispatch_line(self.bot, nick, text, is_pm=True)
+        return dispatch_line(self.bot, nick, text, is_pm=True)

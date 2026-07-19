@@ -17,6 +17,7 @@ from terra_ai.logging_config import (
 )
 from terra_ai.providers.base import Message
 from terra_ai.providers.openrouter import OpenRouterProvider
+from tests.support import dispatch_line
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +141,7 @@ def test_plugin_prompt_and_final_response_share_event_correlation(
     operational_path, _ = _configure(tmp_path, io.StringIO())
     terra.registry.get().chat = MagicMock(return_value="answer line one\nline two")
 
-    result = terra_plugin.dispatch_line(
+    result = dispatch_line(
         plugin_bot,
         "tester",
         "TerraAI: quoted \"prompt\"",

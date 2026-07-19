@@ -5,7 +5,6 @@ import logging
 import re
 
 from sopel import plugin as sopel_plugin
-from sopel import bot as sopel_bot
 from sopel.trigger import Trigger
 
 from terra_ai.bot import TerraAI
@@ -36,13 +35,6 @@ def _irc_error_handler(func):
 
 # Global instance — set during setup
 _terrai: TerraAI | None = None
-
-_KNOWN_NICK_COMMANDS = {
-    "ai", "optin", "optout", "noisy", "setlocation",
-    "addprompt", "rmprompt", "listprompts",
-    "compact", "clear", "effort", "stats", "help",
-}
-
 
 def configure(config):
     """Register TerraAI's typed SOPEL configuration section."""
@@ -403,7 +395,6 @@ def _match_prefixed_command(bot, text: str):
 
 @sopel_plugin.rule_lazy(_prefix_fallback_loader)
 @sopel_plugin.priority('low')
-@sopel_plugin.thread(False)
 @_irc_error_handler
 def unknown_prefixed_command_to_ai(bot, trigger):
     """Route unknown `-whatever` messages to AI.
@@ -419,8 +410,7 @@ def unknown_prefixed_command_to_ai(bot, trigger):
 
     PMs are skipped — `pm_catch_all` handles all PM text to avoid duplicates.
     """
-    sender = trigger.sender or ""
-    if not sender.startswith("#"):
+    if trigger.is_privmsg:
         return  # PM — let pm_catch_all handle it
 
     command = (trigger.group('command') or '').strip()
@@ -461,7 +451,6 @@ def unknown_prefixed_command_to_ai(bot, trigger):
     if response:
         bot.say(response)
 
-
 # ── Freeform addressed queries: TerraAI: <message> ──────────────────────────
 
 @sopel_plugin.rule(r"$nick (.+)")
@@ -489,13 +478,6 @@ def addressed_freeform(bot, trigger):
     logger.debug(
         "addressed_freeform server=%r nick=%r text=%r", server, nick, text
     )
-    first_word = text.split(maxsplit=1)[0].lower().rstrip(":,") if text else ""
-
-    # Avoid double-processing known management commands
-    if first_word in _KNOWN_NICK_COMMANDS:
-        logger.debug("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
-        return
-
     # Build a noisy callback so the user can see tool-call progress.
     def _noisy_notify(msg):
         if terra.user.is_noisy(server, nick):
@@ -514,7 +496,6 @@ def addressed_freeform(bot, trigger):
 
 @sopel_plugin.rule(r"(.+)")
 @sopel_plugin.priority('low')
-@sopel_plugin.thread(False)
 @_irc_error_handler
 def pm_text_to_ai(bot, trigger):
     """Handle PM text that was not handled by a registered Sopel command.
@@ -584,59 +565,3 @@ def pm_text_to_ai(bot, trigger):
                                        noisy_callback=_noisy_notify)
     if response:
         bot.say(response)
-
-
-# ── In-process test routing entry point ──────────────────────────────────────
-#
-# Plugin tests route through SOPEL's real rule dispatcher via ``dispatch_line``.
-# The legacy manual-routing shims
-# (``handle_channel_message``, ``handle_pm_message``, ``_cmd_word``,
-# ``_notify_thinking``) have been removed — SOPEL's decorators now handle
-# all routing.
-
-
-def dispatch_line(bot, nick, line, is_pm=False):
-    """Route a user line through SOPEL's rule dispatcher for tests.
-
-    *bot* must have ``settings`` (with ``core.nick`` / ``core.prefix``) and
-    ``rules`` (a populated :class:`sopel.plugins.rules.Manager``).  *line* is
-    the plain text the user typed — this function wraps it in a minimal IRC
-    ``PRIVMSG`` before feeding it to :class:`~sopel.trigger.PreTrigger`.
-
-    Returns ``{"say": [...], "notice": [...]}`` with everything the handlers
-    produced via ``bot.say()`` / ``bot.notice()``.
-    """
-    from sopel.trigger import PreTrigger, Trigger
-    from sopel.bot import SopelWrapper
-
-    target = bot.settings.core.nick if is_pm else "#terra-ai"
-    # Build a minimal IRC PRIVMSG line that PreTrigger can parse.
-    # Format: :nick!user@host PRIVMSG <target> :<text>
-    irc_line = f":{nick}!user@host PRIVMSG {target} :{line}"
-    pretrigger = PreTrigger(bot.settings.core.nick, irc_line)
-
-    bot.messages.clear()
-    bot.notices.clear()
-
-    # If the bot has a live_notice callback (set by the console TUI),
-    # wire it so that bot.notice() also triggers an immediate UI update.
-    live_notice = getattr(bot, "live_notice", None)
-
-    for rule, match in bot.rules.get_triggered_rules(bot, pretrigger):
-        trigger = Trigger(bot.settings, pretrigger, match, account=None)
-        wrapper = SopelWrapper(bot, trigger)
-        rule.execute(wrapper, trigger)
-
-    result = {"say": list(bot.messages), "notice": list(bot.notices)}
-
-    # Deliver any buffered notices immediately after dispatch completes — but
-    # only if they weren't already streamed live during dispatch. When the
-    # TUI's FakeBot.notice() is relaying notices in real time (live_notice +
-    # the _notice_streamed_live flag), re-forwarding here would double-serve
-    # every notice. In the live IRC bot there is no flag, so notices still
-    # flush through sobot path.
-    if live_notice and not getattr(bot, "_notice_streamed_live", False):
-        for dest, msg in bot.notices:
-            live_notice(msg)
-
-    return result
