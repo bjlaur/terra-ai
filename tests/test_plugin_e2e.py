@@ -40,6 +40,7 @@ def test_unknown_prefixed_prompt(terra, plugin_client, service_transport):
         result = plugin_client.send_message("-what is 2+2?")
 
     handle_ai_message.assert_called_once()
+    assert handle_ai_message.call_args.args[3] == "-what is 2+2?"
     _assert_ai_reply(result, scripted_text="4")
 
 

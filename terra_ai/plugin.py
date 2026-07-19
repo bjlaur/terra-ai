@@ -437,8 +437,8 @@ def unknown_prefixed_command_to_ai(bot, trigger):
     """Route unknown `-whatever` messages to AI.
 
     Examples:
-      -what is 2+2       -> AI sees "what is 2+2"
-      -explain sqlite    -> AI sees "explain sqlite"
+      -what is 2+2       -> AI sees "-what is 2+2"
+      -explain sqlite    -> AI sees "-explain sqlite"
 
     Known Sopel commands are skipped:
       -help              -> normal @plugin.command('help') handler
@@ -451,7 +451,6 @@ def unknown_prefixed_command_to_ai(bot, trigger):
         return  # PM — let pm_catch_all handle it
 
     command = (trigger.group('command') or '').strip()
-    args = (trigger.group('args') or '').strip()
 
     if not command:
         return
@@ -474,7 +473,10 @@ def unknown_prefixed_command_to_ai(bot, trigger):
     if not terra.should_respond(server, nick):
         return
 
-    text = f'{command} {args}'.strip()
+    # Preserve the complete IRC input, including the configured prefix. The
+    # prefix is meaningful conversation context (for example, when the user
+    # later asks what they said). The anchored rule match covers the full line.
+    text = (trigger.group(0) or "").strip()
     logger.debug("TerraAI prefix fallback handling unknown command as AI: %r", text)
 
     # Build a noisy callback so the user can see tool-call progress.
@@ -539,7 +541,7 @@ def pm_text_to_ai(bot, trigger):
 
     Owns:
       hello                  -> AI sees "hello"
-      -weather Detroit       -> AI sees "weather Detroit"
+      -weather Detroit       -> AI sees "-weather Detroit"
       TerraAI: hello         -> AI sees "TerraAI: hello" (AI figures it out)
 
     Does NOT own:
@@ -565,7 +567,6 @@ def pm_text_to_ai(bot, trigger):
     m = _match_prefixed_command(bot, raw)
     if m:
         command = (m.group("command") or "").strip()
-        args = (m.group("args") or "").strip()
 
         if not command:
             return
@@ -581,8 +582,8 @@ def pm_text_to_ai(bot, trigger):
             )
             return
 
-        # Unknown prefixed PM: "-weather Detroit" -> "weather Detroit"
-        text = f"{command} {args}".strip()
+        # Preserve an unknown prefixed PM verbatim for conversation fidelity.
+        text = raw
     else:
         # Bare PM: send as-is. AI can figure out addressing.
         text = raw

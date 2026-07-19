@@ -90,7 +90,7 @@ def test_unknown_prefixed_channel_prompt_routes_exactly_once(terra, plugin_bot):
     assert result["say"] == ["prefixed response"]
     terra.handle_ai_message.assert_called_once()
     args, kwargs = terra.handle_ai_message.call_args
-    assert args == ("test-network", "#terra-ai", "tester", "explain sqlite")
+    assert args == ("test-network", "#terra-ai", "tester", "-explain sqlite")
     assert callable(kwargs["noisy_callback"])
 
 
@@ -108,7 +108,7 @@ def test_unknown_prefix_uses_sopel_privmsg_detection(terra, plugin_bot):
 
     assert result["say"] == ["channel response"]
     assert terra.handle_ai_message.call_args.args == (
-        "test-network", "&local", "tester", "explain sqlite"
+        "test-network", "&local", "tester", "-explain sqlite"
     )
 
 
@@ -126,7 +126,7 @@ def test_production_plugin_has_no_test_dispatcher():
     ("text", "expected_text"),
     [
         ("hello from PM", "hello from PM"),
-        ("-explain sqlite", "explain sqlite"),
+        ("-explain sqlite", "-explain sqlite"),
     ],
 )
 def test_pm_prompts_route_exactly_once(terra, plugin_bot, text, expected_text):
