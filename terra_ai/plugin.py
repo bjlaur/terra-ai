@@ -11,6 +11,7 @@ from sopel.trigger import Trigger
 from terra_ai.bot import TerraAI
 from terra_ai.config import TerraAISection
 from terra_ai.errors import event_error_scope, report_terminal_error
+from terra_ai.logging_config import configure_logging, shutdown_logging
 
 logger = logging.getLogger("terraai")
 
@@ -50,62 +51,55 @@ def setup(bot):
     """Called by Sopel when the plugin is loaded."""
     global _terrai
 
-    # SOPEL's setup_logging() uses logging.config.dictConfig with
-    # disable_existing_loggers=True, which disables the `terraai` logger
-    # (not named in its config) and never attaches it to a handler. Wire
-    # it to SOPEL's own console StreamHandler so our logs land in the same
-    # stream as `-d` output, and honor the configured logging level
-    # (WARNING by default, DEBUG under `sopel -d`).
-    _configure_logging(bot)
-
     bot.config.define_section("terraai", TerraAISection, validate=True)
     config = bot.config.terraai
+    _configure_logging(bot, config)
     if not config.bot_nick:
         config.bot_nick = bot.settings.core.nick
     logger.info("TerraAI setup starting; model=%r", config.model)
-    _terrai = TerraAI(config)
+    try:
+        _terrai = TerraAI(config)
+    except Exception:
+        logger.exception("TerraAI setup failed")
+        shutdown_logging()
+        raise
     logger.info("TerraAI setup complete")
 
 
-def _configure_logging(bot):
-    """Attach the `terraai` logger to SOPEL's console handler.
-
-    Without this, our logger is disabled by setup_logging()'s dictConfig and
-    emits nothing. Mirror the bot's configured logging_level so `-d` also
-    surfaces our DEBUG lines.
-    """
-    level = getattr(bot.settings.core, "logging_level", None) or "WARNING"
-    level = logging.getLevelName(level) if isinstance(level, str) else level
-    logger.setLevel(level)
-
-    # Borrow SOPEL's console handler if present so output shares one stream.
+def _configure_logging(bot, config):
+    """Install TerraAI handlers while sharing SOPEL's stderr stream."""
     root = logging.getLogger()
-    console = None
+    sopel_console = None
     for handler in root.handlers:
         if isinstance(handler, logging.StreamHandler) and not isinstance(
             handler, logging.FileHandler
         ):
-            console = handler
+            sopel_console = handler
             break
-    if console is None:
-        # Fallback: SOPEL didn't install a console handler (e.g. non-TTY
-        # launch). Add our own so plugin logs are never silently dropped.
-        console = logging.StreamHandler()
-        console.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-        )
-    if console not in logger.handlers:
-        logger.addHandler(console)
-        logger.propagate = False
+    configure_logging(
+        log_dir=config.log_dir,
+        secrets=(config.api_key,),
+        log_max_bytes=config.log_max_bytes,
+        log_backup_count=config.log_backup_count,
+        trace_max_bytes=config.trace_log_max_bytes,
+        trace_backup_count=config.trace_log_backup_count,
+        sopel_console=sopel_console,
+    )
 
 
 def shutdown(bot=None):
     """Called by Sopel when the plugin is unloaded."""
     global _terrai
     terra, _terrai = _terrai, None
-    if terra is not None:
-        terra.close()
-    logger.info("TerraAI plugin unloaded")
+    try:
+        if terra is not None:
+            terra.close()
+    except Exception:
+        logger.exception("TerraAI shutdown failed")
+        raise
+    finally:
+        logger.info("TerraAI plugin unloaded")
+        shutdown_logging()
 
 
 def _get_terra() -> TerraAI:
@@ -359,7 +353,7 @@ def _prefix_fallback_loader(settings):
     """
     prefix = settings.core.prefix
     pattern = rf'^(?:{prefix})(?P<command>\S+)(?:\s+(?P<args>.*))?$'
-    logger.info("TerraAI prefix fallback regex: %s", pattern)
+    logger.debug("TerraAI prefix fallback regex: %s", pattern)
     return [re.compile(pattern)]
 
 
@@ -419,9 +413,6 @@ def unknown_prefixed_command_to_ai(bot, trigger):
         )
         return
 
-    text = f'{command} {args}'.strip()
-    logger.info("TerraAI prefix fallback handling unknown command as AI: %r", text)
-
     terra = _get_terra()
     server = _server_name(bot)
     channel = _channel_name(trigger)
@@ -429,6 +420,9 @@ def unknown_prefixed_command_to_ai(bot, trigger):
 
     if not terra.should_respond(server, nick):
         return
+
+    text = f'{command} {args}'.strip()
+    logger.debug("TerraAI prefix fallback handling unknown command as AI: %r", text)
 
     # Build a noisy callback so the user can see tool-call progress.
     # Falls back to a no-op if noisy is disabled.
@@ -457,18 +451,23 @@ def addressed_freeform(bot, trigger):
     server = _server_name(bot)
     channel = _channel_name(trigger)
     nick = _nick(trigger)
-    logger.info("addressed_freeform server=%r nick=%r text=%r", server, nick, trigger.group(1))
-
     if not terra.should_respond(server, nick):
-        logger.info("addressed_freeform: should_respond=False")
+        logger.debug(
+            "addressed_freeform ignored: should_respond=False server=%r nick=%r",
+            server,
+            nick,
+        )
         return
 
     text = (trigger.group(1) or "").strip()
+    logger.debug(
+        "addressed_freeform server=%r nick=%r text=%r", server, nick, text
+    )
     first_word = text.split(maxsplit=1)[0].lower().rstrip(":,") if text else ""
 
     # Avoid double-processing known management commands
     if first_word in _KNOWN_NICK_COMMANDS:
-        logger.info("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
+        logger.debug("addressed_freeform: first_word=%r in KNOWN_NICK_COMMANDS", first_word)
         return
 
     # Build a noisy callback so the user can see tool-call progress.
@@ -476,10 +475,10 @@ def addressed_freeform(bot, trigger):
         if terra.user.is_noisy(server, nick):
             bot.notice(msg, nick)
 
-    logger.info("addressed_freeform: calling handle_ai_message text=%r", text)
+    logger.debug("addressed_freeform: calling handle_ai_message text=%r", text)
     response = terra.handle_ai_message(server, channel, nick, text,
                                        noisy_callback=_noisy_notify)
-    logger.info("addressed_freeform: response=%r", response)
+    logger.debug("addressed_freeform: response=%r", response)
     if response:
         bot.say(response)
 
@@ -554,7 +553,7 @@ def pm_text_to_ai(bot, trigger):
         if terra.user.is_noisy(server, nick):
             bot.notice(msg, nick)
 
-    logger.info("TerraAI PM fallback handling text as AI: %r", text)
+    logger.debug("TerraAI PM fallback handling text as AI: %r", text)
     response = terra.handle_ai_message(server, channel, nick, text,
                                        noisy_callback=_noisy_notify)
     if response:

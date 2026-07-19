@@ -145,6 +145,27 @@ def test_opted_out_user_cannot_reach_ai(terra, plugin_bot, text, is_pm):
 
 
 @pytest.mark.mock
+@pytest.mark.parametrize(
+    ("text", "is_pm"),
+    [
+        ("TerraAI: opted-out-private-7a19", False),
+        ("-unknown opted-out-private-7a19", False),
+        ("opted-out-private-7a19", True),
+    ],
+)
+def test_opted_out_prompt_text_is_not_logged(
+    terra, plugin_bot, caplog, text, is_pm
+):
+    terra.user.handle_optout("test-network", "tester")
+
+    with caplog.at_level(logging.DEBUG, logger="terraai"):
+        result = dispatch(plugin_bot, text, is_pm=is_pm)
+
+    assert result == {"say": [], "notice": []}
+    assert "opted-out-private-7a19" not in caplog.text
+
+
+@pytest.mark.mock
 def test_self_message_cannot_reach_ai(terra, plugin_bot):
     terra.handle_ai_message = MagicMock(return_value="unexpected AI response")
 

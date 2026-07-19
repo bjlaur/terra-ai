@@ -11,6 +11,7 @@ from tests.sopel_harness import (
     ERGO_PORT,
     TEST_CHANNEL,
     load_test_model,
+    get_test_run_directory,
     write_sopel_test_config,
 )
 
@@ -22,6 +23,7 @@ def main() -> int:
         raise SystemExit("OPENROUTER_API_KEY is required for manual mode")
     model = load_test_model(project_dir)
     timeout = int(os.environ.get("TERRAI_TEST_TIMEOUT", "5")) * 6
+    run_directory = get_test_run_directory("manual")
 
     with tempfile.TemporaryDirectory(prefix="terra-ai-manual-") as raw_directory:
         directory = Path(raw_directory)
@@ -32,6 +34,7 @@ def main() -> int:
             api_key=api_key,
             sqlite_path=directory / "terra_ai.db",
             provider_timeout=timeout,
+            log_dir=run_directory / "sopel",
         )
         print(
             f"Manual TerraAI is starting as {BOT_NICK} on "
@@ -41,6 +44,7 @@ def main() -> int:
             "In another terminal, connect irssi to 127.0.0.1:6667 and "
             f"join {TEST_CHANNEL}. Press Ctrl+C here to stop."
         )
+        print(f"Test artifacts: {run_directory}")
         process = subprocess.Popen(["sopel", "-c", str(config_file)])
         try:
             return process.wait()

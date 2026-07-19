@@ -102,7 +102,7 @@ Every confirmed review finding is assigned below. A later phase may discover mor
 ### Phase 3: Logging and observability
 
 - Correlated level routing, INFO prompt/response lifecycle records, DEBUG diagnostics, and TRACE wire payloads.
-- Dedicated rotating `terraai.log` and `openrouter-trace.log`, redaction, private permissions, concurrency, and reload-safe handler ownership.
+- Dedicated rotating `terra-ai.log` and `openrouter-trace.log`, redaction, private permissions, concurrency, and reload-safe handler ownership.
 - Replacement of borrowed root handlers and noisy INFO branch logging.
 
 ### Phase 4: Provider-neutral refactor

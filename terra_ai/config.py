@@ -68,3 +68,23 @@ class TerraAISection(types.StaticSection):
         'sqlite_path', default='data/terraai.db',
     )
     """Path to the SQLite database file."""
+
+    # ── Logging ────────────────────────────────────────────────────────
+
+    log_dir = types.FilenameAttribute(
+        'log_dir', directory=True, default='data/logs',
+    )
+    """Directory for TerraAI's operational and OpenRouter trace logs."""
+
+    log_max_bytes = types.ValidatedAttribute(
+        'log_max_bytes', parse=int, default=10 * 1024 * 1024,
+    )
+    log_backup_count = types.ValidatedAttribute(
+        'log_backup_count', parse=int, default=5,
+    )
+    trace_log_max_bytes = types.ValidatedAttribute(
+        'trace_log_max_bytes', parse=int, default=25 * 1024 * 1024,
+    )
+    trace_log_backup_count = types.ValidatedAttribute(
+        'trace_log_backup_count', parse=int, default=2,
+    )

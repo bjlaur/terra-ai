@@ -7,6 +7,7 @@ import time
 import httpx
 
 from terra_ai.errors import report_recoverable_error
+from terra_ai.logging_config import trace_openrouter
 from terra_ai.providers.base import AIProvider, Message
 from terra_ai.tools.executor import execute_tool
 
@@ -228,9 +229,9 @@ class OpenRouterProvider(AIProvider):
         reasoning = _reasoning_for_model(self._model, effort)
         if reasoning:
             payload["reasoning"] = reasoning
-            logger.info("OpenRouter chat: applying reasoning=%s", reasoning)
+            logger.debug("OpenRouter chat: applying reasoning=%s", reasoning)
         else:
-            logger.info("OpenRouter chat: no reasoning config for model=%s", self._model)
+            logger.debug("OpenRouter chat: no reasoning config for model=%s", self._model)
 
         # Build tools list: always include server-side web_search, plus any
         # local function tools the caller passed in.
@@ -249,27 +250,25 @@ class OpenRouterProvider(AIProvider):
             request_tools.extend(tools)
         payload["tools"] = request_tools
 
-        logger.info("OpenRouter chat: model=%s tools=%d", self._model, len(request_tools))
-
-        # DEBUG: the exact JSON request body sent to OpenRouter, including
-        # tools and reasoning — the true wire payload. Only with -d.
-        logger.debug(
-            "OpenRouter REQUEST BODY: model=%s\n%s",
-            self._model, json.dumps(payload, indent=2),
-        )
+        logger.debug("OpenRouter chat: model=%s tools=%d", self._model, len(request_tools))
 
         with httpx.Client(timeout=self._timeout) as client:
             tool_rounds = 0
             round_idx = 0
             while True:
                 # Notify caller: waiting for AI response.
-                logger.info("OpenRouter chat: round=%d — waiting on API response", round_idx)
+                logger.debug("OpenRouter chat: round=%d — waiting on API response", round_idx)
                 if noisy_callback:
                     noisy_callback("Thinking...")
 
                 api_start = time.time()
                 try:
+                    trace_openrouter(
+                        "request_json=%s",
+                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                    )
                     response = client.post(url, json=payload, headers=headers)
+                    trace_openrouter("response_body=%s", response.text)
                     response.raise_for_status()
                 except httpx.HTTPError as exc:
                     raise OpenRouterTransportError(
@@ -282,7 +281,7 @@ class OpenRouterProvider(AIProvider):
                     raise OpenRouterResponseError(
                         f"OpenRouter round {round_idx} returned invalid JSON: {exc}"
                     ) from exc
-                logger.info(
+                logger.debug(
                     "OpenRouter chat: round=%d API call took %d ms",
                     round_idx, api_ms,
                 )
@@ -294,7 +293,7 @@ class OpenRouterProvider(AIProvider):
                 # older and newer response shapes both surface the notice.
                 server_tool_use = _server_tool_usage(data, round_idx)
                 if server_tool_use.get("web_search_requests"):
-                    logger.info(
+                    logger.debug(
                         "OpenRouter web_search: requests=%d",
                         server_tool_use["web_search_requests"],
                     )
@@ -306,7 +305,7 @@ class OpenRouterProvider(AIProvider):
                 if not tool_calls:
                     # Final text answer — done.
                     content = message.get("content")
-                    logger.info(
+                    logger.debug(
                         "OpenRouter final: content_type=%s content_len=%s",
                         type(content).__name__, len(content) if content else 0,
                     )
@@ -326,7 +325,7 @@ class OpenRouterProvider(AIProvider):
                     )
 
                 # Has tool calls — execute them and feed results back.
-                logger.info(
+                logger.debug(
                     "OpenRouter tool_calls: round=%d count=%d — executing tools",
                     round_idx, len(tool_calls),
                 )
@@ -339,7 +338,7 @@ class OpenRouterProvider(AIProvider):
                     )
                     # Log the argument type/value — a None/missing arguments
                     # string is a common source of downstream .replace() errors.
-                    logger.info(
+                    logger.debug(
                         "Tool call: id=%s name=%s args_type=%s args=%r",
                         call_id, name, type(raw_args).__name__, raw_args,
                     )

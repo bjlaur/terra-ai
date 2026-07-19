@@ -152,7 +152,7 @@ def geocode_location(client: OpenMeteoClient, name: str) -> dict:
             "Geocode: requested %s but no result matched; fell back to %s, %s",
             requested_admin1, best.get("name"), best.get("admin1"),
         )
-    logger.info(
+    logger.debug(
         "Geocoded %r (requested admin1=%r) -> %s, %s (%.4f, %.4f)",
         name, requested_admin1, best.get("name"), best.get("admin1"),
         best.get("latitude"), best.get("longitude"),

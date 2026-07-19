@@ -104,19 +104,21 @@ Phase 2 implementation results are recorded in [`code-review-phase-2-correctness
 ### Work
 
 - Route the Phase 2 correlation context through the final logging handlers and verify propagation across plugin routing, `TerraAI`, provider calls, tools, retries, errors, and final responses.
-- Configure `terraai.log` as the rotating complete operational log at DEBUG and above.
+- Configure `terra-ai.log` as the rotating complete operational log at DEBUG and above.
 - Keep INFO, WARNING, and ERROR on SOPEL stderr; move routine routing/provider detail from INFO to DEBUG.
 - Add a custom TRACE level and a separate rotating `openrouter-trace.log` containing complete OpenRouter request and response JSON.
-- Keep TRACE out of `terraai.log` and keep DEBUG/TRACE off normal SOPEL stderr.
-- Add central recursive secret redaction, private file permissions, independent retention, and reload-safe handler setup/teardown.
+- Keep TRACE out of `terra-ai.log` and keep DEBUG/TRACE off normal SOPEL stderr.
+- Redact the configured provider API key from final formatted output, keep authorization headers out of logging, and add private file permissions, independent retention, and reload-safe handler setup/teardown.
 - Log model-visible prompt and final response at INFO with matching correlation IDs and single-line escaped formatting.
 
 ### Gate
 
 - Tests prove correct level routing, correlation propagation, redaction, source locations, private file setup, handler deduplication, and trace separation.
-- Every exception path records a full traceback in `terraai.log`.
+- Every exception path records a full traceback in `terra-ai.log`.
 - OpenRouter headers/API keys never appear in either file.
 - INFO stderr is limited to prompt/response and meaningful operational lifecycle records.
+
+Phase 3 implementation results are recorded in [`code-review-phase-3-logging.md`](code-review-phase-3-logging.md). Stop for user review at this gate.
 
 ## Phase 4: Provider-Neutral Refactor
 

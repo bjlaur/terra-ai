@@ -1,6 +1,10 @@
 """Shared configuration for automated and manual SOPEL/Ergo testing."""
 
 import configparser
+import os
+import tempfile
+from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -17,6 +21,24 @@ PLUGIN_LIST = (
     "coretasks",
     "terra_ai",
 )
+
+
+@lru_cache
+def get_test_run_directory(mode: str = "ergo") -> Path:
+    """Return the sortable, private artifact directory for this test run."""
+    configured = os.environ.get("TERRAI_TEST_RUN_DIR")
+    if configured:
+        directory = Path(configured)
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        directory = (
+            Path(tempfile.gettempdir())
+            / "terraai-tests"
+            / f"{stamp}-{mode}-{os.getpid()}"
+        )
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    return directory
 
 
 def load_test_model(project_dir: Path) -> str:
@@ -41,8 +63,11 @@ def write_sopel_test_config(
     api_key: str,
     sqlite_path: Path,
     provider_timeout: int,
+    log_dir: Path | None = None,
 ) -> Path:
     """Write the private config shared by Ergo tests and manual mode."""
+    log_dir = log_dir or get_test_run_directory()
+    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     plugins = "\n    ".join(PLUGIN_LIST)
     content = f"""[core]
 nick = {BOT_NICK}
@@ -54,6 +79,7 @@ channels = {TEST_CHANNEL}
 prefix = {COMMAND_PREFIX}
 help_prefix = {COMMAND_PREFIX}
 logging_level = DEBUG
+logdir = {log_dir}
 extra = {project_dir}
 enable =
     {plugins}
@@ -66,6 +92,7 @@ provider_timeout = {provider_timeout}
 bot_nick = {BOT_NICK}
 effort = high
 sqlite_path = {sqlite_path}
+log_dir = {log_dir / 'terra-ai'}
 """
     config_file = directory / "sopel.cfg"
     config_file.write_text(content)

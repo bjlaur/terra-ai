@@ -72,7 +72,7 @@ class OpenMeteoClient:
             )
 
         duration_ms = int((time.time() - start) * 1000)
-        logger.info(
+        logger.debug(
             "OpenMeteo request: url=%s duration_ms=%d",
             url, duration_ms,
         )

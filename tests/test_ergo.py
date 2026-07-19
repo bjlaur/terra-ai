@@ -21,6 +21,7 @@ from tests.sopel_harness import (
     PLUGIN_LIST as HARNESS_PLUGIN_LIST,
     TEST_CHANNEL as HARNESS_TEST_CHANNEL,
     load_test_model,
+    get_test_run_directory,
     write_sopel_test_config,
 )
 
@@ -293,6 +294,7 @@ class TestErgoSopelBot:
             api_key=api_key,
             sqlite_path=tmp / "terra_ai.db",
             provider_timeout=int(_test_timeout(6)),
+            log_dir=get_test_run_directory() / "sopel",
         )
 
         try:
@@ -378,18 +380,13 @@ class TestErgoSopelBot:
         # it so the failure is obvious instead of confusing.
         self._assert_channel_vacant(self.TEST_CHANNEL, self.BOT_NICK)
 
-        # Timestamp the log files so each test run keeps its own history
-        # instead of overwriting /tmp/sopel_stderr.log (which made it
-        # impossible to compare runs or inspect a previous failure).
-        run_stamp = time.strftime("%Y%m%d-%H%M%S")
-        stderr_path = os.path.join(
-            tempfile.gettempdir(), f"sopel_stderr-{run_stamp}.log"
-        )
-        stdout_path = os.path.join(
-            tempfile.gettempdir(), f"sopel_stdout-{run_stamp}.log"
-        )
+        run_directory = get_test_run_directory()
+        stderr_path = run_directory / "sopel-stderr.log"
+        stdout_path = run_directory / "sopel-stdout.log"
         stdout_file = open(stdout_path, "w")
         stderr_file = open(stderr_path, "w")
+        stdout_path.chmod(0o600)
+        stderr_path.chmod(0o600)
         try:
             proc = subprocess.Popen(
                 ["sopel", "-c", str(sopel_config)],
@@ -399,7 +396,7 @@ class TestErgoSopelBot:
                 env=env,
             )
             self._wait_for_bot_ready(
-                stderr_path,
+                str(stderr_path),
                 timeout=self.BOT_STARTUP_WAIT,
                 process=proc,
             )
@@ -436,6 +433,8 @@ class TestErgoSopelBot:
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         plugins_lines = "\n    ".join(self.PLUGIN_LIST)
+        bad_provider_log_dir = get_test_run_directory() / "sopel-bad-provider"
+        bad_provider_log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         config_content = f"""[core]
 nick = {self.BAD_PROVIDER_BOT_NICK}
 host = {self.ERGO_HOST}
@@ -445,6 +444,7 @@ owner = agent1
 channels = {self.BAD_PROVIDER_CHANNEL}
 prefix = -
 help_prefix = -
+logdir = {bad_provider_log_dir}
 extra = {project_dir}
 enable =
     {plugins_lines}
@@ -456,6 +456,7 @@ base_url = http://127.0.0.1:1/nonexistent
 provider_timeout = {_test_timeout(6)}
 effort = high
 sqlite_path = {db_path}
+log_dir = {bad_provider_log_dir / 'terra-ai'}
 """
         config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
@@ -475,15 +476,13 @@ sqlite_path = {db_path}
         env["PYTHONPATH"] = project_dir
         env.pop("OPENROUTER_API_KEY", None)
 
-        err_stamp = time.strftime("%Y%m%d-%H%M%S")
-        err_stdout_path = os.path.join(
-            tempfile.gettempdir(), f"sopel_errbot_stdout-{err_stamp}.log"
-        )
-        err_stderr_path = os.path.join(
-            tempfile.gettempdir(), f"sopel_errbot_stderr-{err_stamp}.log"
-        )
+        run_directory = get_test_run_directory()
+        err_stdout_path = run_directory / "sopel-bad-provider-stdout.log"
+        err_stderr_path = run_directory / "sopel-bad-provider-stderr.log"
         stdout_file = open(err_stdout_path, "w")
         stderr_file = open(err_stderr_path, "w")
+        err_stdout_path.chmod(0o600)
+        err_stderr_path.chmod(0o600)
         try:
             proc = subprocess.Popen(
                 ["sopel", "-c", str(sopel_config_bad_provider)],
@@ -493,7 +492,7 @@ sqlite_path = {db_path}
                 env=env,
             )
             self._wait_for_bot_ready(
-                err_stderr_path,
+                str(err_stderr_path),
                 timeout=self.BOT_STARTUP_WAIT,
                 process=proc,
             )

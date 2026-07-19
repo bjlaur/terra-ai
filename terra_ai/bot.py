@@ -1,5 +1,6 @@
 """Core TerraAI plugin logic."""
 
+import json
 import logging
 import time
 
@@ -94,8 +95,6 @@ class TerraAI:
 
         start = time.time()
 
-        logger.info("AI_PROMPT: nick=%s channel=%s text=%r", nick, channel, text)
-
         # Prefix the user message with <nick> exactly ONCE, here — this is
         # the single chokepoint. The prefixed form is what the AI sees and
         # what gets stored in history, so replayed history matches live.
@@ -131,8 +130,15 @@ class TerraAI:
             t["function"]["name"] if "function" in t else t.get("type", "unknown")
             for t in tools
         ]
-        logger.info("AI_REQUEST: model=%s effort=%s messages=%d tools=%s",
-                    provider._model, self.prompts.effort, len(msg_objs), tool_names)
+        logger.info(
+            "AI prompt sent: model=%s nick=%s channel=%s prompt=%s",
+            provider._model,
+            nick,
+            channel,
+            json.dumps(model_text, ensure_ascii=False),
+        )
+        logger.debug("AI request: model=%s effort=%s messages=%d tools=%s",
+                     provider._model, self.prompts.effort, len(msg_objs), tool_names)
         response = provider.chat(
             msg_objs, effort=self.prompts.effort, tools=tools,
             noisy_callback=noisy_callback,
@@ -141,9 +147,11 @@ class TerraAI:
             raise ValueError(
                 f"Provider {provider.name!r} returned an empty or non-text response"
             )
-        logger.info(
-            "AI_RESPONSE: model=%s length=%d text=%.500s",
-            provider._model, len(response or ""), response or "",
+        logger.debug(
+            "AI provider response: model=%s length=%d text=%s",
+            provider._model,
+            len(response or ""),
+            json.dumps(response or "", ensure_ascii=False),
         )
 
         # ── Auto-concise loop ───────────────────────────────────────────
@@ -162,8 +170,8 @@ class TerraAI:
                and len(response.encode("utf-8")) > IRC_SAFE_BYTES
                and concise_retries < MAX_CONCISE_RETRIES):
             concise_retries += 1
-            logger.info(
-                "AI_RESPONSE too long (%d bytes > %d): concise rewrite attempt %d/%d",
+            logger.debug(
+                "AI response too long (%d bytes > %d): concise rewrite attempt %d/%d",
                 len(response.encode("utf-8")), IRC_SAFE_BYTES,
                 concise_retries, MAX_CONCISE_RETRIES,
             )
@@ -175,8 +183,8 @@ class TerraAI:
                 f"Your response was too long. You MUST follow the rules and "
                 f"reply with at most {IRC_SAFE_BYTES} UTF-8 bytes."
             )
-            logger.info(
-                "AI_RESPONSE too long: sending system reminder (attempt %d/%d): %r",
+            logger.debug(
+                "AI response too long: sending system reminder (attempt %d/%d): %r",
                 concise_retries, MAX_CONCISE_RETRIES, concise_reminder,
             )
             retry_msgs.append(Message("assistant", response))
@@ -185,9 +193,12 @@ class TerraAI:
                 retry_msgs, effort=self.prompts.effort, tools=tools,
                 noisy_callback=noisy_callback,
             )
-            logger.info(
-                "AI_RESPONSE (after concise rewrite #%d): model=%s length=%d text=%.500s",
-                concise_retries, provider._model, len(response or ""), response or "",
+            logger.debug(
+                "AI response after concise rewrite #%d: model=%s length=%d text=%s",
+                concise_retries,
+                provider._model,
+                len(response or ""),
+                json.dumps(response or "", ensure_ascii=False),
             )
             if not isinstance(response, str) or not response.strip():
                 raise ValueError(
@@ -207,6 +218,12 @@ class TerraAI:
         # Save to history (model_text is already <nick>-prefixed)
         if include_history:
             self.context.save_exchange(server, channel, nick, model_text, response)
+
+        logger.info(
+            "AI response: model=%s response=%s",
+            provider._model,
+            json.dumps(response, ensure_ascii=False),
+        )
 
         # Performance data is nonessential: a diagnostics failure must not
         # replace an otherwise successful and persisted response.

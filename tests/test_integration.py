@@ -1,5 +1,6 @@
 """Integration tests for TerraAI."""
 
+import logging
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
@@ -106,8 +107,49 @@ class TestPluginRules:
             terra_plugin.shutdown(bot)
 
         assert terra_plugin._terrai is None
+        operational_log = tmp_path / "data" / "logs" / "terra-ai.log"
+        trace_log = tmp_path / "data" / "logs" / "openrouter-trace.log"
+        assert operational_log.exists()
+        assert trace_log.exists()
+        assert "TerraAI setup complete" in operational_log.read_text()
+        assert "TerraAI plugin unloaded" in operational_log.read_text()
         with pytest.raises(RuntimeError, match="closed"):
             instance.db.fetchone("SELECT 1")
+
+    def test_setup_failure_is_traced_and_logging_is_torn_down(self, tmp_path):
+        from terra_ai import plugin as terra_plugin
+
+        config_path = tmp_path / "sopel.cfg"
+        config_path.write_text(
+            "\n".join(
+                [
+                    "[core]",
+                    "nick = TerraAI",
+                    "host = irc.example.test",
+                    "owner = tester",
+                    "",
+                    "[terraai]",
+                    "api_key = test-key",
+                    f"log_dir = {tmp_path / 'logs'}",
+                ]
+            )
+        )
+        config = Config(str(config_path), validate=False)
+        terra_plugin.configure(config)
+        bot = SimpleNamespace(config=config, settings=config)
+
+        with pytest.raises(ValueError, match="No AI model configured"):
+            terra_plugin.setup(bot)
+
+        operational = (tmp_path / "logs" / "terra-ai.log").read_text()
+        assert "TerraAI setup failed" in operational
+        assert "Traceback" in operational
+        assert "ValueError: No AI model configured" in operational
+        assert terra_plugin._terrai is None
+        assert not any(
+            getattr(handler, "_terraai_owned_handler", False)
+            for handler in logging.getLogger("terraai").handlers
+        )
 
     def test_cmd_help_exists(self):
         """Plugin must have a cmd_help command handler."""

@@ -29,10 +29,15 @@ def current_correlation_id() -> str | None:
     return _correlation_id.get()
 
 
+def new_correlation_id() -> str:
+    """Return a new standalone correlation ID."""
+    return uuid.uuid4().hex[:8]
+
+
 def _get_or_create_correlation_id() -> str:
     correlation_id = current_correlation_id()
     if correlation_id is None:
-        correlation_id = uuid.uuid4().hex[:8]
+        correlation_id = new_correlation_id()
     return correlation_id
 
 
@@ -78,9 +83,11 @@ def format_irc_error(exc: BaseException) -> str:
 
 def _log_exception(exc: BaseException, message: str, *args: object) -> None:
     correlation_id = _get_or_create_correlation_id()
+    source = _exception_source(exc)
     logger.error(
-        "[%s] " + message,
+        "[%s %s] " + message,
         correlation_id,
+        source,
         *args,
         exc_info=(type(exc), exc, exc.__traceback__),
     )

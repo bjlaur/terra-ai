@@ -7,14 +7,25 @@ project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ergo_started_here=0
 cd "$project_dir"
 
+prepare_run_dir() {
+    local test_mode="$1"
+    local log_root="${TMPDIR:-/tmp}/terraai-tests"
+    local run_stamp
+    run_stamp="$(date -u +%Y%m%d-%H%M%S-%N)"
+    export TERRAI_TEST_RUN_DIR="$log_root/${run_stamp}-${test_mode}-$$"
+    mkdir -p "$TERRAI_TEST_RUN_DIR"
+    chmod 700 "$TERRAI_TEST_RUN_DIR"
+    echo "Test artifacts:  $TERRAI_TEST_RUN_DIR" >&2
+}
+
 prepare_test_logs() {
     local test_mode="$1"
-    local log_dir="${TMPDIR:-/tmp}/terraai-tests"
-    mkdir -p "$log_dir"
-    test_output_log="$log_dir/${test_mode}-output.log"
-    export TERRAI_PYTEST_PROGRESS_FILE="$log_dir/${test_mode}-progress.log"
+    prepare_run_dir "$test_mode"
+    test_output_log="$TERRAI_TEST_RUN_DIR/pytest-output.log"
+    export TERRAI_PYTEST_PROGRESS_FILE="$TERRAI_TEST_RUN_DIR/progress.log"
     : > "$test_output_log"
     : > "$TERRAI_PYTEST_PROGRESS_FILE"
+    chmod 600 "$test_output_log" "$TERRAI_PYTEST_PROGRESS_FILE"
     echo "Pytest output:   $test_output_log" >&2
     echo "Test progress:   $TERRAI_PYTEST_PROGRESS_FILE" >&2
     echo "Follow progress: tail -f $TERRAI_PYTEST_PROGRESS_FILE" >&2
@@ -116,6 +127,7 @@ run_ergo() {
 
 run_manual() {
     load_test_env
+    prepare_run_dir manual
     if ! ergo_is_running; then
         "$project_dir/startergo.sh"
         ergo_started_here=1

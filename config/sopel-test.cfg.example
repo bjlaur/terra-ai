@@ -49,3 +49,10 @@ effort = high
 
 # Storage
 sqlite_path = data/terraai.db
+
+# TerraAI operational and provider wire logs
+log_dir = data/logs
+log_max_bytes = 10485760
+log_backup_count = 5
+trace_log_max_bytes = 26214400
+trace_log_backup_count = 2

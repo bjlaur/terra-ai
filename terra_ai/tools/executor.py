@@ -62,7 +62,7 @@ def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
         tool_start = time.time()
         result = handler(arguments, noisy_callback=noisy_callback)
         tool_ms = int((time.time() - tool_start) * 1000)
-        logger.info("Tool %r executed in %d ms", name, tool_ms)
+        logger.debug("Tool %r executed in %d ms", name, tool_ms)
         if not isinstance(result, ToolResult):
             raise TypeError(
                 f"Tool {name!r} returned {type(result).__name__}, expected ToolResult"
