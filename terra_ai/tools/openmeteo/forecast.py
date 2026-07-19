@@ -1,10 +1,15 @@
 """weather_forecast tool — current and future weather from Open-Meteo."""
 
-import logging
 import time
 from typing import Any
 
-from terra_ai.tools.openmeteo.client import FORECAST_URL, OpenMeteoClient
+from terra_ai.errors import log_expected_error
+from terra_ai.tools.openmeteo.client import (
+    FORECAST_URL,
+    OpenMeteoClient,
+    OpenMeteoError,
+    OpenMeteoResponseError,
+)
 from terra_ai.tools.openmeteo.geocode import geocode_location
 from terra_ai.tools.openmeteo.normalize import (
     FORECAST_RENAMES,
@@ -16,8 +21,6 @@ from terra_ai.tools.openmeteo.normalize import (
 # Re-export for use in _normalize_block (avoids re-import inside the function).
 _normalize_add_descriptions = add_weather_descriptions
 from terra_ai.tools.openmeteo.result import ToolResult
-
-logger = logging.getLogger("terraai")
 
 # Preset -> variable lists. Copied exactly from the hand-off doc so the
 # Open-Meteo request matches the agreed shape.
@@ -179,6 +182,31 @@ PRESET_DEFAULTS: dict[str, dict[str, int]] = {
 }
 
 
+def _validate_arguments(arguments: Any) -> str | None:
+    if not isinstance(arguments, dict):
+        return "Arguments must be a JSON object."
+
+    location = arguments.get("location")
+    if location is not None and (
+        not isinstance(location, str) or not location.strip()
+    ):
+        return "Location must be a non-empty string."
+
+    preset = arguments.get("preset", "basic_forecast")
+    if not isinstance(preset, str) or preset not in PRESETS:
+        return f"Unknown weather preset {preset!r}."
+
+    for field, maximum in (("days", 16), ("hours", 168)):
+        value = arguments.get(field)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int):
+            return f"{field.capitalize()} must be an integer."
+        if not 1 <= value <= maximum:
+            return f"{field.capitalize()} must be between 1 and {maximum}."
+    return None
+
+
 def _summary_hint(preset: str) -> str:
     base = (
         "Answer the user's actual forecast question concisely for IRC. "
@@ -263,6 +291,16 @@ def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient 
     start = time.time()
     client = client or OpenMeteoClient()
 
+    validation_error = _validate_arguments(arguments)
+    if validation_error:
+        return ToolResult(
+            ok=False,
+            tool="weather_forecast",
+            source="terra-ai",
+            error=validation_error,
+            summary_hint="Correct the tool arguments before trying again.",
+        )
+
     location_arg = arguments.get("location")
     preset = arguments.get("preset") or "basic_forecast"
 
@@ -280,13 +318,23 @@ def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient 
 
     try:
         location = geocode_location(client, location_arg)
-    except ValueError as e:
+    except ValueError as exc:
+        log_expected_error(exc, "weather location lookup")
         return ToolResult(
             ok=False,
             tool="weather_forecast",
             source="open-meteo",
-            error=str(e),
+            error=str(exc),
             summary_hint="Tell the user that location wasn't found and ask for a different one.",
+        )
+    except OpenMeteoError as exc:
+        log_expected_error(exc, "weather geocoding service")
+        return ToolResult(
+            ok=False,
+            tool="weather_forecast",
+            source="open-meteo",
+            error=f"Weather service error: {exc}",
+            summary_hint="Tell the user the weather service is temporarily unavailable.",
         )
 
     params = build_forecast_params(
@@ -298,13 +346,17 @@ def execute_weather_forecast(arguments: dict[str, Any], client: OpenMeteoClient 
 
     try:
         raw = client.get_json(FORECAST_URL, params)
-    except Exception as e:
-        logger.error("weather_forecast request failed: %s", e)
+        if not any(block in raw for block in PRESETS[preset]):
+            raise OpenMeteoResponseError(
+                f"Open-Meteo forecast response contains no data for preset {preset!r}"
+            )
+    except OpenMeteoError as exc:
+        log_expected_error(exc, "weather forecast service")
         return ToolResult(
             ok=False,
             tool="weather_forecast",
             source="open-meteo",
-            error=f"Weather service error: {e}",
+            error=f"Weather service error: {exc}",
             summary_hint="Tell the user the weather service is temporarily unavailable.",
         )
 

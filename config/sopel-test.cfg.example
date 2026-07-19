@@ -28,7 +28,6 @@ enable =
     adminchannel
     ping
     reload
-    safety
     coretasks
     terra_ai
 
@@ -45,7 +44,6 @@ base_url = https://openrouter.ai/api/v1
 provider_timeout = 30
 
 # Bot behavior
-trigger_phrase = TerraAI:
 bot_nick = TerraAI
 effort = high
 

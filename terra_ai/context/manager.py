@@ -61,9 +61,16 @@ class ContextManager:
         caller (single chokepoint in TerraAI.handle_ai_message); stored
         verbatim so replayed history matches what the AI saw at prompt time.
         """
-        session_id = self._get_or_create_session(server, channel)
-        self.history.append(server, channel, nick, "user", user_message, source=source)
-        self.history.append(server, channel, nick, "assistant", assistant_response, source=source)
+        with self.db.transaction():
+            session_id = self._get_or_create_session(server, channel)
+            self.history.append(
+                server, channel, nick, "user", user_message,
+                source=source, session_id=session_id,
+            )
+            self.history.append(
+                server, channel, nick, "assistant", assistant_response,
+                source=source, session_id=session_id,
+            )
 
     def compact(self, server: str, channel: str) -> str:
         """Mark current session as compacted and create a new one.
@@ -71,49 +78,31 @@ class ContextManager:
         Returns the new session_id.
         """
         new_session_id = str(uuid.uuid4())
-        # Get current session
-        row = self.db.conn.execute(
-            "SELECT active_session_id FROM sessions WHERE server = ? AND channel = ?",
-            (server, channel)
-        ).fetchone()
+        with self.db.transaction() as conn:
+            # Get current session
+            row = conn.execute(
+                "SELECT active_session_id FROM sessions WHERE server = ? AND channel = ?",
+                (server, channel),
+            ).fetchone()
 
-        if row:
-            old_session_id = row["active_session_id"]
-            # Count rows before
-            count_before = self.db.conn.execute(
-                "SELECT COUNT(*) FROM conversation_history WHERE server = ? AND channel = ? AND session_id = ?",
-                (server, channel, old_session_id)
-            ).fetchone()[0]
-
-            # Log compaction
-            self.db.conn.execute(
-                """INSERT INTO compactions (server, channel, old_session_id, new_session_id, rows_before, rows_after)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (server, channel, old_session_id, new_session_id, count_before, 0)
-            )
-
-            # Update session
-            self.db.conn.execute(
-                "UPDATE sessions SET active_session_id = ?, updated_at = datetime('now') WHERE server = ? AND channel = ?",
-                (new_session_id, server, channel)
-            )
-
-            self.db.conn.commit()
+            if row:
+                old_session_id = row["active_session_id"]
+                count_before = conn.execute(
+                    "SELECT COUNT(*) FROM conversation_history WHERE server = ? AND channel = ? AND session_id = ?",
+                    (server, channel, old_session_id),
+                ).fetchone()[0]
+                conn.execute(
+                    """INSERT INTO compactions (server, channel, old_session_id, new_session_id, rows_before, rows_after)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (server, channel, old_session_id, new_session_id, count_before, 0),
+                )
+                conn.execute(
+                    "UPDATE sessions SET active_session_id = ?, updated_at = datetime('now') WHERE server = ? AND channel = ?",
+                    (new_session_id, server, channel),
+                )
 
         return new_session_id
 
     def _get_or_create_session(self, server: str, channel: str) -> str:
         """Get the active session ID or create a new one."""
-        row = self.db.conn.execute(
-            "SELECT active_session_id FROM sessions WHERE server = ? AND channel = ?",
-            (server, channel)
-        ).fetchone()
-        if row:
-            return row["active_session_id"]
-        session_id = str(uuid.uuid4())
-        self.db.conn.execute(
-            "INSERT INTO sessions (server, channel, active_session_id) VALUES (?, ?, ?)",
-            (server, channel, session_id)
-        )
-        self.db.conn.commit()
-        return session_id
+        return self.history._get_active_session(server, channel)

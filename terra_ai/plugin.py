@@ -9,6 +9,8 @@ from sopel import bot as sopel_bot
 from sopel.trigger import Trigger
 
 from terra_ai.bot import TerraAI
+from terra_ai.config import TerraAISection
+from terra_ai.errors import event_error_scope, report_terminal_error
 
 logger = logging.getLogger("terraai")
 
@@ -21,11 +23,12 @@ def _irc_error_handler(func):
     """
     @functools.wraps(func)
     def wrapper(bot, trigger, *args, **kwargs):
-        try:
-            return func(bot, trigger, *args, **kwargs)
-        except Exception as e:
-            logger.error("Handler %s crashed: %s", func.__name__, e, exc_info=True)
-            bot.say(f"Error: {e}")
+        event = getattr(trigger, "_pretrigger", trigger)
+        with event_error_scope(bot.say, event=event):
+            try:
+                return func(bot, trigger, *args, **kwargs)
+            except Exception as exc:
+                report_terminal_error(bot, exc, func.__name__)
     return wrapper
 
 # Global instance — set during setup
@@ -36,6 +39,11 @@ _KNOWN_NICK_COMMANDS = {
     "addprompt", "rmprompt", "listprompts",
     "compact", "clear", "effort", "stats", "help",
 }
+
+
+def configure(config):
+    """Register TerraAI's typed SOPEL configuration section."""
+    config.define_section("terraai", TerraAISection, validate=False)
 
 
 def setup(bot):
@@ -50,9 +58,10 @@ def setup(bot):
     # (WARNING by default, DEBUG under `sopel -d`).
     _configure_logging(bot)
 
-    # SOPEL already parsed the [terraai] section into bot.config.terraai
-    # (a TerraAISection instance). Use it directly — no separate YAML needed.
+    bot.config.define_section("terraai", TerraAISection, validate=True)
     config = bot.config.terraai
+    if not config.bot_nick:
+        config.bot_nick = bot.settings.core.nick
     logger.info("TerraAI setup starting; model=%r", config.model)
     _terrai = TerraAI(config)
     logger.info("TerraAI setup complete")
@@ -93,7 +102,9 @@ def _configure_logging(bot):
 def shutdown(bot=None):
     """Called by Sopel when the plugin is unloaded."""
     global _terrai
-    _terrai = None
+    terra, _terrai = _terrai, None
+    if terra is not None:
+        terra.close()
     logger.info("TerraAI plugin unloaded")
 
 
@@ -373,6 +384,7 @@ def _match_prefixed_command(bot, text: str):
 @sopel_plugin.rule_lazy(_prefix_fallback_loader)
 @sopel_plugin.priority('low')
 @sopel_plugin.thread(False)
+@_irc_error_handler
 def unknown_prefixed_command_to_ai(bot, trigger):
     """Route unknown `-whatever` messages to AI.
 

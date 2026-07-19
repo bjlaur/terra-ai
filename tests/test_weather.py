@@ -130,6 +130,28 @@ class TestWeatherForecastTool:
         assert result.ok is False
         assert "not found" in result.error.lower() or "No location" in result.error
 
+    @pytest.mark.parametrize(
+        ("arguments", "message"),
+        [
+            ({"location": "Detroit", "preset": "bogus"}, "unknown weather preset"),
+            ({"location": "Detroit", "days": 0}, "between 1 and 16"),
+            ({"location": "Detroit", "days": 17}, "between 1 and 16"),
+            ({"location": "Detroit", "hours": 0}, "between 1 and 168"),
+            ({"location": "Detroit", "hours": 169}, "between 1 and 168"),
+            ({"location": "Detroit", "days": "3"}, "must be an integer"),
+            ({"location": 123}, "non-empty string"),
+        ],
+    )
+    def test_invalid_arguments_return_structured_failure(
+        self, openmeteo_client, arguments, message
+    ):
+        from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
+
+        result = execute_weather_forecast(arguments, client=openmeteo_client)
+
+        assert result.ok is False
+        assert message in result.error.lower()
+
     def test_default_preset_is_basic_forecast(self, openmeteo_client):
         from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
         result = execute_weather_forecast(
@@ -171,12 +193,27 @@ class TestExecutor:
     def test_dispatch_unknown_tool(self):
         from terra_ai.tools.executor import execute_tool
         result_str = execute_tool("nonexistent_tool", '{"query": "x"}')
-        assert "unknown tool" in result_str.lower()
+        parsed = json.loads(result_str)
+        assert parsed["ok"] is False
+        assert parsed["tool"] == "nonexistent_tool"
+        assert "unknown tool" in parsed["error"].lower()
 
     def test_dispatch_invalid_json(self):
         from terra_ai.tools.executor import execute_tool
         result_str = execute_tool("weather_forecast", "not valid json")
-        assert "invalid json" in result_str.lower()
+        parsed = json.loads(result_str)
+        assert parsed["ok"] is False
+        assert parsed["tool"] == "weather_forecast"
+        assert "invalid json" in parsed["error"].lower()
+
+    @pytest.mark.parametrize("arguments", [[], None, 42, "null"])
+    def test_dispatch_non_object_arguments(self, arguments):
+        from terra_ai.tools.executor import execute_tool
+
+        parsed = json.loads(execute_tool("weather_forecast", arguments))
+
+        assert parsed["ok"] is False
+        assert "json object" in parsed["error"].lower()
 
 
 class TestSchemas:

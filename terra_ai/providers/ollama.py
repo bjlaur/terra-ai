@@ -60,5 +60,5 @@ class OllamaProvider(AIProvider):
                 response = client.get(f"{self._base_url}/api/tags")
                 return response.status_code == 200
         except Exception as e:
-            logger.error("Ollama availability check failed: %s", e)
+            logger.error("Ollama availability check failed: %s", e, exc_info=True)
             return False

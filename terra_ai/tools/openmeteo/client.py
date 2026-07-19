@@ -18,6 +18,18 @@ AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
 
+class OpenMeteoError(RuntimeError):
+    """Base class for expected Open-Meteo service failures."""
+
+
+class OpenMeteoTransportError(OpenMeteoError):
+    """Open-Meteo could not be reached or returned an HTTP failure."""
+
+
+class OpenMeteoResponseError(OpenMeteoError):
+    """Open-Meteo returned a malformed response."""
+
+
 class OpenMeteoClient:
     """Sync HTTP client for Open-Meteo APIs.
 
@@ -38,14 +50,26 @@ class OpenMeteoClient:
             with httpx.Client(timeout=self.timeout_s) as client:
                 response = client.get(url, params=params)
                 response.raise_for_status()
-                data = response.json()
-        except httpx.HTTPError as e:
-            duration_ms = int((time.time() - start) * 1000)
-            logger.error(
-                "OpenMeteo HTTP error: url=%s duration_ms=%d error=%s",
-                url, duration_ms, e,
+        except httpx.HTTPError as exc:
+            raise OpenMeteoTransportError(
+                f"Open-Meteo request failed for {url}: {exc}"
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise OpenMeteoResponseError(
+                f"Open-Meteo returned invalid JSON for {url}: {exc}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise OpenMeteoResponseError(
+                f"Open-Meteo returned {type(data).__name__}, expected an object for {url}"
             )
-            raise
+        if data.get("error"):
+            reason = data.get("reason") or "unspecified service error"
+            raise OpenMeteoResponseError(
+                f"Open-Meteo returned an error for {url}: {reason}"
+            )
 
         duration_ms = int((time.time() - start) * 1000)
         logger.info(

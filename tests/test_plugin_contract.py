@@ -210,16 +210,16 @@ def test_unhandled_plugin_error_is_logged_and_reported_once(
     with caplog.at_level(logging.ERROR, logger="terraai"):
         result = dispatch(plugin_bot, "TerraAI: hello")
 
-    assert result["say"] == ["Error: boom"]
+    assert len(result["say"]) == 1
+    assert re.fullmatch(
+        r"Error \[[0-9a-f]{8} [^\]]+\.py:\d+\]: RuntimeError: boom",
+        result["say"][0],
+    )
     assert caplog.text.count("RuntimeError: boom") == 1
     assert "Traceback" in caplog.text
 
 
 @pytest.mark.mock
-@pytest.mark.xfail(
-    strict=True,
-    reason="Phase 2 pending contract: correlated IRC errors with source locations",
-)
 def test_phase2_error_reply_and_log_share_correlation_and_source(
     terra, plugin_bot, caplog
 ):
@@ -239,6 +239,43 @@ def test_phase2_error_reply_and_log_share_correlation_and_source(
 
 
 @pytest.mark.mock
+def test_recoverable_unexpected_error_is_reported_then_response_continues(
+    terra, plugin_bot, caplog
+):
+    provider = terra.registry.get()
+    provider.chat = MagicMock(return_value="completed answer")
+    terra._record_performance = MagicMock(side_effect=RuntimeError("stats failed"))
+
+    with caplog.at_level(logging.ERROR, logger="terraai"):
+        result = dispatch(plugin_bot, "TerraAI: hello")
+
+    assert len(result["say"]) == 2
+    assert re.fullmatch(
+        r"Error \[[0-9a-f]{8} [^\]]+\.py:\d+\]: RuntimeError: stats failed",
+        result["say"][0],
+    )
+    assert result["say"][1] == "completed answer"
+    assert caplog.text.count("RuntimeError: stats failed") == 1
+    assert "Traceback" in caplog.text
+    correlation = re.search(r"Error \[([0-9a-f]{8}) ", result["say"][0]).group(1)
+    assert correlation in caplog.text
+
+
+@pytest.mark.mock
+def test_irc_error_is_utf8_safe_and_within_byte_limit(terra, plugin_bot):
+    terra.handle_ai_message = MagicMock(
+        side_effect=RuntimeError("é" * IRC_SAFE_BYTES)
+    )
+
+    result = dispatch(plugin_bot, "TerraAI: hello")
+
+    assert len(result["say"]) == 1
+    reply = result["say"][0]
+    assert len(reply.encode("utf-8")) <= IRC_SAFE_BYTES
+    assert reply.endswith("…")
+
+
+@pytest.mark.mock
 def test_oversize_response_is_rewritten_before_plugin_reply(terra, plugin_bot):
     provider = terra.registry.get()
     provider.chat = MagicMock(
@@ -251,4 +288,22 @@ def test_oversize_response_is_rewritten_before_plugin_reply(terra, plugin_bot):
     assert provider.chat.call_count == 2
     assert len(result["say"][0].encode("utf-8")) <= IRC_SAFE_BYTES
     history = terra.context.history.recent("test-network", "#terra-ai")
-    assert history[-1]["content"] == "short response"
+    assert [(row["role"], row["content"]) for row in history] == [
+        ("user", "<tester> be concise"),
+        ("assistant", "short response"),
+    ]
+
+
+@pytest.mark.mock
+def test_oversize_response_has_deterministic_utf8_fallback(terra, plugin_bot):
+    provider = terra.registry.get()
+    provider.chat = MagicMock(return_value="é" * IRC_SAFE_BYTES)
+
+    result = dispatch(plugin_bot, "TerraAI: still too long")
+
+    assert provider.chat.call_count == 3
+    assert len(result["say"][0].encode("utf-8")) <= IRC_SAFE_BYTES
+    assert result["say"][0].endswith("…")
+    history = terra.context.history.recent("test-network", "#terra-ai")
+    assert len(history) == 2
+    assert history[-1]["content"] == result["say"][0]

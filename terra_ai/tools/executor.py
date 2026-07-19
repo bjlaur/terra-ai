@@ -10,6 +10,8 @@ import logging
 import time
 
 from terra_ai.tools.openmeteo.forecast import execute_weather_forecast
+from terra_ai.tools.openmeteo.result import ToolResult
+from terra_ai.errors import report_recoverable_error
 
 logger = logging.getLogger("terraai")
 
@@ -19,6 +21,17 @@ logger = logging.getLogger("terraai")
 TOOL_FUNCTIONS = {
     "weather_forecast": execute_weather_forecast,
 }
+
+
+def _failure(name: str, error: str) -> str:
+    return json.dumps(
+        ToolResult(
+            ok=False,
+            tool=name or "unknown",
+            source="terra-ai",
+            error=error,
+        ).to_dict()
+    )
 
 
 def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
@@ -33,21 +46,28 @@ def execute_tool(name: str, arguments: str | dict, noisy_callback=None) -> str:
         try:
             arguments = json.loads(arguments)
         except json.JSONDecodeError:
-            return f"Error: invalid JSON arguments for '{name}'"
+            return _failure(name, f"Invalid JSON arguments for {name!r}.")
+
+    if not isinstance(arguments, dict):
+        return _failure(name, f"Arguments for {name!r} must be a JSON object.")
+
+    if not isinstance(name, str) or not name.strip():
+        return _failure("unknown", "Tool name must be a non-empty string.")
 
     handler = TOOL_FUNCTIONS.get(name)
     if not handler:
-        return f"Error: unknown tool '{name}'"
+        return _failure(name, f"Unknown tool {name!r}.")
 
     try:
         tool_start = time.time()
         result = handler(arguments, noisy_callback=noisy_callback)
         tool_ms = int((time.time() - tool_start) * 1000)
         logger.info("Tool %r executed in %d ms", name, tool_ms)
-        # ToolResult -> JSON string for the model.
-        if hasattr(result, "to_dict"):
-            return json.dumps(result.to_dict())
-        return str(result)
-    except Exception as e:
-        logger.error("Tool %r execution failed: %s", name, e)
-        return f"Error: {e}"
+        if not isinstance(result, ToolResult):
+            raise TypeError(
+                f"Tool {name!r} returned {type(result).__name__}, expected ToolResult"
+            )
+        return json.dumps(result.to_dict())
+    except Exception as exc:
+        report_recoverable_error(exc, f"tool {name!r} execution")
+        return _failure(name, f"Tool execution failed: {exc}")

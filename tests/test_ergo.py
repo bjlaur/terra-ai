@@ -1106,7 +1106,7 @@ sqlite_path = {db_path}
         """Bot MUST send an error message to IRC when the AI provider fails.
 
         Provider URL is unreachable, so the HTTP call errors. The bot must
-        respond with 'Error:' — never stay silent.
+        respond with a correlated 'Error [...]' diagnostic — never stay silent.
         """
         sock = self._irc_connect("TestBadProv")
         self._irc_join(sock, "TestBadProv", self.BAD_PROVIDER_CHANNEL)
@@ -1122,7 +1122,7 @@ sqlite_path = {db_path}
         )
         assert all_lines is not None, "Bot stayed silent when AI provider failed — must send error message"
         full_text = "\n".join(all_lines)
-        assert "Error:" in full_text, \
-            f"Bot response should contain 'Error:', got:\n{full_text}"
+        assert "Error [" in full_text, \
+            f"Bot response should contain a correlated error, got:\n{full_text}"
 
         self._irc_quit(sock)

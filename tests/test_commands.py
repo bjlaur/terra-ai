@@ -14,7 +14,7 @@ def db(tmp_path):
     try:
         yield database
     finally:
-        database.conn.close()
+        database.close()
 
 
 @pytest.fixture
@@ -80,6 +80,28 @@ class TestContextManager:
         assert len(history) == 2
         assert history[0]["content"] == "hello"
         assert history[1]["content"] == "hi there"
+
+    def test_save_exchange_rolls_back_both_rows_on_failure(self, context, db):
+        with db.transaction() as conn:
+            conn.execute(
+                """CREATE TRIGGER fail_assistant_history
+                   BEFORE INSERT ON conversation_history
+                   WHEN NEW.role = 'assistant'
+                   BEGIN
+                       SELECT RAISE(ABORT, 'assistant write failed');
+                   END"""
+            )
+
+        with pytest.raises(Exception, match="assistant write failed"):
+            context.save_exchange(
+                "irc.example.com", "#chan", "nick", "hello", "hi there"
+            )
+
+        rows = db.fetchall(
+            "SELECT role, content FROM conversation_history WHERE server = ? AND channel = ?",
+            ("irc.example.com", "#chan"),
+        )
+        assert rows == []
 
     def test_compact(self, context):
         context.save_exchange("irc.example.com", "#chan", "nick", "hello", "hi")

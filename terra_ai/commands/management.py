@@ -1,11 +1,7 @@
 """Management commands for TerraAI."""
 
-import logging
-
 from terra_ai.database import Database
 from terra_ai.prompts.manager import PromptManager
-
-logger = logging.getLogger("terraai")
 
 
 class ManagementCommands:
@@ -48,13 +44,9 @@ class ManagementCommands:
             return "Usage: .addprompt <trigger> <text>"
 
         trigger, response = parts
-        try:
-            if self.prompts.add_prompt(server, trigger, response, nick):
-                return f"Added {trigger}."
-            return "Trigger already exists."
-        except Exception as e:
-            logger.error("addprompt failed for %r on %s: %s", trigger, server, e)
-            return f"Error: Failed to add prompt: {e}"
+        if self.prompts.add_prompt(server, trigger, response, nick):
+            return f"Added {trigger}."
+        return "Trigger already exists."
 
     def handle_compact(self, server: str, channel: str, nick: str) -> str:
         """Handle .compact command."""
@@ -67,17 +59,17 @@ class ManagementCommands:
         """Handle .clear command — wipe conversation history and start fresh."""
         import uuid
         new_session_id = str(uuid.uuid4())
-        self.db.conn.execute(
-            "UPDATE sessions SET active_session_id = ?, updated_at = datetime('now') "
-            "WHERE server = ? AND channel = ?",
-            (new_session_id, server, channel)
-        )
-        self.db.conn.commit()
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE sessions SET active_session_id = ?, updated_at = datetime('now') "
+                "WHERE server = ? AND channel = ?",
+                (new_session_id, server, channel),
+            )
         return f"Session cleared. New session: {new_session_id[:8]}..."
 
     def handle_stats(self, server: str, channel: str) -> str:
         """Handle .stats command."""
-        rows = self.db.conn.execute(
+        rows = self.db.fetchall(
             """SELECT provider, model, COUNT(*) as calls,
                       AVG(processing_time_ms) as avg_ms,
                       AVG(total_tokens) as avg_tokens
@@ -85,7 +77,7 @@ class ManagementCommands:
                WHERE server = ? AND channel = ?
                GROUP BY provider, model""",
             (server, channel)
-        ).fetchall()
+        )
 
         if not rows:
             return "No stats yet."

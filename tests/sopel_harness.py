@@ -14,7 +14,6 @@ PLUGIN_LIST = (
     "adminchannel",
     "ping",
     "reload",
-    "safety",
     "coretasks",
     "terra_ai",
 )

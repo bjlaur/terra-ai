@@ -236,7 +236,7 @@ def test_provider_http_failure_reaches_irc_once(plugin_client, service_transport
     result = plugin_client.send_message("TerraAI: simulate provider failure")
 
     assert len(result["say"]) == 1
-    assert result["say"][0].startswith("Error:")
+    assert result["say"][0].startswith("Error [")
     assert len(service_transport.requests) == 1
 
 
@@ -251,6 +251,26 @@ def test_weather_tool_failure_completes_the_real_tool_loop(
     assert hosts.count("openrouter.ai") == 2
     assert "geocoding-api.open-meteo.com" in hosts
     assert "api.open-meteo.com" not in hosts
+
+
+@pytest.mark.mock
+def test_unexpected_tool_failure_reports_then_model_recovers(
+    plugin_client, service_transport
+):
+    def broken_weather(arguments, noisy_callback=None):
+        raise RuntimeError("unexpected weather defect")
+
+    with patch.dict(
+        "terra_ai.tools.executor.TOOL_FUNCTIONS",
+        {"weather_forecast": broken_weather},
+    ):
+        result = plugin_client.send_message("TerraAI: weather Detroit")
+
+    assert len(result["say"]) == 2
+    assert result["say"][0].startswith("Error [")
+    assert "RuntimeError: unexpected weather defect" in result["say"][0]
+    assert result["say"][1] == "The weather tool failed cleanly."
+    assert len(service_transport.requests) == 2
 
 
 @pytest.mark.mock

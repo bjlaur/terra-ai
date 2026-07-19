@@ -2,11 +2,11 @@
 
 import json
 import logging
-import os
 import time
 
 import httpx
 
+from terra_ai.errors import report_recoverable_error
 from terra_ai.providers.base import AIProvider, Message
 from terra_ai.tools.executor import execute_tool
 
@@ -15,6 +15,99 @@ logger = logging.getLogger("terraai")
 # Cap on tool-call round-trips per chat() call. Prevents infinite loops if
 # the model keeps requesting tools without converging on a final answer.
 MAX_TOOL_ROUNDS = 3
+
+
+class OpenRouterError(RuntimeError):
+    """Base error for contextual OpenRouter failures."""
+
+
+class OpenRouterTransportError(OpenRouterError):
+    """The OpenRouter HTTP request failed."""
+
+
+class OpenRouterResponseError(OpenRouterError):
+    """OpenRouter returned a response that cannot satisfy the chat contract."""
+
+
+class OpenRouterToolRoundLimitError(OpenRouterError):
+    """The model requested more local tool rounds than configured."""
+
+
+def _response_message(data: object, round_idx: int) -> dict:
+    """Validate and return one OpenRouter assistant message."""
+    if not isinstance(data, dict):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} returned {type(data).__name__}, expected an object"
+        )
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} response has no choices"
+        )
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} first choice must be an object"
+        )
+    message = first.get("message")
+    if not isinstance(message, dict):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} first choice has no message object"
+        )
+    return message
+
+
+def _validated_tool_call(call: object, round_idx: int, call_idx: int) -> tuple[str, str, str | dict]:
+    if not isinstance(call, dict):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} tool call {call_idx} must be an object"
+        )
+    call_id = call.get("id")
+    if not isinstance(call_id, str) or not call_id:
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} tool call {call_idx} has no string id"
+        )
+    function = call.get("function")
+    if not isinstance(function, dict):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} tool call {call_idx} has no function object"
+        )
+    name = function.get("name")
+    if not isinstance(name, str) or not name:
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} tool call {call_idx} has no function name"
+        )
+    arguments = function.get("arguments", "{}")
+    if not isinstance(arguments, (str, dict)):
+        raise OpenRouterResponseError(
+            f"OpenRouter round {round_idx} tool call {call_idx} arguments must be a JSON string or object"
+        )
+    return call_id, name, arguments
+
+
+def _server_tool_usage(data: dict, round_idx: int) -> dict:
+    """Return optional server-tool metadata without invalidating a good answer."""
+    try:
+        usage = data.get("usage")
+        if usage is None:
+            usage = {}
+        if not isinstance(usage, dict):
+            raise OpenRouterResponseError(
+                f"OpenRouter round {round_idx} usage must be an object"
+            )
+        server_tool_use = usage.get("server_tool_use_details")
+        if server_tool_use is None:
+            server_tool_use = usage.get("server_tool_use")
+        if server_tool_use is None:
+            server_tool_use = {}
+        if not isinstance(server_tool_use, dict):
+            raise OpenRouterResponseError(
+                f"OpenRouter round {round_idx} server tool usage must be an object"
+            )
+        return server_tool_use
+    except OpenRouterResponseError as exc:
+        report_recoverable_error(exc, "OpenRouter server-tool usage metadata")
+        return {}
 
 # Models that do NOT support reasoning controls via chat-completions.
 # Sending reasoning fields to these models causes 422 errors or silent ignore.
@@ -107,6 +200,11 @@ class OpenRouterProvider(AIProvider):
         Returns:
             The AI's response text.
         """
+        if isinstance(max_tool_rounds, bool) or not isinstance(max_tool_rounds, int):
+            raise ValueError("max_tool_rounds must be an integer")
+        if max_tool_rounds < 0:
+            raise ValueError("max_tool_rounds must not be negative")
+
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -161,32 +259,40 @@ class OpenRouterProvider(AIProvider):
         )
 
         with httpx.Client(timeout=self._timeout) as client:
-            for round_idx in range(max_tool_rounds + 1):
+            tool_rounds = 0
+            round_idx = 0
+            while True:
                 # Notify caller: waiting for AI response.
                 logger.info("OpenRouter chat: round=%d — waiting on API response", round_idx)
                 if noisy_callback:
                     noisy_callback("Thinking...")
 
                 api_start = time.time()
-                response = client.post(url, json=payload, headers=headers)
+                try:
+                    response = client.post(url, json=payload, headers=headers)
+                    response.raise_for_status()
+                except httpx.HTTPError as exc:
+                    raise OpenRouterTransportError(
+                        f"OpenRouter request failed in round {round_idx}: {exc}"
+                    ) from exc
                 api_ms = int((time.time() - api_start) * 1000)
-                response.raise_for_status()
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    raise OpenRouterResponseError(
+                        f"OpenRouter round {round_idx} returned invalid JSON: {exc}"
+                    ) from exc
                 logger.info(
                     "OpenRouter chat: round=%d API call took %d ms",
                     round_idx, api_ms,
                 )
+                message = _response_message(data, round_idx)
 
                 # Log server-side tool usage if available.
                 # OpenRouter returns this under `server_tool_use_details` (note
                 # the _details suffix) on some responses — check both names so
                 # older and newer response shapes both surface the notice.
-                usage = data.get("usage") or {}
-                server_tool_use = (
-                    usage.get("server_tool_use_details")
-                    or usage.get("server_tool_use")
-                    or {}
-                )
+                server_tool_use = _server_tool_usage(data, round_idx)
                 if server_tool_use.get("web_search_requests"):
                     logger.info(
                         "OpenRouter web_search: requests=%d",
@@ -195,7 +301,6 @@ class OpenRouterProvider(AIProvider):
                     if noisy_callback:
                         noisy_callback("Searching web...")
 
-                message = data["choices"][0]["message"]
                 tool_calls = message.get("tool_calls")
 
                 if not tool_calls:
@@ -205,7 +310,20 @@ class OpenRouterProvider(AIProvider):
                         "OpenRouter final: content_type=%s content_len=%s",
                         type(content).__name__, len(content) if content else 0,
                     )
-                    return content or ""
+                    if not isinstance(content, str) or not content.strip():
+                        raise OpenRouterResponseError(
+                            f"OpenRouter round {round_idx} returned no text or tool calls"
+                        )
+                    return content
+
+                if not isinstance(tool_calls, list):
+                    raise OpenRouterResponseError(
+                        f"OpenRouter round {round_idx} tool_calls must be a list"
+                    )
+                if tool_rounds >= max_tool_rounds:
+                    raise OpenRouterToolRoundLimitError(
+                        f"OpenRouter requested another tool round after the configured limit of {max_tool_rounds}"
+                    )
 
                 # Has tool calls — execute them and feed results back.
                 logger.info(
@@ -215,11 +333,10 @@ class OpenRouterProvider(AIProvider):
                 # Append the assistant message with tool_calls as-is.
                 payload_messages.append(message)
 
-                for call in tool_calls:
-                    call_id = call.get("id", "")
-                    function = call.get("function") or {}
-                    name = function.get("name", "")
-                    raw_args = function.get("arguments", "{}")
+                for call_idx, call in enumerate(tool_calls):
+                    call_id, name, raw_args = _validated_tool_call(
+                        call, round_idx, call_idx
+                    )
                     # Log the argument type/value — a None/missing arguments
                     # string is a common source of downstream .replace() errors.
                     logger.info(
@@ -237,10 +354,8 @@ class OpenRouterProvider(AIProvider):
                         "name": name,
                         "content": result_str,
                     })
-
-            # Fell off the loop — last attempt, return whatever we have.
-            logger.warning("OpenRouter: hit max_tool_rounds=%d", max_tool_rounds)
-            return message.get("content") or ""
+                tool_rounds += 1
+                round_idx += 1
 
     def is_available(self) -> bool:
         return self._api_key is not None and len(self._api_key) > 0

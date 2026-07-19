@@ -88,8 +88,9 @@ persistence semantics were not promoted into stabilized feature contracts.
   temporary configuration.
 - `compileall`, shell syntax checks, and `git diff --check` pass.
 
-The remaining plugin strict-xfail is the agreed Phase 2 correlated error
-format/source-location contract. The separate Ergo xfail remains the live
+At the Phase 1 gate, the remaining plugin strict-xfail was the agreed Phase 2
+correlated error format/source-location contract; Phase 2 subsequently
+implemented it. The separate Ergo xfail remains the live
 model's non-deterministic willingness to produce an initially overlong reply;
 the deterministic plugin test covers the rewrite branch.
 

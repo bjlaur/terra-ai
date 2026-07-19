@@ -1,8 +1,10 @@
 """Integration tests for TerraAI."""
 
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 import pytest
+from sopel.config import Config
 
 from terra_ai.providers.openrouter import _reasoning_for_model
 
@@ -66,6 +68,46 @@ class TestPluginRules:
         from terra_ai import plugin as terra_plugin
         assert callable(getattr(terra_plugin, 'setup', None)), \
             "plugin.setup must be callable"
+
+    def test_typed_config_is_registered_and_shutdown_closes_database(self, tmp_path):
+        from terra_ai import plugin as terra_plugin
+        from terra_ai.config import TerraAISection
+
+        config_path = tmp_path / "sopel.cfg"
+        config_path.write_text(
+            "\n".join(
+                [
+                    "[core]",
+                    "nick = TerraAI",
+                    "host = irc.example.test",
+                    "owner = tester",
+                    "",
+                    "[terraai]",
+                    "model = test/model",
+                    "api_key = test-key",
+                    "base_url = https://openrouter.example/v1",
+                    "provider_timeout = 15",
+                    f"sqlite_path = {tmp_path / 'terraai.db'}",
+                ]
+            )
+        )
+        config = Config(str(config_path), validate=False)
+        terra_plugin.configure(config)
+        assert isinstance(config.terraai, TerraAISection)
+
+        bot = SimpleNamespace(config=config, settings=config)
+        terra_plugin.setup(bot)
+        instance = terra_plugin._terrai
+        try:
+            assert isinstance(instance.config, TerraAISection)
+            assert instance.config.provider_timeout == 15
+            assert instance.config.bot_nick == "TerraAI"
+        finally:
+            terra_plugin.shutdown(bot)
+
+        assert terra_plugin._terrai is None
+        with pytest.raises(RuntimeError, match="closed"):
+            instance.db.fetchone("SELECT 1")
 
     def test_cmd_help_exists(self):
         """Plugin must have a cmd_help command handler."""

@@ -1,6 +1,7 @@
 """Tests for TerraAI database layer."""
 
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 
 from terra_ai.database import (
     CommandStats,
@@ -11,6 +12,8 @@ from terra_ai.database import (
     PromptStore,
     UserStore,
 )
+from terra_ai.commands.user import UserCommands
+from terra_ai.prompts.manager import PromptManager
 
 
 @pytest.fixture
@@ -21,7 +24,7 @@ def db(tmp_path):
     try:
         yield database
     finally:
-        database.conn.close()
+        database.close()
 
 
 @pytest.fixture
@@ -78,6 +81,26 @@ class TestUserStore:
     def test_multi_server_isolation(self, users):
         users.opt_out("irc.example.com", "nick")
         assert users.is_opted_in("irc.other.com", "nick") is True
+
+    def test_shared_connection_serializes_handler_threads(self, db):
+        def update_user(index):
+            store = UserStore(db)
+            store.set_noisy("irc.example.com", f"nick-{index}", True)
+            return store.is_noisy("irc.example.com", f"nick-{index}")
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(update_user, range(40)))
+
+        assert results == [True] * 40
+        assert db.fetchone("SELECT COUNT(*) FROM users")[0] == 40
+
+    def test_noisy_mode_survives_command_object_recreation(self, db):
+        first = UserCommands(db, PromptManager(db))
+        assert first.handle_noisy("irc.example.com", "nick") == "Noisy mode ON."
+
+        recreated = UserCommands(db, PromptManager(db))
+        assert recreated.is_noisy("irc.example.com", "nick") is True
+        assert recreated.handle_noisy("irc.example.com", "nick") == "Noisy mode OFF."
 
 
 class TestHistoryStore:

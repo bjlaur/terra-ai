@@ -24,7 +24,6 @@ class UserCommands:
     def __init__(self, db: Database, prompts: PromptManager):
         self.db = db
         self.prompts = prompts
-        self._noisy_users: set[tuple[str, str]] = set()  # (server, nick)
 
     def _users(self) -> "UserStore":
         from terra_ai.database import UserStore
@@ -57,16 +56,13 @@ class UserCommands:
 
     def handle_noisy(self, server: str, nick: str) -> str:
         """Handle .noisy command — toggle verbose status notices."""
-        key = (server, nick)
-        if key in self._noisy_users:
-            self._noisy_users.discard(key)
-            return "Noisy mode OFF."
-        self._noisy_users.add(key)
-        return "Noisy mode ON."
+        users = self._users()
+        enabled = users.toggle_noisy(server, nick)
+        return f"Noisy mode {'ON' if enabled else 'OFF'}."
 
     def is_noisy(self, server: str, nick: str) -> bool:
         """Check if user has noisy mode enabled."""
-        return (server, nick) in self._noisy_users
+        return self._users().is_noisy(server, nick)
 
     def disable_tool(self, server: str, nick: str, tool_name: str):
         """Disable a tool for a user."""

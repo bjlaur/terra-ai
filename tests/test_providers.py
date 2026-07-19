@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from terra_ai.providers.base import AIProvider, Message
-from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.openrouter import (
+    OpenRouterProvider,
+    OpenRouterResponseError,
+    OpenRouterToolRoundLimitError,
+)
 from terra_ai.providers.registry import ProviderRegistry
 
 
@@ -61,6 +65,117 @@ class TestOpenRouterProvider:
         result = provider.chat([Message("user", "hi")])
 
         assert result == "Hey!"
+
+    @patch("terra_ai.providers.openrouter.execute_tool", return_value='{"ok": true}')
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_tool_result_is_consumed_by_followup_request(
+        self, mock_client_cls, mock_execute_tool
+    ):
+        first = MagicMock()
+        first.raise_for_status = MagicMock()
+        first.json.return_value = {
+            "choices": [{"message": {"content": None, "tool_calls": [{
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "weather_forecast", "arguments": "{}"},
+            }]}}]
+        }
+        second = MagicMock()
+        second.raise_for_status = MagicMock()
+        second.json.return_value = {
+            "choices": [{"message": {"content": "It is sunny."}}]
+        }
+        client = MagicMock()
+        client.post.side_effect = [first, second]
+        mock_client_cls.return_value.__enter__.return_value = client
+
+        provider = OpenRouterProvider(model="test-model", api_key="test-key")
+        result = provider.chat([Message("user", "weather")], max_tool_rounds=1)
+
+        assert result == "It is sunny."
+        assert client.post.call_count == 2
+        followup = client.post.call_args_list[1].kwargs["json"]["messages"]
+        assert followup[-1] == {
+            "role": "tool",
+            "tool_call_id": "call-1",
+            "name": "weather_forecast",
+            "content": '{"ok": true}',
+        }
+        mock_execute_tool.assert_called_once_with(
+            "weather_forecast", "{}", noisy_callback=None
+        )
+
+    @patch("terra_ai.providers.openrouter.execute_tool")
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_tool_call_is_rejected_before_execution_at_limit(
+        self, mock_client_cls, mock_execute_tool
+    ):
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {
+            "choices": [{"message": {"content": None, "tool_calls": [{
+                "id": "call-1",
+                "function": {"name": "weather_forecast", "arguments": "{}"},
+            }]}}]
+        }
+        client = MagicMock()
+        client.post.return_value = response
+        mock_client_cls.return_value.__enter__.return_value = client
+        provider = OpenRouterProvider(model="test-model", api_key="test-key")
+
+        with pytest.raises(OpenRouterToolRoundLimitError, match="limit of 0"):
+            provider.chat([Message("user", "weather")], max_tool_rounds=0)
+
+        mock_execute_tool.assert_not_called()
+        client.post.assert_called_once()
+
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_malformed_response_has_contextual_error(self, mock_client_cls):
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"choices": []}
+        client = MagicMock()
+        client.post.return_value = response
+        mock_client_cls.return_value.__enter__.return_value = client
+        provider = OpenRouterProvider(model="test-model", api_key="test-key")
+
+        with pytest.raises(OpenRouterResponseError, match="round 0.*no choices"):
+            provider.chat([Message("user", "hello")])
+
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_empty_final_response_is_rejected(self, mock_client_cls):
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"choices": [{"message": {"content": ""}}]}
+        client = MagicMock()
+        client.post.return_value = response
+        mock_client_cls.return_value.__enter__.return_value = client
+        provider = OpenRouterProvider(model="test-model", api_key="test-key")
+
+        with pytest.raises(OpenRouterResponseError, match="no text or tool calls"):
+            provider.chat([Message("user", "hello")])
+
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_malformed_optional_usage_does_not_replace_answer(
+        self, mock_client_cls, caplog
+    ):
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {
+            "choices": [{"message": {"content": "valid answer"}}],
+            "usage": [],
+        }
+        client = MagicMock()
+        client.post.return_value = response
+        mock_client_cls.return_value.__enter__.return_value = client
+        provider = OpenRouterProvider(model="test-model", api_key="test-key")
+
+        with caplog.at_level("ERROR", logger="terraai"):
+            result = provider.chat([Message("user", "hello")])
+
+        assert result == "valid answer"
+        assert "usage must be an object" in caplog.text
+        assert "Traceback" in caplog.text
 
 
 class TestProviderRegistry:

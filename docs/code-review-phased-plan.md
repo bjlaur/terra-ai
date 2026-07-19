@@ -75,7 +75,7 @@ planned.
 
 ### Work
 
-- Implement the error decision table from the behavioral contract, including event-scoped correlation context, full-stack logging, exactly-once IRC reporting, traceback-origin locations, and UTF-8-safe 450-byte error messages. Phase 3 takes ownership of final handler/file routing rather than recreating correlation.
+- Implement the error decision table from the behavioral contract, including event-scoped correlation context, full-stack logging, exactly-once IRC reporting, traceback-origin locations, and UTF-8-safe 450-byte error messages. Route unexpected-but-recoverable “report, then continue” failures through one narrow dedicated reporting method, distinct from terminal plugin error handling and direct IRC output, so their visibility can be configured later without changing callers; do not add that configuration in this phase. Phase 3 takes ownership of final handler/file routing rather than recreating correlation.
 - Distinguish validation outcomes from exceptions and make all model-facing tool failures structured `ToolResult` JSON.
 - Fix OpenRouter tool-round termination so each executed result is consumed by a follow-up model request or the call is rejected before execution at the configured limit.
 - Validate tool names and arguments as objects before dispatch, and validate provider response shapes with contextual errors rather than incidental indexing failures.
@@ -96,6 +96,8 @@ planned.
 - Injected failures prove rollback, exactly-once reporting, source-location references, and continued processing only for valid recoverable states.
 - Existing SQLite files remain usable unless an explicitly approved reset has occurred.
 - Full offline and focused real-service tests pass.
+
+Phase 2 implementation results are recorded in [`code-review-phase-2-correctness.md`](code-review-phase-2-correctness.md). Stop for user review at this gate.
 
 ## Phase 3: Logging and Observability
 

@@ -7,6 +7,26 @@ project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ergo_started_here=0
 cd "$project_dir"
 
+prepare_test_logs() {
+    local test_mode="$1"
+    local log_dir="${TMPDIR:-/tmp}/terraai-tests"
+    mkdir -p "$log_dir"
+    test_output_log="$log_dir/${test_mode}-output.log"
+    export TERRAI_PYTEST_PROGRESS_FILE="$log_dir/${test_mode}-progress.log"
+    : > "$test_output_log"
+    : > "$TERRAI_PYTEST_PROGRESS_FILE"
+    echo "Pytest output:   $test_output_log" >&2
+    echo "Test progress:   $TERRAI_PYTEST_PROGRESS_FILE" >&2
+    echo "Follow progress: tail -f $TERRAI_PYTEST_PROGRESS_FILE" >&2
+}
+
+run_pytest() {
+    local test_mode="$1"
+    shift
+    prepare_test_logs "$test_mode"
+    python3 -m pytest "$@" 2>&1 | tee "$test_output_log"
+}
+
 usage() {
     cat <<'EOF'
 Usage: ./test.sh MODE [pytest arguments]
@@ -49,12 +69,12 @@ load_test_env() {
 }
 
 run_fast() {
-    python3 -m pytest "$@"
+    run_pytest fast "$@"
 }
 
 run_real() {
     load_test_env
-    python3 -m pytest --real -m "e2e and not mock" "$@"
+    run_pytest real --real -m "e2e and not mock" "$@"
 }
 
 ergo_is_running() {
@@ -76,7 +96,20 @@ run_ergo() {
     fi
 
     trap cleanup_ergo EXIT
-    python3 -m pytest --ergo tests/test_ergo.py "$@"
+    local has_test_selector=0
+    local argument
+    for argument in "$@"; do
+        if [[ "$argument" == *"::"* || "$argument" == *.py || \
+              "$argument" == tests/* || "$argument" == ./tests/* ]]; then
+            has_test_selector=1
+            break
+        fi
+    done
+    if (( has_test_selector )); then
+        run_pytest ergo --ergo "$@"
+    else
+        run_pytest ergo --ergo tests/test_ergo.py "$@"
+    fi
     cleanup_ergo
     trap - EXIT
 }

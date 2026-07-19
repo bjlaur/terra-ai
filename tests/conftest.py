@@ -3,6 +3,7 @@
 import configparser
 import os
 import socket
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,40 @@ from tests.http_fakes import ScriptedServices
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_PROGRESS_PATH = None
+
+
+def _write_test_progress(message):
+    if _PROGRESS_PATH is None:
+        return
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _PROGRESS_PATH.open("a", encoding="utf-8") as progress:
+        progress.write(f"{timestamp} {message}\n")
+
+
+def pytest_configure(config):
+    """Initialize the optional per-test progress log used by test.sh."""
+    global _PROGRESS_PATH
+    progress_file = os.environ.get("TERRAI_PYTEST_PROGRESS_FILE")
+    _PROGRESS_PATH = Path(progress_file) if progress_file else None
+    _write_test_progress("SESSION START")
+
+
+def pytest_runtest_logstart(nodeid, location):
+    _write_test_progress(f"START {nodeid}")
+
+
+def pytest_runtest_logreport(report):
+    if report.failed:
+        _write_test_progress(f"FAIL {report.nodeid} phase={report.when}")
+    elif report.skipped:
+        _write_test_progress(f"SKIP {report.nodeid} phase={report.when}")
+    elif report.when == "call":
+        _write_test_progress(f"PASS {report.nodeid}")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    _write_test_progress(f"SESSION END exitstatus={exitstatus}")
 
 
 def pytest_addoption(parser):
@@ -136,7 +171,7 @@ def terra(tmp_path, request):
         yield instance
     finally:
         terra_plugin._terrai = previous
-        instance.db.conn.close()
+        instance.close()
 
 
 @pytest.fixture

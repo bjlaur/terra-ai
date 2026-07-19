@@ -8,7 +8,11 @@ asking the model to prompt the user.
 
 import logging
 
-from terra_ai.tools.openmeteo.client import GEOCODING_URL, OpenMeteoClient
+from terra_ai.tools.openmeteo.client import (
+    GEOCODING_URL,
+    OpenMeteoClient,
+    OpenMeteoResponseError,
+)
 
 logger = logging.getLogger("terraai")
 
@@ -122,11 +126,27 @@ def geocode_location(client: OpenMeteoClient, name: str) -> dict:
     data = client.get_json(GEOCODING_URL, params)
     results = data.get("results") or []
 
+    if not isinstance(results, list):
+        raise OpenMeteoResponseError(
+            "Open-Meteo geocoding response field 'results' must be a list"
+        )
+    if any(not isinstance(result, dict) for result in results):
+        raise OpenMeteoResponseError(
+            "Open-Meteo geocoding results must contain only objects"
+        )
+
     if not results:
         raise ValueError(f"No location found for {name!r}")
 
     ranked = _rank_results(results, requested_admin1)
     best = ranked[0]
+    for coordinate in ("latitude", "longitude"):
+        if isinstance(best.get(coordinate), bool) or not isinstance(
+            best.get(coordinate), (int, float)
+        ):
+            raise OpenMeteoResponseError(
+                f"Open-Meteo geocoding result has no numeric {coordinate}"
+            )
     if requested_admin1 and best.get("admin1", "").lower() != requested_admin1.lower():
         logger.warning(
             "Geocode: requested %s but no result matched; fell back to %s, %s",
