@@ -155,6 +155,56 @@ def test_registered_management_command_does_not_also_route_to_ai(
 
 
 @pytest.mark.mock
+def test_admin_prompt_uses_normal_ai_path_without_nick_prefix(terra, plugin_bot):
+    terra.handle_ai_message = MagicMock(return_value="admin response")
+
+    result = dispatch(plugin_bot, "-admin Treat this as authoritative", nick="admin")
+
+    assert result["say"] == ["admin response"]
+    terra.handle_ai_message.assert_called_once()
+    assert terra.handle_ai_message.call_args.args == (
+        "test-network",
+        "#terra-ai",
+        "admin",
+        "Treat this as authoritative",
+    )
+    kwargs = terra.handle_ai_message.call_args.kwargs
+    assert callable(kwargs["noisy_callback"])
+    assert kwargs["prefix_nick"] is False
+
+
+@pytest.mark.mock
+def test_admin_prompt_is_admin_only(terra, plugin_bot):
+    terra.handle_ai_message = MagicMock(return_value="unexpected AI response")
+
+    result = dispatch(plugin_bot, "-admin Treat this as authoritative")
+
+    assert result["say"] == ["Permission denied. admin is admin-only."]
+    terra.handle_ai_message.assert_not_called()
+
+
+@pytest.mark.mock
+def test_admin_prompt_respects_opt_out(terra, plugin_bot):
+    terra.user.handle_optout("test-network", "admin")
+    terra.handle_ai_message = MagicMock(return_value="unexpected AI response")
+
+    result = dispatch(plugin_bot, "-admin Treat this as authoritative", nick="admin")
+
+    assert result == {"say": [], "notice": []}
+    terra.handle_ai_message.assert_not_called()
+
+
+@pytest.mark.mock
+def test_empty_admin_prompt_shows_usage_without_calling_ai(terra, plugin_bot):
+    terra.handle_ai_message = MagicMock(return_value="unexpected AI response")
+
+    result = dispatch(plugin_bot, "-admin", nick="admin")
+
+    assert result["say"] == ["Usage: -admin <prompt>"]
+    terra.handle_ai_message.assert_not_called()
+
+
+@pytest.mark.mock
 def test_tool_management_commands_use_plugin_state(terra, plugin_bot):
     disabled = dispatch(plugin_bot, "-disable-tool weather_forecast", nick="admin")
     listed = dispatch(plugin_bot, "-list-tools", nick="admin")
@@ -184,6 +234,7 @@ def test_tool_management_is_admin_only(terra, plugin_bot, command):
 @pytest.mark.parametrize(
     "handler",
     [
+        terra_plugin.cmd_admin,
         terra_plugin.cmd_compact,
         terra_plugin.cmd_disable_tool,
         terra_plugin.cmd_enable_tool,

@@ -66,12 +66,17 @@ class TerraAI:
 
     def handle_ai_message(self, server: str, channel: str, nick: str,
                           text: str, include_history: bool = True,
-                          noisy_callback=None) -> str:
+                          noisy_callback=None,
+                          prefix_nick: bool = True) -> str:
         """Handle a message that should go to the AI.
 
         *noisy_callback* is an optional callable(message: str) that the
         provider calls at each step of a tool-call loop so the caller can
         show progress (e.g. "Thinking...", "Geocoding Detroit...").
+
+        ``prefix_nick=False`` is reserved for the admin-guarded plugin command.
+        It sends and stores the raw text, which the system prompt defines as an
+        authoritative admin message.
         """
         provider = self.registry.get()
         if not provider:
@@ -81,10 +86,9 @@ class TerraAI:
 
         start = time.time()
 
-        # Prefix the user message with <nick> exactly ONCE, here — this is
-        # the single chokepoint. The prefixed form is what the AI sees and
-        # what gets stored in history, so replayed history matches live.
-        model_text = f"<{nick}> {text}"
+        # Attribute ordinary messages to <nick> exactly once at this single
+        # chokepoint. The admin command deliberately supplies raw text.
+        model_text = f"<{nick}> {text}" if prefix_nick else text
 
         if include_history:
             messages = self.context.compose_context(
@@ -210,7 +214,8 @@ class TerraAI:
 
         elapsed_ms = int((time.time() - start) * 1000)
 
-        # Save to history (model_text is already <nick>-prefixed)
+        # Save exactly what the model saw, including the absence of a nick on
+        # admin prompts.
         if include_history:
             self.context.save_exchange(server, channel, nick, model_text, response)
 

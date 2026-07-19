@@ -245,6 +245,30 @@ def test_context_free_ai_excludes_history_and_does_not_persist(
     assert history_after == history_before
 
 
+def test_admin_prompt_uses_provider_and_history_without_nick_prefix(
+    terra, plugin_client, service_transport, monkeypatch
+):
+    provider = terra.registry.get()
+    original_chat = provider.chat
+    observed_messages = []
+
+    def observe_chat(messages, *args, **kwargs):
+        observed_messages.append(list(messages))
+        return original_chat(messages, *args, **kwargs)
+
+    monkeypatch.setattr(provider, "chat", observe_chat)
+    prompt = "Keep answers concise for this conversation"
+    result = plugin_client.send_as("admin", f"-admin {prompt}")
+
+    _assert_ai_reply(result)
+    contents = [message.content for message in observed_messages[0]]
+    assert prompt in contents
+    assert f"<admin> {prompt}" not in contents
+    history = terra.context.history.recent("test-network", "#terra-ai")
+    assert history[-2]["role"] == "user"
+    assert history[-2]["content"] == prompt
+
+
 def test_disabled_weather_tool_is_absent_from_provider_request(
     terra, plugin_client, service_transport, monkeypatch
 ):

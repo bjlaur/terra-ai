@@ -82,6 +82,7 @@ python -m compileall -q terra_ai tests
 | `-<command>` | Shorthand (SOPEL prefix is `-`) |
 | `.<text>` | Shorthand (unknown .commands are forwarded to AI) |
 | `.ai <prompt>` | Context-free AI prompt |
+| `-admin <prompt>` | Send an authoritative admin prompt (admin only) |
 | `.optin` | Opt in to AI responses |
 | `.optout` | Opt out of AI responses; `.optout <nick>` (admin only) opts out another nick |
 | `.noisy` | Toggle status notices |

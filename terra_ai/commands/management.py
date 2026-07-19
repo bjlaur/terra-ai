@@ -101,6 +101,7 @@ class ManagementCommands:
         p = self.help_prefix
         return (
             f"Commands: {p}optin, {p}optout, {p}noisy, {p}ai <prompt>, "
+            f"{p}admin <prompt> (admin only), "
             f"{p}addprompt <trigger> <text>, {p}rmprompt <number>, {p}listprompts, "
             f"{p}setlocation <city, state>, {p}compact, {p}clear, {p}stats, {p}help, {p}effort [level]"
         )

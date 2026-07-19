@@ -195,6 +195,39 @@ def cmd_ai(bot, trigger):
         bot.say(response)
 
 
+@sopel_plugin.command("admin")
+@_irc_error_handler
+@sopel_plugin.require_admin("Permission denied. admin is admin-only.")
+def cmd_admin(bot, trigger):
+    """Send an authoritative admin prompt through the normal AI path."""
+    terra = _get_terra()
+    server = _server_name(bot)
+    channel = _channel_name(trigger)
+    nick = _nick(trigger)
+    if not _guard(server, nick):
+        return
+
+    args = (trigger.group(2) or "").strip()
+    if not args:
+        bot.say(terra.management.format_usage("admin <prompt>"))
+        return
+
+    def _noisy_notify(msg):
+        if terra.user.is_noisy(server, nick):
+            bot.notice(msg, nick)
+
+    response = terra.handle_ai_message(
+        server,
+        channel,
+        nick,
+        args,
+        noisy_callback=_noisy_notify,
+        prefix_nick=False,
+    )
+    if response:
+        bot.say(response)
+
+
 @sopel_plugin.command("addprompt")
 @_irc_error_handler
 def cmd_addprompt(bot, trigger):

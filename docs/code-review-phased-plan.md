@@ -237,3 +237,23 @@ Begin this only after the stabilization and cleanup phases above are green and r
   provider/tool-selection contract. The stale reply-text-only Ergo test was
   deleted with explicit permission; retained Ergo weather tests cover the
   local tool and its noisy progress through real Sopel/IRC.
+
+## Phase 5 Closeout
+
+Phase 5 is complete by user direction. The final implementation adds an
+admin-guarded `-admin <prompt>` command. It follows the normal history-enabled
+AI path but deliberately omits the `<nick>` prefix so the existing system
+contract treats the stored message as authoritative admin input. The shared
+fast/real plugin E2E body verifies the provider and history representation.
+
+The final approved handler corrections put TerraAI's error boundary outside
+Sopel's admin check and make help/usage output use `core.help_prefix` without
+changing routing. `allow_bots` and the local noisy-callback closures are
+intentionally retained.
+
+All remaining audit findings are deferred to a future iteration. This includes
+the unfinished feature areas already listed in this plan plus active README/config
+cleanup, the redundant `rmprompt` parsing line, repeated `UserCommands` local
+imports, the Open-Meteo alias/import-order smell, SQLite cleanup on schema-init
+failure, and monotonic elapsed-time measurements. Deferral grants no permission
+to delete those paths or reset an existing SQLite file.

@@ -55,15 +55,12 @@ means enabled.
 
 ## Verification
 
-- Focused database, plugin-contract, and plugin E2E tests: **78 passed**.
-- Complete deterministic offline gate after weather source-selection coverage:
-  **192 passed, 21 skipped**. All 21 skips are the separately selected
+- Complete deterministic offline gate at Phase 5 closeout:
+  **203 passed, 21 skipped**. All 21 skips are the separately selected
   always-real Ergo suite.
-- Shared real-service plugin gate: **16 passed**.
-- The last complete Ergo/Sopel gate before deleting the stale duplicate was
-  **21 passed, 1 expected xfail**. The deleted test was one of the passes; no
-  retained Ergo code changed. The xfail remains the live model's unreliable
-  production of an over-450-byte response.
+- Complete shared real-service plugin gate: **19 passed, 205 deselected**.
+- Complete Ergo/Sopel gate: **20 passed, 1 expected xfail**. The xfail remains
+  the live model's unreliable production of an over-450-byte response.
 - `git diff --check` passed.
 
 ## Explicit weather source selection
@@ -96,11 +93,52 @@ No Ergo duplicate replaces it because provider/tool selection is already
 covered through `plugin.py`; retained Ergo tests continue to cover real
 weather-tool progress and results through the IRC boundary.
 
-## Remaining decisions and deferred work
+## Authoritative admin prompts
 
-- `addressed_freeform` still opts into IRCv3 bot-tagged messages with
-  `allow_bots`. This may be useful for bot interoperability but also creates a
-  loop/cost/privacy risk and needs an explicit policy decision.
+The admin-only `-admin <prompt>` command uses the normal history-enabled AI
+path, including provider tools, noisy notices, concise-response handling,
+logging, persistence, and error reporting. Its sole semantic difference is
+that the model and history receive the raw prompt without a `<nick>` prefix.
+The base system rules already define an unprefixed user-role message as an
+authoritative admin prompt. Opt-out still applies because all other ordinary
+message behavior was intentionally preserved.
+
+One shared fast/real plugin E2E body proves that the provider receives the raw
+prompt and that history stores the same raw prompt. Plugin contract tests prove
+admin denial, opt-out, empty-command usage, noisy callback wiring, and inclusion
+of Sopel's admin check inside TerraAI's terminal error boundary.
+
+## Phase 5 closeout
+
+- TerraAI's error boundary now encloses Sopel's authorization wrapper on every
+  TerraAI admin-only command. Normal permission decisions are unchanged.
+- Help and usage output uses Sopel's configured `core.help_prefix`; routing
+  continues to use Sopel's separate `core.prefix` regex.
+- `addressed_freeform` intentionally retains `allow_bots` by user decision.
+- The small repeated noisy-callback closures intentionally remain local to
+  their handlers.
+
+The cleanup phase is closed by user direction. The following audit findings
+are explicitly deferred to the next cleanup iteration and are not claims about
+currently supported behavior:
+
+- Prompt-management semantics, including the known `rmprompt` behavior and its
+  redundant parsing line.
+- Clear/compact, statistics/telemetry, effort/reasoning, provider selection and
+  fallback, and container/package implementation.
+- Broader active README corrections for unfinished commands and false feature
+  claims, TerraAISection's false zero-configuration wording, and the
+  machine-specific path in the active Sopel test-config example.
+- Simplifying repeated `UserCommands` local imports, removing the pointless
+  Open-Meteo function alias/import-order smell, closing SQLite if schema
+  initialization fails, and changing elapsed-time measurements to monotonic
+  clocks.
+
+No deferred code is authorized for deletion, and no SQLite file or unrelated
+schema may be reset as part of this closeout.
+
+## Deferred feature work
+
 - Prompt management, `setlocation` persistence, clear/compact, telemetry,
   effort, container work, and provider selection remain deferred as recorded
   in the phased plan.
