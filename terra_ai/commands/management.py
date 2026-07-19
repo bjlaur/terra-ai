@@ -12,6 +12,10 @@ class ManagementCommands:
         self.prompts = prompts
         self.help_prefix = help_prefix
 
+    def format_usage(self, command: str) -> str:
+        """Format command usage with Sopel's configured display prefix."""
+        return f"Usage: {self.help_prefix}{command}"
+
     def handle_listprompts(self, server: str, nick: str) -> str:
         """Handle .listprompts command."""
         prompts = self.prompts.list_prompts(server)
@@ -28,7 +32,7 @@ class ManagementCommands:
         try:
             index = int(args.strip()) - 1  # 1-indexed to 0-indexed
         except (ValueError, AttributeError):
-            return "Usage: .rmprompt <number>"
+            return self.format_usage("rmprompt <number>")
 
         if self.prompts.remove_prompt_by_index(server, index):
             prompts = self.prompts.list_prompts(server)
@@ -41,7 +45,7 @@ class ManagementCommands:
         """Handle .addprompt <trigger> <text> command."""
         parts = args.strip().split(None, 1)
         if len(parts) < 2:
-            return "Usage: .addprompt <trigger> <text>"
+            return self.format_usage("addprompt <trigger> <text>")
 
         trigger, response = parts
         if self.prompts.add_prompt(server, trigger, response, nick):

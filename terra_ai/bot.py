@@ -27,7 +27,13 @@ class TerraAI:
     SOPEL @rule decorators delegate to this class.
     """
 
-    def __init__(self, config: TerraAISection, registry: ProviderRegistry):
+    def __init__(
+        self,
+        config: TerraAISection,
+        registry: ProviderRegistry,
+        *,
+        help_prefix: str = "-",
+    ):
         if not str(config.sqlite_path or "").strip():
             raise ValueError("[terraai] sqlite_path must not be empty")
         self.config = config
@@ -36,7 +42,11 @@ class TerraAI:
             self.db, config=config
         )
         self.context = ContextManager(self.db, self.prompts)
-        self.management = ManagementCommands(self.db, self.prompts, help_prefix="-")
+        self.management = ManagementCommands(
+            self.db,
+            self.prompts,
+            help_prefix=help_prefix,
+        )
         self.user = UserCommands(self.db, self.prompts)
         self.tool_policy = ToolPolicy(self.db)
         self.registry = registry

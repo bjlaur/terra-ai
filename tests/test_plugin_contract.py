@@ -181,6 +181,32 @@ def test_tool_management_is_admin_only(terra, plugin_bot, command):
 
 
 @pytest.mark.mock
+@pytest.mark.parametrize(
+    "handler",
+    [
+        terra_plugin.cmd_compact,
+        terra_plugin.cmd_disable_tool,
+        terra_plugin.cmd_enable_tool,
+        terra_plugin.cmd_listtools,
+    ],
+)
+def test_admin_check_is_inside_plugin_error_boundary(handler):
+    class BrokenAdminTrigger:
+        @property
+        def admin(self):
+            raise RuntimeError("admin lookup failed")
+
+    bot = MagicMock()
+
+    handler(bot, BrokenAdminTrigger())
+
+    bot.say.assert_called_once()
+    message = bot.say.call_args.args[0]
+    assert message.startswith("Error [")
+    assert "RuntimeError: admin lookup failed" in message
+
+
+@pytest.mark.mock
 def test_tool_policy_is_server_wide(terra, plugin_bot):
     dispatch(plugin_bot, "-disable-tool weather_forecast", nick="admin")
 

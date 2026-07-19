@@ -52,7 +52,11 @@ def setup(bot):
         config.bot_nick = bot.settings.core.nick
     logger.info("TerraAI setup starting; model=%r", config.model)
     try:
-        _terrai = TerraAI(config, _openrouter_registry(config))
+        _terrai = TerraAI(
+            config,
+            _openrouter_registry(config),
+            help_prefix=bot.settings.core.help_prefix,
+        )
     except Exception:
         logger.exception("TerraAI setup failed")
         shutdown_logging()
@@ -224,8 +228,8 @@ def cmd_listprompts(bot, trigger):
 
 
 @sopel_plugin.command("compact")
-@sopel_plugin.require_admin("Permission denied. .compact is admin-only.")
 @_irc_error_handler
+@sopel_plugin.require_admin("Permission denied. .compact is admin-only.")
 def cmd_compact(bot, trigger):
     """Compact conversation history. Admin only."""
     terra = _get_terra()
@@ -304,15 +308,15 @@ def cmd_setlocation(bot, trigger):
 
 
 @sopel_plugin.command("disable-tool")
-@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 def cmd_disable_tool(bot, trigger):
     """Disable a local tool server-wide. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
     args = (trigger.group(2) or "").strip()
     if not args:
-        bot.say("Usage: -disable-tool <tool_name>")
+        bot.say(terra.management.format_usage("disable-tool <tool_name>"))
         return
     valid = terra.tool_policy.valid_names()
     if args not in valid:
@@ -323,15 +327,15 @@ def cmd_disable_tool(bot, trigger):
 
 
 @sopel_plugin.command("enable-tool")
-@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 def cmd_enable_tool(bot, trigger):
     """Enable a local tool server-wide. Admin only."""
     terra = _get_terra()
     server = _server_name(bot)
     args = (trigger.group(2) or "").strip()
     if not args:
-        bot.say("Usage: -enable-tool <tool_name>")
+        bot.say(terra.management.format_usage("enable-tool <tool_name>"))
         return
     valid = terra.tool_policy.valid_names()
     if args not in valid:
@@ -342,8 +346,8 @@ def cmd_enable_tool(bot, trigger):
 
 
 @sopel_plugin.command("list-tools")
-@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 @_irc_error_handler
+@sopel_plugin.require_admin("Permission denied. Tool management is admin-only.")
 def cmd_listtools(bot, trigger):
     """List server-wide local-tool policy. Admin only."""
     terra = _get_terra()

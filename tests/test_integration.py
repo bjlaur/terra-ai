@@ -159,6 +159,20 @@ class TestPluginRules:
 
 
 class TestManagementCommands:
+    def test_help_and_usage_use_configured_display_prefix(self, terra):
+        terra.management.help_prefix = "!"
+
+        assert "!optin" in terra.management.handle_help()
+        assert terra.management.handle_addprompt("server", "nick", "") == (
+            "Usage: !addprompt <trigger> <text>"
+        )
+        assert terra.management.handle_rmprompt("server", "nick", "") == (
+            "Usage: !rmprompt <number>"
+        )
+        assert terra.management.format_usage("disable-tool <tool_name>") == (
+            "Usage: !disable-tool <tool_name>"
+        )
+
     def test_add_and_list_prompts(self, terra):
         terra.management.handle_addprompt("irc.example.com", "nick", ".wea sunny")
         result = terra.management.handle_listprompts("irc.example.com", "nick")
