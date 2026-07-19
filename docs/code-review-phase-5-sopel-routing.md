@@ -56,22 +56,51 @@ means enabled.
 ## Verification
 
 - Focused database, plugin-contract, and plugin E2E tests: **78 passed**.
-- Complete deterministic offline gate: **190 passed, 22 skipped**. All 22
-  skips are the separately selected always-real Ergo suite.
+- Complete deterministic offline gate after weather source-selection coverage:
+  **192 passed, 21 skipped**. All 21 skips are the separately selected
+  always-real Ergo suite.
 - Shared real-service plugin gate: **16 passed**.
-- Ergo/Sopel gate: **21 passed, 1 expected xfail**. The xfail remains the live
-  model's unreliable production of an over-450-byte response.
+- The last complete Ergo/Sopel gate before deleting the stale duplicate was
+  **21 passed, 1 expected xfail**. The deleted test was one of the passes; no
+  retained Ergo code changed. The xfail remains the live model's unreliable
+  production of an over-450-byte response.
 - `git diff --check` passed.
+
+## Explicit weather source selection
+
+This item was moved into Phase 5 by user direction. A capability-aware system
+instruction is present only when both local tools and provider-native search
+are available. It tells the model to honor an explicit request for web search
+instead of `weather_forecast`. The same instruction defines a distinct hybrid
+request: when a user explicitly asks for both sources or a web-search overread,
+the model must run local weather and provider-native search, then synthesize
+one reply.
+
+One shared plugin-routed test body covers deterministic and real services.
+Fast mode scripts OpenRouter's documented
+`usage.server_tool_use.web_search_requests` metadata. Real mode observes the
+same metadata through TerraAI's `Searching web...` noisy notice. Both modes
+reject a `Fetching weather...` notice, and fast mode additionally proves that
+no Open-Meteo HTTP request occurred. A second shared scenario requires both
+`Searching web...` and `Fetching weather...`, so hybrid behavior cannot pass
+from answer wording alone. Focused prompt/contract/fast coverage passed
+**15 tests**; both identical live scenarios passed.
+
+A one-run live benchmark using fresh per-test TerraAI/database fixtures and the
+same configured model measured **6.50s** for local Open-Meteo, **6.88s** for
+web-search-only, and **19.59s** for hybrid overread. These are observations of
+live provider/network conditions, not stable performance guarantees.
+
+The misleading reply-text-only Ergo test was deleted with explicit permission.
+No Ergo duplicate replaces it because provider/tool selection is already
+covered through `plugin.py`; retained Ergo tests continue to cover real
+weather-tool progress and results through the IRC boundary.
 
 ## Remaining decisions and deferred work
 
 - `addressed_freeform` still opts into IRCv3 bot-tagged messages with
   `allow_bots`. This may be useful for bot interoperability but also creates a
   loop/cost/privacy risk and needs an explicit policy decision.
-- The stale Ergo test named `test_bot_uses_web_search_for_weather` verifies
-  only a weather response, not provider-native search. A future distinct test
-  should cover an explicit user request for web search without duplicating the
-  local-weather contract.
 - Prompt management, `setlocation` persistence, clear/compact, telemetry,
   effort, container work, and provider selection remain deferred as recorded
   in the phased plan.

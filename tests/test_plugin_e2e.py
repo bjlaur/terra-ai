@@ -77,6 +77,49 @@ def test_weather_tool_round_trip(plugin_client, service_transport):
     assert any(word in notices.lower() for word in ("weather", "forecast", "fetching"))
 
 
+def test_explicit_weather_web_search_override(plugin_client, service_transport):
+    plugin_client.send_message("-noisy")
+    plugin_client.bot.notices.clear()
+
+    result = plugin_client.send_message(
+        "TerraAI: Use web search instead of the local weather tool to find "
+        "the current weather in Traverse City, Michigan."
+    )
+
+    _assert_ai_reply(
+        result,
+        scripted_text="external weather sources" if service_transport else None,
+    )
+    notices = " ".join(message for _, message in plugin_client.bot.notices)
+    assert "Searching web..." in notices
+    assert "Fetching weather" not in notices
+    if service_transport:
+        assert not any(
+            request.url.host.endswith("open-meteo.com")
+            for request in service_transport.requests
+        )
+
+
+def test_explicit_weather_hybrid_overread(plugin_client, service_transport):
+    plugin_client.send_message("-noisy")
+    plugin_client.bot.notices.clear()
+
+    result = plugin_client.send_message(
+        "TerraAI: Use both the local weather tool and web search as an overread "
+        "for the weather in Detroit, Michigan, then combine what they say."
+    )
+
+    _assert_ai_reply(result, scripted_text="Detroit" if service_transport else None)
+    notices = " ".join(message for _, message in plugin_client.bot.notices)
+    assert "Searching web..." in notices
+    assert "Fetching weather" in notices
+    if service_transport:
+        assert any(
+            request.url.host.endswith("open-meteo.com")
+            for request in service_transport.requests
+        )
+
+
 def test_ordinary_channel_traffic_never_reaches_provider(
     terra, plugin_client, service_transport
 ):

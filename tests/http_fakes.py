@@ -72,6 +72,17 @@ class ScriptedServices:
             for message in messages
         )
 
+        usage = {}
+        weather_source_request = (
+            "web search" in user_text
+            and "local weather tool" in user_text
+            and ("weather" in user_text or "forecast" in user_text)
+        )
+        hybrid_weather_search = weather_source_request and (
+            "use both" in user_text or "overread" in user_text
+        )
+        explicit_weather_search = weather_source_request and not hybrid_weather_search
+
         if last.get("role") == "tool":
             tool_content = str(last.get("content") or "")
             if '"ok": false' in tool_content.lower():
@@ -84,6 +95,30 @@ class ScriptedServices:
                     "role": "assistant",
                     "content": "Detroit weather forecast: 70°F and clear.",
                 }
+        elif hybrid_weather_search:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "weather-hybrid-1",
+                        "type": "function",
+                        "function": {
+                            "name": "weather_forecast",
+                            "arguments": json.dumps(
+                                {"location": "Detroit, MI", "preset": "basic_forecast"}
+                            ),
+                        },
+                    }
+                ],
+            }
+            usage = {"server_tool_use": {"web_search_requests": 1}}
+        elif explicit_weather_search:
+            message = {
+                "role": "assistant",
+                "content": "External weather sources report current conditions.",
+            }
+            usage = {"server_tool_use": {"web_search_requests": 1}}
         elif concise_retry:
             message = {"role": "assistant", "content": "short rewritten response"}
         elif "force an oversized response" in user_text:
@@ -131,7 +166,7 @@ class ScriptedServices:
 
         return httpx.Response(
             200,
-            json={"choices": [{"message": message}], "usage": {}},
+            json={"choices": [{"message": message}], "usage": usage},
         )
 
     @staticmethod

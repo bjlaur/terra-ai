@@ -219,18 +219,21 @@ Begin this only after the stabilization and cleanup phases above are green and r
 - Preserve the provider-neutral possibility of reasoning controls without adding it to the current provider contract or repairing dormant adapters for it.
 - If effort code makes an active cleanup materially harder, propose the precise code, commands, tests, state, and documentation to delete and request explicit permission first. After approval, leave a concise reimplementation note rather than maintaining a misleading partial feature.
 
-## Deferred Follow-Up: Explicit Web Search Instead of Weather Tool
+## Phase 5 Implementation: Explicit Weather Source Selection
 
-- Define how a user explicitly requests provider-native web search instead of
-  the local Open-Meteo weather tool for a weather question.
-- Add one shared plugin-routed fast/real scenario that proves web search ran,
-  no local weather tool ran, and the final reply was returned normally. Fast
-  mode should script OpenRouter's server-tool usage metadata; real mode should
-  observe actual provider usage rather than infer it from response wording.
-- Extend the always-real Ergo suite only if the IRC/SOPEL boundary adds useful
-  coverage, using noisy notices or correlated logs to distinguish
-  `Searching web...` from `Fetching weather...`.
-- The existing Ergo test named `test_bot_uses_web_search_for_weather` does not
-  establish this behavior: it only checks for weather-related reply text and
-  may pass after Open-Meteo use. Rename or replace it when this deferred item
-  is implemented; do not treat it as web-search selection coverage now.
+- When both local tools and provider-native search are available, the system
+  contract honors an explicit request to use web search instead of the local
+  weather tool.
+- An explicit request for both sources, or for a web-search overread, requires
+  both `weather_forecast` and provider-native web search before one synthesized
+  reply.
+- One shared plugin-routed fast/real scenario proves actual search through
+  OpenRouter's `usage.server_tool_use.web_search_requests` metadata, proves no
+  Open-Meteo request/tool notice occurred, and verifies a normal final reply.
+- A second shared scenario requires both `Searching web...` and
+  `Fetching weather...`, proving the hybrid path rather than inferring it from
+  answer wording.
+- No Ergo duplicate was added because IRC adds no distinct behavior to this
+  provider/tool-selection contract. The stale reply-text-only Ergo test was
+  deleted with explicit permission; retained Ergo weather tests cover the
+  local tool and its noisy progress through real Sopel/IRC.

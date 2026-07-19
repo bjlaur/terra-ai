@@ -1017,36 +1017,6 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
 
         self._irc_quit(sock)
 
-    def test_bot_uses_web_search_for_weather(self, sopel_bot_process):
-        """Test that the bot uses web_search when asked about weather.
-
-        Sends 'What's the weather in Traverse City?' via TerraAI: trigger.
-        The bot should call web_search and respond with weather-related content.
-        """
-        sock = self._irc_connect("TestWeather")
-        self._irc_join(sock, "TestWeather", self.TEST_CHANNEL)
-
-        sock.sendall(
-            f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: what's the weather in Traverse City?\r\n".encode()
-        )
-
-        response = self._read_irc_until(
-            sock,
-            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=_test_timeout(4),  # AI reply; bump TERRAI_TEST_TIMEOUT if slow
-        )
-        assert response is not None, "Bot did not respond to weather query"
-        # Bot replies must never echo the <nick> user-turn prefix.
-        self._assert_no_nick_prefix(self._reply_text(response), nick="TestWeather")
-
-        full_text = "\n".join(response).lower()
-        assert "traverse" in full_text or "weather" in full_text \
-            or "temperature" in full_text or "forecast" in full_text \
-            or "°" in full_text or "cloud" in full_text or "rain" in full_text, \
-            f"Expected weather-related response, got:\n{chr(10).join(response)}"
-
-        self._irc_quit(sock)
-
     def test_bot_responds_to_bare_pm(self, sopel_bot_process):
         """Test that bare PM text (no prefix, no nick) reaches the AI.
 

@@ -92,6 +92,11 @@ def test_core_uses_only_public_provider_contract(
         prompt = " ".join(message.content for message in call["messages"])
         assert ("weather_forecast" in prompt) is has_weather_prompt
         assert ("provider-side web search" in prompt) is has_search_prompt
+        has_weather_search_override = has_weather_prompt and has_search_prompt
+        assert (
+            "asks you to use web search instead" in prompt
+        ) is has_weather_search_override
+        assert ("asks for a web-search overread" in prompt) is has_weather_search_override
         if has_tools:
             assert [
                 tool["function"]["name"] for tool in call["tools"]

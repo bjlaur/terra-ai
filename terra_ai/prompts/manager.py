@@ -44,11 +44,17 @@ class PromptManager:
         provider declares that capability.
         """
         capabilities = capabilities or ProviderCapabilities()
+        def supports(requirement) -> bool:
+            if requirement is None:
+                return True
+            if isinstance(requirement, tuple):
+                return all(getattr(capabilities, name) for name in requirement)
+            return bool(getattr(capabilities, requirement))
+
         templates = [
             template
-            for template, required_capability in SYSTEM_PROMPTS
-            if required_capability is None
-            or getattr(capabilities, required_capability)
+            for template, requirement in SYSTEM_PROMPTS
+            if supports(requirement)
         ]
         botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
         return [
