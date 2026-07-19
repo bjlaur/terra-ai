@@ -12,6 +12,8 @@ import pytest
 
 from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
+from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.registry import ProviderRegistry
 from tests.support import PluginTestClient, build_fake_bot
 from tests.http_fakes import ScriptedServices
 
@@ -164,7 +166,13 @@ def terra(tmp_path, request):
         api_key=api_key,
         sqlite_path=str(tmp_path / "terraai.db"),
     )
-    instance = TerraAI(config)
+    provider = OpenRouterProvider(
+        model=config.model,
+        api_key=config.api_key,
+        base_url=config.base_url,
+        timeout=config.provider_timeout,
+    )
+    instance = TerraAI(config, ProviderRegistry(provider))
     previous = terra_plugin._terrai
     terra_plugin._terrai = instance
     try:

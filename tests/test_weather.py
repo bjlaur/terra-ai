@@ -228,14 +228,12 @@ class TestSchemas:
         assert "preset" in func["parameters"]["properties"]
 
     def test_available_tools_includes_weather(self):
-        from terra_ai.tools.schemas import AVAILABLE_TOOLS
+        from terra_ai.tools.schemas import LOCAL_TOOLS
         names = []
-        for t in AVAILABLE_TOOLS:
+        for t in LOCAL_TOOLS:
             if t["type"] == "function":
                 names.append(t["function"]["name"])
-            elif t["type"] == "openrouter:web_search":
-                names.append("openrouter:web_search")
         assert "weather_forecast" in names
-        assert "openrouter:web_search" in names
+        assert "openrouter:web_search" not in names
         # geocode is NOT a standalone tool — weather_forecast geocodes internally.
         assert "geocode" not in names

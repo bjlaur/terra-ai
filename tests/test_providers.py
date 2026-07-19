@@ -6,6 +6,7 @@ import pytest
 
 from terra_ai.providers.base import AIProvider, Message
 from terra_ai.providers.openrouter import (
+    OPENROUTER_WEB_SEARCH_TOOL,
     OpenRouterProvider,
     OpenRouterResponseError,
     OpenRouterToolRoundLimitError,
@@ -17,18 +18,21 @@ class TestOpenRouterProvider:
     def test_name(self):
         provider = OpenRouterProvider(model="openrouter/test-model", api_key="test-key")
         assert provider.name == "openrouter"
+        assert provider.model == "openrouter/test-model"
+        assert provider.capabilities.local_tools is True
+        assert provider.capabilities.native_search is True
 
-    def test_is_available_with_key(self):
+    def test_is_configured_with_key(self):
         provider = OpenRouterProvider(model="test", api_key="test-key")
-        assert provider.is_available() is True
+        assert provider.configured is True
 
-    def test_is_available_without_key(self):
+    def test_is_not_configured_without_key(self):
         provider = OpenRouterProvider(model="test", api_key=None)
-        assert provider.is_available() is False
+        assert provider.configured is False
 
-    def test_is_available_empty_key(self):
+    def test_is_not_configured_with_empty_key(self):
         provider = OpenRouterProvider(model="test", api_key="")
-        assert provider.is_available() is False
+        assert provider.configured is False
 
     @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_chat(self, mock_client_cls):
@@ -44,10 +48,21 @@ class TestOpenRouterProvider:
 
         provider = OpenRouterProvider(model="test-model", api_key="test-key")
         messages = [Message("user", "hi")]
-        result = provider.chat(messages, system_prompt="You are a bot")
+        local_tool = {
+            "type": "function",
+            "function": {"name": "weather_forecast"},
+        }
+        result = provider.chat(
+            messages,
+            system_prompt="You are a bot",
+            tools=[local_tool],
+        )
 
         assert result == "Hello!"
         mock_client.post.assert_called_once()
+        request_tools = mock_client.post.call_args.kwargs["json"]["tools"]
+        assert request_tools.count(OPENROUTER_WEB_SEARCH_TOOL) == 1
+        assert request_tools.count(local_tool) == 1
 
     @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_chat_without_system_prompt(self, mock_client_cls):

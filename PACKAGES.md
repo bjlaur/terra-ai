@@ -24,7 +24,6 @@ sudo pacman -S --noconfirm python-yaml python-openai python-httpx python-aiohttp
 | `python-dotenv` | extra | .env loading (local dev) |
 | `ergo` | AUR (yay) | IRC server for integration testing |
 | `python-pytest` | extra | Test runner |
-| `google-generativeai` | pip | Gemini provider (no Arch package) |
 
 ## Required (0.0.3+)
 

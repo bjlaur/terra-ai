@@ -12,11 +12,10 @@ from terra_ai.database import Database, DBConfig, UserStore
 from terra_ai.errors import report_recoverable_error
 from terra_ai.irc import limit_utf8
 from terra_ai.providers.base import Message
-from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
 from terra_ai.prompts.manager import PromptManager
 from terra_ai.prompts.defaults import IRC_SAFE_BYTES
-from terra_ai.tools.schemas import AVAILABLE_TOOLS
+from terra_ai.tools.schemas import LOCAL_TOOLS
 logger = logging.getLogger("terraai")
 
 
@@ -27,24 +26,9 @@ class TerraAI:
     SOPEL @rule decorators delegate to this class.
     """
 
-    def __init__(self, config: TerraAISection):
+    def __init__(self, config: TerraAISection, registry: ProviderRegistry):
         if not str(config.sqlite_path or "").strip():
             raise ValueError("[terraai] sqlite_path must not be empty")
-        if not str(config.base_url or "").strip():
-            raise ValueError("[terraai] base_url must not be empty")
-        if config.provider_timeout <= 0:
-            raise ValueError("[terraai] provider_timeout must be greater than zero")
-        if not config.model:
-            raise ValueError(
-                "No AI model configured. TerraAI is model-agnostic: set "
-                "[terraai] model in your SOPEL .cfg (e.g. 'tencent/hy3:free'). "
-                "Refusing to start with an empty model."
-            )
-        if not config.api_key:
-            raise ValueError(
-                "No OpenRouter API key configured. Set [terraai] api_key "
-                "or the OPENROUTER_API_KEY env var."
-            )
         self.config = config
         self.db = Database(DBConfig(path=config.sqlite_path))
         self.prompts = PromptManager(
@@ -53,15 +37,7 @@ class TerraAI:
         self.context = ContextManager(self.db, self.prompts)
         self.management = ManagementCommands(self.db, self.prompts, help_prefix="-")
         self.user = UserCommands(self.db, self.prompts)
-
-        # Set up provider
-        provider = OpenRouterProvider(
-            model=config.model,
-            api_key=config.api_key,
-            base_url=config.base_url,
-            timeout=config.provider_timeout,
-        )
-        self.registry = ProviderRegistry(provider)
+        self.registry = registry
 
     def is_opted_in(self, server: str, nick: str) -> bool:
         """Check if user is opted in. Defaults to True if user not in DB."""
@@ -88,9 +64,7 @@ class TerraAI:
         provider = self.registry.get()
         if not provider:
             raise RuntimeError(
-                "AI provider not configured. "
-                "Set api_key in the [terraai] section of your Sopel config "
-                "or export OPENROUTER_API_KEY before starting Sopel."
+                "No configured AI provider is active."
             )
 
         start = time.time()
@@ -101,44 +75,60 @@ class TerraAI:
         model_text = f"<{nick}> {text}"
 
         if include_history:
-            messages = self.context.compose_context(server, channel, model_text, nick)
+            messages = self.context.compose_context(
+                server,
+                channel,
+                model_text,
+                nick,
+                capabilities=provider.capabilities,
+            )
         else:
             # Context-free (.ai command): the system prompt is the whole
             # prompt — no history. Still prefix with <nick> for consistency.
-            messages = self.context.prompts.get_context_seed(server, channel)
+            messages = self.context.prompts.get_context_seed(
+                server,
+                channel,
+                capabilities=provider.capabilities,
+            )
             messages.append({"role": "user", "content": model_text})
 
         # Convert to Message objects
         msg_objs = [Message(m["role"], m["content"]) for m in messages]
 
-        # The full JSON wire payload (messages + tools + reasoning) is
-        # dumped by the provider as DEBUG "OpenRouter REQUEST BODY" — no
-        # need to duplicate the messages array here.
+        # The provider owns exact wire logging and native feature schemas.
 
-        # Filter out disabled tools per user.
-        # Only applies to local tools (those with "function" key).
-        # Server-side tools (e.g. openrouter:web_search) can't be disabled.
+        # Apply the current persisted local-tool overrides. Their accidental
+        # per-user storage and missing admin ownership are deferred for an
+        # explicit server-wide schema correction; do not treat that shape as
+        # part of the provider contract.
         disabled = {
             t["tool_name"] for t in self.user.list_tools(server, nick)
             if t["disabled"]
         }
-        tools = [
-            t for t in AVAILABLE_TOOLS
-            if "function" not in t or t["function"]["name"] not in disabled
-        ]
+        tools = None
+        if provider.capabilities.local_tools:
+            tools = [
+                tool for tool in LOCAL_TOOLS
+                if tool["function"]["name"] not in disabled
+            ]
         tool_names = [
             t["function"]["name"] if "function" in t else t.get("type", "unknown")
-            for t in tools
+            for t in tools or []
         ]
         logger.info(
             "AI prompt sent: model=%s nick=%s channel=%s prompt=%s",
-            provider._model,
+            provider.model,
             nick,
             channel,
             json.dumps(model_text, ensure_ascii=False),
         )
-        logger.debug("AI request: model=%s effort=%s messages=%d tools=%s",
-                     provider._model, self.prompts.effort, len(msg_objs), tool_names)
+        logger.debug(
+            "AI request: model=%s effort=%s messages=%d tools=%s",
+            provider.model,
+            self.prompts.effort,
+            len(msg_objs),
+            tool_names,
+        )
         response = provider.chat(
             msg_objs, effort=self.prompts.effort, tools=tools,
             noisy_callback=noisy_callback,
@@ -149,7 +139,7 @@ class TerraAI:
             )
         logger.debug(
             "AI provider response: model=%s length=%d text=%s",
-            provider._model,
+            provider.model,
             len(response or ""),
             json.dumps(response or "", ensure_ascii=False),
         )
@@ -196,7 +186,7 @@ class TerraAI:
             logger.debug(
                 "AI response after concise rewrite #%d: model=%s length=%d text=%s",
                 concise_retries,
-                provider._model,
+                provider.model,
                 len(response or ""),
                 json.dumps(response or "", ensure_ascii=False),
             )
@@ -221,7 +211,7 @@ class TerraAI:
 
         logger.info(
             "AI response: model=%s response=%s",
-            provider._model,
+            provider.model,
             json.dumps(response, ensure_ascii=False),
         )
 
@@ -229,7 +219,7 @@ class TerraAI:
         # replace an otherwise successful and persisted response.
         try:
             self._record_performance(
-                server, channel, nick, provider.name, provider._model,
+                server, channel, nick, provider.name, provider.model,
                 elapsed_ms, len(response),
             )
         except Exception as exc:

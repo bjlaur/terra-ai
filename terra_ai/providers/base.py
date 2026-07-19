@@ -1,7 +1,20 @@
 """Abstract base class for AI providers."""
 
 from abc import ABC, abstractmethod
-from typing import Generator
+from dataclasses import dataclass
+from typing import Callable
+
+
+@dataclass(frozen=True)
+class ProviderCapabilities:
+    """Optional active features implemented by a provider adapter."""
+
+    local_tools: bool = False
+    native_search: bool = False
+
+
+class UnsupportedProviderOptionError(ValueError):
+    """A caller requested an option the provider does not implement."""
 
 
 class Message:
@@ -27,10 +40,32 @@ class AIProvider(ABC):
         """Provider name (e.g. 'openrouter')."""
         ...
 
+    @property
+    @abstractmethod
+    def model(self) -> str:
+        """Configured model identifier, without provider-specific inspection."""
+        ...
+
+    @property
+    @abstractmethod
+    def capabilities(self) -> ProviderCapabilities:
+        """Declare optional active features implemented by this adapter."""
+        ...
+
+    @property
+    @abstractmethod
+    def configured(self) -> bool:
+        """Whether required local configuration is present.
+
+        This is intentionally not a remote health check. A future local or
+        in-process model need not have credentials, HTTP, or a preflight API.
+        """
+        ...
+
     @abstractmethod
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
-             max_tool_rounds: int = 3) -> str:
+             noisy_callback: Callable[[str], None] | None = None) -> str:
         """Send messages and get a complete response.
 
         Args:
@@ -38,15 +73,9 @@ class AIProvider(ABC):
             system_prompt: Optional system prompt prepended as a system message.
             effort: Effort level ('low', 'medium', 'high', 'xhigh', 'max').
             tools: Local function-tool schemas to include in the request.
-            max_tool_rounds: Max tool-call round-trips (for providers that
-                support tool calling).
+            noisy_callback: Optional progress callback.
 
         Returns:
             The AI's response text.
         """
-        ...
-
-    @abstractmethod
-    def is_available(self) -> bool:
-        """Check if provider is configured and reachable."""
         ...

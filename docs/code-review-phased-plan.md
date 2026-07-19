@@ -139,6 +139,8 @@ Phase 3 implementation results are recorded in [`code-review-phase-3-logging.md`
 - Experimental providers satisfy contract tests and explicitly reject unsupported capabilities.
 - No provider-selection or dormant-provider feature work has entered scope.
 
+Phase 4 implementation results are recorded in [`code-review-phase-4-provider-neutral.md`](code-review-phase-4-provider-neutral.md). Stop for user review at this gate.
+
 ## Phase 5: Routing and General Cleanup
 
 ### Work
@@ -148,6 +150,7 @@ Phase 3 implementation results are recorded in [`code-review-phase-3-logging.md`
 - Audit the plugin against SOPEL's public lifecycle, configuration, rule and command precedence, trigger parsing, nickname addressing, permission checks, threading model, and output APIs. Remove home-grown equivalents or bypasses unless TerraAI has a documented domain-specific requirement that SOPEL does not provide.
 - Audit module and layer ownership across plugin, core, commands, prompts/context, providers, tools, database, configuration, and test support. Flag behavior implemented in the wrong module, provider or SOPEL details leaking across boundaries, convenience imports that invert dependencies, and modules with mixed reasons to change. Move code only when it establishes a clearer owner or removes coupling; do not reshuffle files for cosmetic architecture.
 - Remove `_KNOWN_NICK_COMMANDS`, its addressed-command suppression, and documentation/tests for nonexistent addressed management aliases. Keep management commands prefix-only.
+- Correct tool enable/disable/list as admin-only, server-wide policy rather than the accidental per-user `UserStore` feature. Move it to an appropriate owner and request explicit permission before any incompatible replacement of the existing `tools` table.
 - Preserve prefixed `setlocation` as the single documented hybrid command.
 - Remove duplicated imports/logs, unused state, misleading names, stale comments, unnecessary broad catches, and redundant tests/helpers.
 - Review every production module and retained test helper for validation, ownership, side effects, concurrency assumptions, SOPEL emulation, and dead or contradictory paths.

@@ -8,7 +8,7 @@ import httpx
 
 from terra_ai.errors import report_recoverable_error
 from terra_ai.logging_config import trace_openrouter
-from terra_ai.providers.base import AIProvider, Message
+from terra_ai.providers.base import AIProvider, Message, ProviderCapabilities
 from terra_ai.tools.executor import execute_tool
 
 logger = logging.getLogger("terraai")
@@ -16,6 +16,16 @@ logger = logging.getLogger("terraai")
 # Cap on tool-call round-trips per chat() call. Prevents infinite loops if
 # the model keeps requesting tools without converging on a final answer.
 MAX_TOOL_ROUNDS = 3
+
+OPENROUTER_WEB_SEARCH_TOOL = {
+    "type": "openrouter:web_search",
+    "parameters": {
+        "engine": "auto",
+        "max_results": 5,
+        "max_total_results": 15,
+        "search_context_size": "medium",
+    },
+}
 
 
 class OpenRouterError(RuntimeError):
@@ -177,6 +187,18 @@ class OpenRouterProvider(AIProvider):
     def name(self) -> str:
         return "openrouter"
 
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(local_tools=True, native_search=True)
+
+    @property
+    def configured(self) -> bool:
+        return bool(self._model and self._api_key)
+
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
              max_tool_rounds: int = MAX_TOOL_ROUNDS,
@@ -235,17 +257,7 @@ class OpenRouterProvider(AIProvider):
 
         # Build tools list: always include server-side web_search, plus any
         # local function tools the caller passed in.
-        request_tools = [
-            {
-                "type": "openrouter:web_search",
-                "parameters": {
-                    "engine": "auto",
-                    "max_results": 5,
-                    "max_total_results": 15,
-                    "search_context_size": "medium",
-                },
-            }
-        ]
+        request_tools = [OPENROUTER_WEB_SEARCH_TOOL]
         if tools:
             request_tools.extend(tools)
         payload["tools"] = request_tools
@@ -355,6 +367,3 @@ class OpenRouterProvider(AIProvider):
                     })
                 tool_rounds += 1
                 round_idx += 1
-
-    def is_available(self) -> bool:
-        return self._api_key is not None and len(self._api_key) > 0

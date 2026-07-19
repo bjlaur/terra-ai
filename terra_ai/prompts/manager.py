@@ -4,6 +4,7 @@ import sqlite3
 
 from terra_ai.database import Database, PromptStore
 from terra_ai.errors import log_expected_error
+from terra_ai.providers.base import ProviderCapabilities
 from terra_ai.prompts.defaults import (
     DEFAULT_EFFORT,
     EFFORT_LEVELS,
@@ -31,16 +32,28 @@ class PromptManager:
             return True
         return False
 
-    def get_context_seed(self, server: str, channel: str) -> list[dict]:
+    def get_context_seed(
+        self,
+        server: str,
+        channel: str,
+        capabilities: ProviderCapabilities | None = None,
+    ) -> list[dict]:
         """Get the prompt as a list of system messages (one per rule).
 
-        Each entry in SYSTEM_PROMPTS becomes its own `system` turn so the
-        model weights every rule as an authoritative instruction.
+        Optional feature instructions are included only when the active
+        provider declares that capability.
         """
+        capabilities = capabilities or ProviderCapabilities()
+        templates = [
+            template
+            for template, required_capability in SYSTEM_PROMPTS
+            if required_capability is None
+            or getattr(capabilities, required_capability)
+        ]
         botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
         return [
             {"role": "system", "content": tmpl.format(botnick=botnick)}
-            for tmpl in SYSTEM_PROMPTS
+            for tmpl in templates
         ]
 
     def add_prompt(self, server: str, trigger: str, response: str,

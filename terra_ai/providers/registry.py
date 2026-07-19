@@ -8,7 +8,7 @@ logger = logging.getLogger("terraai")
 
 
 class ProviderRegistry:
-    """Manages the active AI provider with optional fallback chain."""
+    """Holds the active provider and dormant fallback configuration."""
 
     def __init__(self, primary: AIProvider | None = None,
                  fallbacks: list[AIProvider] | None = None):
@@ -24,15 +24,16 @@ class ProviderRegistry:
         self._fallbacks = fallbacks
 
     def get(self) -> AIProvider | None:
-        """Get the first available provider (primary, then fallbacks)."""
-        if self._primary and self._primary.is_available():
+        """Get the first configured provider (primary, then dormant fallbacks)."""
+        if self._primary and self._primary.configured:
             return self._primary
 
         for fallback in self._fallbacks:
-            if fallback.is_available():
+            if fallback.configured:
                 logger.warning(
-                    f"Primary provider {self._primary.name if self._primary else 'None'} "
-                    f"unavailable, using fallback {fallback.name}"
+                    "Primary provider %s is not configured; using fallback %s",
+                    self._primary.name if self._primary else "None",
+                    fallback.name,
                 )
                 return fallback
 

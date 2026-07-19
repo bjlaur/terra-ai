@@ -2,18 +2,14 @@
 
 from terra_ai.database import Database
 from terra_ai.prompts.manager import PromptManager
-from terra_ai.tools.schemas import AVAILABLE_TOOLS
+from terra_ai.tools.schemas import LOCAL_TOOLS
 
 
 def _valid_tool_names() -> set[str]:
-    """Return the set of tool names that can be disabled/enabled.
-
-    Only local tools (those with a "function" key) can be disabled.
-    Server-side tools (e.g. openrouter:web_search) are excluded.
-    """
+    """Return provider-neutral local tool names managed by commands."""
     return {
         t["function"]["name"]
-        for t in AVAILABLE_TOOLS
+        for t in LOCAL_TOOLS
         if "function" in t
     }
 
@@ -65,19 +61,19 @@ class UserCommands:
         return self._users().is_noisy(server, nick)
 
     def disable_tool(self, server: str, nick: str, tool_name: str):
-        """Disable a tool for a user."""
+        """Use the legacy override store pending server-wide admin redesign."""
         self._users().disable_tool(server, nick, tool_name)
 
     def enable_tool(self, server: str, nick: str, tool_name: str):
-        """Enable a tool for a user."""
+        """Use the legacy override store pending server-wide admin redesign."""
         self._users().enable_tool(server, nick, tool_name)
 
     def list_tools(self, server: str, nick: str) -> list[dict]:
-        """List all tools and their enabled/disabled status."""
+        """Read the legacy override store pending server-wide redesign."""
         return self._users().list_tools(server, nick)
 
     def is_tool_disabled(self, server: str, nick: str, tool_name: str) -> bool:
-        """Check if a tool is disabled for a user."""
+        """Read one legacy override pending server-wide redesign."""
         return self._users().is_tool_disabled(server, nick, tool_name)
 
     def valid_tool_names(self) -> set[str]:

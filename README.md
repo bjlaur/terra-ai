@@ -6,8 +6,8 @@ A SOPEL plugin that turns an IRC bot into a provider-agnostic AI assistant.
 
 - Responds to addressed queries (`TerraAI: <text>`) and `-` command shorthand
 - Direct messages via `/msg <botnick> <text>` (no trigger phrase needed)
-- Provider-agnostic with fallback chain: OpenRouter (default) → Gemini, OpenAI, Ollama
-- Web search via DuckDuckGo instant answer API (no API key required)
+- OpenRouter runtime with a provider-neutral interface for future adapters
+- Provider-native web search plus local Open-Meteo weather tools
 - SQLite persistence for conversation history, prompts, and user preferences
 - Custom prompts via `.addprompt`, `.rmprompt`, `.listprompts`
 - Configurable bot nick via `{botnick}` variable in prompts (no hardcoded name)
@@ -35,7 +35,7 @@ source ~/.terra-ai/.env
 ```
 
 `~/.terra-ai/.env` should set at least `OPENROUTER_API_KEY` (see
-`env.example`). The Web search feature uses DuckDuckGo and needs no key. Then:
+`env.example`). Web search is provided by OpenRouter. Then:
 
 ```bash
 sopel -c config/terraai.yaml
@@ -110,13 +110,11 @@ terra_ai/               # SOPEL plugin package (loaded from repo root)
 ├── database.py         # SQLite layer (7 tables)
 ├── providers/          # AI provider abstraction
 │   ├── base.py         # AIProvider / Message
-│   ├── registry.py     # ProviderRegistry with fallback chain
-│   ├── openrouter.py   # OpenRouter (default)
-│   ├── gemini.py       # Gemini
-│   ├── openai.py       # OpenAI
-│   └── ollama.py       # Ollama
-├── tools/
-│   └── web_search.py   # DuckDuckGo instant-answer search (no key)
+│   ├── registry.py     # Active-provider holder
+│   ├── openrouter.py   # Active OpenRouter runtime
+│   ├── openai.py       # Experimental, not runtime-selectable
+│   └── ollama.py       # Experimental, not runtime-selectable
+├── tools/              # Provider-neutral local tools
 ├── prompts/            # Prompt management + defaults
 ├── context/            # Conversation context / compaction
 └── commands/           # Command handlers (user.py, management.py)

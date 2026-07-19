@@ -12,6 +12,8 @@ from terra_ai.bot import TerraAI
 from terra_ai.config import TerraAISection
 from terra_ai.errors import event_error_scope, report_terminal_error
 from terra_ai.logging_config import configure_logging, shutdown_logging
+from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.registry import ProviderRegistry
 
 logger = logging.getLogger("terraai")
 
@@ -58,12 +60,36 @@ def setup(bot):
         config.bot_nick = bot.settings.core.nick
     logger.info("TerraAI setup starting; model=%r", config.model)
     try:
-        _terrai = TerraAI(config)
+        _terrai = TerraAI(config, _openrouter_registry(config))
     except Exception:
         logger.exception("TerraAI setup failed")
         shutdown_logging()
         raise
     logger.info("TerraAI setup complete")
+
+
+def _openrouter_registry(config) -> ProviderRegistry:
+    """Build the currently configured runtime provider outside core logic."""
+    if not config.model:
+        raise ValueError(
+            "No AI model configured. Set [terraai] model in your SOPEL config."
+        )
+    if not config.api_key:
+        raise ValueError(
+            "No OpenRouter API key configured. Set [terraai] api_key or "
+            "OPENROUTER_API_KEY."
+        )
+    if not str(config.base_url or "").strip():
+        raise ValueError("[terraai] base_url must not be empty")
+    if config.provider_timeout <= 0:
+        raise ValueError("[terraai] provider_timeout must be greater than zero")
+    provider = OpenRouterProvider(
+        model=config.model,
+        api_key=config.api_key,
+        base_url=config.base_url,
+        timeout=config.provider_timeout,
+    )
+    return ProviderRegistry(provider)
 
 
 def _configure_logging(bot, config):

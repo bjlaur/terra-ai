@@ -5,6 +5,8 @@ import pytest
 from terra_ai.context.manager import ContextManager
 from terra_ai.database import DBConfig, Database
 from terra_ai.prompts.manager import PromptManager
+from terra_ai.prompts.defaults import SYSTEM_PROMPTS
+from terra_ai.providers.base import ProviderCapabilities
 
 
 @pytest.fixture
@@ -29,7 +31,14 @@ def context(db, prompts):
 
 class TestPromptManager:
     def test_context_seed(self, prompts):
-        seed = prompts.get_context_seed("irc.example.com", "#chan")
+        seed = prompts.get_context_seed(
+            "irc.example.com",
+            "#chan",
+            capabilities=ProviderCapabilities(
+                local_tools=True,
+                native_search=True,
+            ),
+        )
         assert len(seed) > 0
         # The prompt is a list of `system` messages, one per rule.
         assert seed[0]["role"] == "system"
@@ -40,6 +49,15 @@ class TestPromptManager:
         assert "web search" in joined
         # The bot nick placeholder is interpolated per server/config.
         assert "{botnick}" not in joined
+        assert [message["content"] for message in seed] == [
+            template.format(botnick="") for template, _ in SYSTEM_PROMPTS
+        ]
+
+    def test_context_seed_does_not_advertise_unsupported_features(self, prompts):
+        seed = prompts.get_context_seed("irc.example.com", "#chan")
+        joined = " ".join(message["content"] for message in seed)
+        assert "weather_forecast" not in joined
+        assert "provider-side web search" not in joined
 
     def test_add_and_remove_prompt(self, prompts):
         prompts.add_prompt("irc.example.com", "wea", "sunny", "admin")

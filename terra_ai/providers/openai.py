@@ -4,7 +4,12 @@ import os
 
 import httpx
 
-from terra_ai.providers.base import AIProvider, Message
+from terra_ai.providers.base import (
+    AIProvider,
+    Message,
+    ProviderCapabilities,
+    UnsupportedProviderOptionError,
+)
 
 
 class OpenAIProvider(AIProvider):
@@ -26,9 +31,29 @@ class OpenAIProvider(AIProvider):
     def name(self) -> str:
         return "openai"
 
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities()
+
+    @property
+    def configured(self) -> bool:
+        return bool(self._model and self._api_key)
+
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
-             max_tool_rounds: int = 3) -> str:
+             noisy_callback=None) -> str:
+        if tools:
+            raise UnsupportedProviderOptionError(
+                "OpenAIProvider does not implement local tool calling"
+            )
+        if effort != "high":
+            raise UnsupportedProviderOptionError(
+                "OpenAIProvider does not implement reasoning effort"
+            )
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -45,12 +70,11 @@ class OpenAIProvider(AIProvider):
             "messages": payload_messages,
         }
 
+        if noisy_callback:
+            noisy_callback("Thinking...")
         with httpx.Client(timeout=self._timeout) as client:
             response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
         return data["choices"][0]["message"]["content"]
-
-    def is_available(self) -> bool:
-        return self._api_key is not None and len(self._api_key) > 0

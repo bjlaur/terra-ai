@@ -3,6 +3,7 @@
 import uuid
 
 from terra_ai.database import Database, HistoryStore
+from terra_ai.providers.base import ProviderCapabilities
 from terra_ai.prompts.manager import PromptManager
 
 
@@ -15,15 +16,18 @@ class ContextManager:
         self.prompts = prompt_manager
 
     def compose_context(self, server: str, channel: str,
-                        user_message: str, nick: str) -> list[dict]:
+                        user_message: str, nick: str,
+                        capabilities: ProviderCapabilities | None = None) -> list[dict]:
         """Compose the full context for an AI call.
 
         Returns a list of message dicts ready for the AI provider.
         """
         messages = []
 
-        # 1. System prompt: one `system` message per rule from SYSTEM_PROMPTS.
-        seed = self.prompts.get_context_seed(server, channel)
+        # 1. System prompt: base rules plus capability-aware tool instructions.
+        seed = self.prompts.get_context_seed(
+            server, channel, capabilities=capabilities
+        )
         messages.extend(seed)
 
         # 3. Custom prompts as context
