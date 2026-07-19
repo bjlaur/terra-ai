@@ -15,11 +15,12 @@ from terra_ai.prompts.defaults import (
 class PromptManager:
     """Manages custom prompts and system prompt generation."""
 
-    def __init__(self, db: Database, config=None):
+    def __init__(self, db: Database, config=None, prefix_char: str = ""):
         self.db = db
         self.store = PromptStore(db)
         self._effort = config.effort if config and hasattr(config, 'effort') else DEFAULT_EFFORT
         self._config = config
+        self._prefix_char = prefix_char
 
     @property
     def effort(self) -> str:
@@ -58,7 +59,13 @@ class PromptManager:
         ]
         botnick = self._config.bot_nick if self._config and hasattr(self._config, 'bot_nick') else ""
         return [
-            {"role": "system", "content": tmpl.format(botnick=botnick)}
+            {
+                "role": "system",
+                "content": tmpl.format(
+                    botnick=botnick,
+                    prefix_char=self._prefix_char,
+                ),
+            }
             for tmpl in templates
         ]
 

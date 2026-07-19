@@ -49,9 +49,23 @@ class TestPromptManager:
         assert "web search" in joined
         # The bot nick placeholder is interpolated per server/config.
         assert "{botnick}" not in joined
+        assert "{prefix_char}" not in joined
         assert [message["content"] for message in seed] == [
-            template.format(botnick="") for template, _ in SYSTEM_PROMPTS
+            template.format(botnick="", prefix_char="")
+            for template, _ in SYSTEM_PROMPTS
         ]
+
+    def test_context_seed_uses_configured_command_prefix(self, db):
+        prompts = PromptManager(db, prefix_char="!")
+        seed = prompts.get_context_seed(
+            "irc.example.com",
+            "#chan",
+            capabilities=ProviderCapabilities(local_tools=True),
+        )
+
+        joined = " ".join(message["content"] for message in seed)
+        assert "!wea" in joined
+        assert "-wea" not in joined
 
     def test_context_seed_does_not_advertise_unsupported_features(self, prompts):
         seed = prompts.get_context_seed("irc.example.com", "#chan")

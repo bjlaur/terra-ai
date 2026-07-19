@@ -39,7 +39,9 @@ class TerraAI:
         self.config = config
         self.db = Database(DBConfig(path=config.sqlite_path))
         self.prompts = PromptManager(
-            self.db, config=config
+            self.db,
+            config=config,
+            prefix_char=help_prefix,
         )
         self.context = ContextManager(self.db, self.prompts)
         self.management = ManagementCommands(
