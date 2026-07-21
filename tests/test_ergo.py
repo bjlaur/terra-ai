@@ -271,7 +271,7 @@ class TestErgoSopelBot:
     BOT_NICK = HARNESS_BOT_NICK
 
     @pytest.fixture(scope="session")
-    def sopel_config(self, tmp_path_factory):
+    def sopel_config(self, tmp_path_factory, pytestconfig):
         """Create a minimal SOPEL config file for testing.
 
         The model is read from the live config/sopel-test.cfg (the same
@@ -280,7 +280,9 @@ class TestErgoSopelBot:
         """
         try:
             project_dir = Path(__file__).resolve().parents[1]
-            terrai_model = load_test_model(project_dir)
+            terrai_model = load_test_model(
+                project_dir, cli_model=pytestconfig.getoption("--model")
+            )
         except RuntimeError as e:
             pytest.skip(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
         tmp = tmp_path_factory.mktemp("sopel")
@@ -416,16 +418,18 @@ class TestErgoSopelBot:
     BAD_PROVIDER_BOT_NICK = "ErrBot"
 
     @pytest.fixture(scope="session")
-    def sopel_config_bad_provider(self, tmp_path_factory):
+    def sopel_config_bad_provider(self, tmp_path_factory, pytestconfig):
         """Create a SOPEL config with a provider that will fail (bad URL).
 
         The provider has an API key but points at a non-existent endpoint,
         so the HTTP call itself will error — exercising the real error path.
         The model is read from the live config/sopel-test.cfg.
         """
-        from tests.conftest import _load_sopel_test_cfg
         try:
-            terrai_model, _ = _load_sopel_test_cfg()
+            project_root = Path(__file__).resolve().parents[1]
+            terrai_model = load_test_model(
+                project_root, cli_model=pytestconfig.getoption("--model")
+            )
         except RuntimeError as e:
             pytest.skip(f"{e} (Set [terraai] model in config/sopel-test.cfg)")
         tmp = tmp_path_factory.mktemp("sopel-badprov")
@@ -664,6 +668,26 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
         body = tail.split(":", 1)[1] if ":" in tail else tail
         return body.strip()
 
+    def _benchmark_send(
+        self, sock, nick, case, prompt, *, timeout_multiplier=4
+    ):
+        """Send one benchmark turn and preserve every bot PRIVMSG exactly."""
+        case.add_message(nick, prompt)
+        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{prompt}\r\n".encode())
+        lines = self._read_irc_until(
+            sock,
+            lambda line: line.startswith(f":{self.BOT_NICK}!")
+            and " PRIVMSG " in line,
+            timeout=_test_timeout(timeout_multiplier),
+        )
+        captured = False
+        for line in lines:
+            if line.startswith(f":{self.BOT_NICK}!") and " PRIVMSG " in line:
+                case.add_response(self._reply_text(line), raw=line)
+                captured = True
+        assert captured, f"No {self.BOT_NICK} PRIVMSG captured: {lines}"
+        return case.final_response
+
     def _assert_no_nick_prefix(self, reply_text, nick=None):
         """Fail if a bot reply leaks the user-turn <nick> prefix.
 
@@ -733,70 +757,58 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
 
         self._irc_quit(sock)
 
-    def test_bot_responds_to_trigger(self, sopel_bot_process):
-        """Test that the bot responds to TerraAI: trigger."""
-        sock = self._irc_connect("TestTrigger")
-        self._irc_join(sock, "TestTrigger", self.TEST_CHANNEL)
+    @pytest.mark.benchmark
+    def test_bot_responds_to_trigger(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        """Addressed prompts identify the configured bot and current IRC user."""
+        nick = "TestTrigger"
+        sock = self._irc_connect(nick)
+        request.addfinalizer(lambda: self._irc_quit(sock))
+        self._irc_join(sock, nick, self.TEST_CHANNEL)
+        prompt = f"{self.BOT_NICK}: Who are you, and what is my IRC nickname?"
 
-        # Send trigger
-        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: hello\r\n".encode())
+        with benchmark_case("identity_and_current_user") as case:
+            response = self._benchmark_send(sock, nick, case, prompt)
 
-        # Look for a response from the bot (this will hit the real AI API)
-        response = self._read_irc_until(
-            sock,
-            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=_test_timeout(4)
-        )
-        assert response is not None, "Bot did not respond to TerraAI: trigger"
-        # Bot replies must never echo the <nick> user-turn prefix.
-        self._assert_no_nick_prefix(self._reply_text(response), nick="TestTrigger")
+        lowered = response.lower()
+        self._assert_no_nick_prefix(response, nick=nick)
+        assert "terraai" in lowered or "terra ai" in lowered
+        assert nick.lower() in lowered
 
-        self._irc_quit(sock)
+    @pytest.mark.benchmark
+    def test_bot_responds_to_unknown_command(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        """Unknown prefixed commands route to AI and return the right answer."""
+        nick = "TestUnknown"
+        sock = self._irc_connect(nick)
+        request.addfinalizer(lambda: self._irc_quit(sock))
+        self._irc_join(sock, nick, self.TEST_CHANNEL)
+        prompt = f"{self.COMMAND_PREFIX}what is 17 times 6?"
 
-    def test_bot_responds_to_unknown_command(self, sopel_bot_process):
-        """Test that unknown commands are routed to AI and get a response."""
-        sock = self._irc_connect("TestUnknown")
-        self._irc_join(sock, "TestUnknown", self.TEST_CHANNEL)
+        with benchmark_case("basic_arithmetic") as case:
+            response = self._benchmark_send(sock, nick, case, prompt)
 
-        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :{self.COMMAND_PREFIX}what is 2+2\r\n".encode())
+        self._assert_no_nick_prefix(response, nick=nick)
+        assert "102" in response
 
-        response = self._read_irc_until(
-            sock,
-            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=_test_timeout(4)
-        )
-        assert response is not None, "Bot did not respond to unknown command"
-        # The reply must not leak the <nick> user-turn prefix back out.
-        self._assert_no_nick_prefix(self._reply_text(response), nick="TestUnknown")
+    @pytest.mark.benchmark
+    def test_bot_reply_not_nick_prefixed(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        """Bot replies answer a factual prompt without leaking a nick prefix."""
+        nick = "TestReply"
+        sock = self._irc_connect(nick)
+        request.addfinalizer(lambda: self._irc_quit(sock))
+        self._irc_join(sock, nick, self.TEST_CHANNEL)
+        prompt = f"{self.BOT_NICK}: What is the capital of Michigan?"
 
-        self._irc_quit(sock)
+        with benchmark_case("basic_fact") as case:
+            response = self._benchmark_send(sock, nick, case, prompt)
 
-    def test_bot_reply_not_nick_prefixed(self, sopel_bot_process):
-        """Bot replies must never echo the <nick> user-turn prefix.
-
-        User turns arrive as `<Nick> text`; that angle-bracket prefix is part
-        of the user turn only. If the model echoes it into its reply (e.g.
-        `<TestReply> 2+2 = 4` instead of `TestReply: 2+2 = 4`), the stored
-        history gets poisoned and the prefix leaks into future context. This
-        test fails if any bot reply carries a `<Word>`-style prefix.
-        """
-        sock = self._irc_connect("TestReply")
-        self._irc_join(sock, "TestReply", self.TEST_CHANNEL)
-
-        # A plain addressed trigger exercises the normal reply path.
-        sock.sendall(f"PRIVMSG {self.TEST_CHANNEL} :TerraAI: what is 2+2\r\n".encode())
-
-        response = self._read_irc_until(
-            sock,
-            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=_test_timeout(4)
-        )
-        assert response is not None, "Bot did not respond to trigger"
-        reply_text = self._reply_text(response)
-        # First line of the reply must not contain a <nick> prefix.
-        self._assert_no_nick_prefix(reply_text, nick="TestReply")
-
-        self._irc_quit(sock)
+        self._assert_no_nick_prefix(response, nick=nick)
+        assert "lansing" in response.lower()
 
     def test_bot_ignores_regular_messages(self, sopel_bot_process):
         """Test that regular messages (no trigger, no .command) are ignored."""
@@ -1039,39 +1051,79 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
 
         self._irc_quit(sock)
 
-    def test_bot_uses_weather_forecast_tool(self, sopel_bot_process):
-        """Test that the bot calls weather_forecast when asked about weather.
+    @pytest.mark.benchmark
+    def test_bot_uses_weather_forecast_tool(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        """Resolve North Branch, Michigan and return real weather content."""
+        nick = "TestWeatherTool"
+        sock = self._irc_connect(nick)
+        request.addfinalizer(lambda: self._irc_quit(sock))
+        self._irc_join(sock, nick, self.TEST_CHANNEL)
+        prompt = f"{self.BOT_NICK}: What's the weather in North Branch, MI?"
 
-        Sends 'weather Detroit' to a live ergo channel. The bot should call
-        the weather_forecast tool (via the tool-call loop) and respond with
-        real weather content including a temperature.
-        """
-        sock = self._irc_connect("TestWeatherTool")
-        self._irc_join(sock, "TestWeatherTool", self.TEST_CHANNEL)
+        with benchmark_case("weather_north_branch_michigan") as case:
+            response = self._benchmark_send(
+                sock, nick, case, prompt, timeout_multiplier=8
+            )
 
-        sock.sendall(
-            f"PRIVMSG {self.TEST_CHANNEL} :{self.BOT_NICK}: weather Detroit\r\n".encode()
+        lowered = response.lower()
+        self._assert_no_nick_prefix(response, nick=nick)
+        assert "north branch" in lowered
+        assert "minnesota" not in lowered
+        assert "could not resolve" not in lowered
+        assert "couldn't resolve" not in lowered
+        weather_markers = (
+            "°", "high", "low", "temperature", "fahrenheit", "cloud",
+            "rain", "snow", "clear", "wind", "forecast", "humidity",
         )
+        assert any(marker in lowered for marker in weather_markers)
 
-        response = self._read_irc_until(
-            sock,
-            lambda line: self.BOT_NICK in line and "PRIVMSG" in line,
-            timeout=_test_timeout(8),  # tool loop + AI calls; bump TERRAI_TEST_TIMEOUT if slow
-        )
-        assert response is not None, "Bot did not respond to weather query"
-        # Bot replies must never echo the <nick> user-turn prefix.
-        self._assert_no_nick_prefix(self._reply_text(response), nick="TestWeatherTool")
+    @pytest.mark.benchmark
+    def test_conversation_memory(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        nick = "BenchMemory"
+        sock = self._irc_connect(nick)
+        request.addfinalizer(lambda: self._irc_quit(sock))
+        self._irc_join(sock, nick, self.TEST_CHANNEL)
+        prompts = [
+            f"{self.BOT_NICK}: Remember that my cat is named Miso.",
+            f"{self.BOT_NICK}: What is my cat's name?",
+        ]
 
-        full_text = "\n".join(response).lower()
-        assert "detroit" in full_text, \
-            f"Response should mention Detroit:\n{chr(10).join(response)}"
-        # Should contain a temperature reading (°F or a number + "high"/"low")
-        weather_markers = ["°", "high", "low", "temperature", "fahrenheit",
-                          "cloud", "rain", "clear", "wind", "forecast"]
-        assert any(m in full_text for m in weather_markers), \
-            f"Response should contain weather data:\n{chr(10).join(response)}"
+        with benchmark_case("conversation_memory") as case:
+            self._benchmark_send(sock, nick, case, prompts[0])
+            response = self._benchmark_send(sock, nick, case, prompts[1])
 
-        self._irc_quit(sock)
+        assert not response.lower().startswith("error [")
+        assert "miso" in response.lower()
+
+    @pytest.mark.benchmark
+    def test_speaker_attribution(
+        self, sopel_bot_process, benchmark_case, request
+    ):
+        first_nick = "BenchNickOne"
+        second_nick = "BenchNickTwo"
+        first_sock = self._irc_connect(first_nick)
+        request.addfinalizer(lambda: self._irc_quit(first_sock))
+        self._irc_join(first_sock, first_nick, self.TEST_CHANNEL)
+        prompts = [
+            f"{self.BOT_NICK}: Remember this: my favorite made-up fruit is a glimmerpear.",
+            f"{self.BOT_NICK}: Who said their favorite made-up fruit was a glimmerpear?",
+        ]
+
+        with benchmark_case("speaker_attribution") as case:
+            self._benchmark_send(first_sock, first_nick, case, prompts[0])
+            second_sock = self._irc_connect(second_nick)
+            request.addfinalizer(lambda: self._irc_quit(second_sock))
+            self._irc_join(second_sock, second_nick, self.TEST_CHANNEL)
+            response = self._benchmark_send(
+                second_sock, second_nick, case, prompts[1]
+            )
+
+        assert not response.lower().startswith("error [")
+        assert first_nick.lower() in response.lower()
 
     def test_bot_reports_error_on_ai_failure(self, sopel_bot_bad_provider):
         """Bot MUST send an error message to IRC when the AI provider fails.

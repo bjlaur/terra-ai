@@ -60,6 +60,10 @@ docker run -v ./data:/home/terra-ai/data -v ./config:/home/terra-ai/config terra
 # The same plugin E2E scenarios using OpenRouter and Open-Meteo from .env
 ./test.sh real
 
+# Temporarily override the configured model without editing tracked config
+./test.sh real --model nvidia/nemotron-3-super-120b-a12b:free
+TERRAI_TEST_MODEL=google/gemma-4-31b-it:free ./test.sh real
+
 # Always-real IRC → Ergo → SOPEL → plugin → service → IRC system tests
 ./test.sh ergo
 
@@ -69,9 +73,23 @@ docker run -v ./data:/home/terra-ai/data -v ./config:/home/terra-ai/config terra
 # All three gates in order
 ./test.sh all
 
+# Run the normal real and Ergo suites once for each benchmark model.
+# Exact user-visible responses and end-to-end timings are written under
+# benchmark-results/.
+scripts/benchmark-models
+
+# Benchmark a single model or choose an output directory
+scripts/benchmark-models --model google/gemma-4-31b-it:free
+scripts/benchmark-models --output-dir benchmark-results/my-run
+
 # Check compilation
 python -m compileall -q terra_ai tests
 ```
+
+`./test.sh real` and `./test.sh ergo` continue to run their full normal live
+suites. Tests marked `benchmark` additionally record their prompts, exact
+responses, pytest outcome, and send-to-final-response wall-clock latency when
+`TERRAI_BENCHMARK_OUTPUT` is set by `scripts/benchmark-models`.
 
 ## Commands
 

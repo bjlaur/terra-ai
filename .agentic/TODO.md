@@ -14,6 +14,9 @@ Only pending/unfinished work stays in the active sections below.
 ## Active: 0.0.2 — SOPEL-Native Plugin Cleanup
 
 ### Done ✅
+- [x] Real-world four-model benchmark workflow using normal `--real` and Ergo
+  suites, exact response capture, end-to-end timings, JSON/JSONL/Markdown
+  reports and model overrides; the Codex execution handoff is delivered separately
 - [x] Console phase 2: route through SOPEL's real rule dispatcher via `dispatch_line()`
 - [x] Removed `trigger_char` and `trigger_phrase` from config, PromptManager, bot, and all tests
 - [x] Removed `load_config()` / YAML config path — `setup()` reads `bot.config.terraai` directly

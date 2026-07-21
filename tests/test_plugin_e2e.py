@@ -20,28 +20,88 @@ def _assert_ai_reply(result, *, scripted_text=None):
         assert scripted_text.lower() in result["say"][0].lower()
 
 
-def test_addressed_channel_prompt(terra, plugin_client, service_transport):
+def _benchmark_send(case, plugin_client, nick, prompt):
+    """Send through the normal plugin route and preserve every bot.say reply."""
+    case.add_message(nick, prompt)
+    result = plugin_client.send_as(nick, prompt)
+    case.add_responses(result["say"])
+    return result
+
+
+def _bot_nick(plugin_client):
+    return plugin_client.bot.settings.core.nick
+
+
+def _command_prefix(plugin_client):
+    return plugin_client.bot.settings.core.help_prefix
+
+
+@pytest.mark.benchmark
+def test_addressed_identity_prompt(
+    terra, plugin_client, service_transport, benchmark_case
+):
+    bot_nick = _bot_nick(plugin_client)
+    prompt = f"{bot_nick}: Who are you, and what is my IRC nickname?"
     with patch.object(
         terra, "handle_ai_message", wraps=terra.handle_ai_message
     ) as handle_ai_message:
-        result = plugin_client.send_message("TerraAI: hello")
+        with benchmark_case("identity_and_current_user") as case:
+            result = _benchmark_send(
+                case, plugin_client, plugin_client.nick, prompt
+            )
 
     handle_ai_message.assert_called_once()
-    _assert_ai_reply(
-        result,
-        scripted_text="mocked AI response" if service_transport else None,
-    )
+    _assert_ai_reply(result)
+    response = case.final_response.lower()
+    assert bot_nick.lower() in response
+    assert plugin_client.nick.lower() in response
 
 
-def test_unknown_prefixed_prompt(terra, plugin_client, service_transport):
+@pytest.mark.benchmark
+def test_unknown_prefixed_arithmetic_prompt(
+    terra, plugin_client, service_transport, benchmark_case
+):
+    prompt = f"{_command_prefix(plugin_client)}what is 17 times 6?"
     with patch.object(
         terra, "handle_ai_message", wraps=terra.handle_ai_message
     ) as handle_ai_message:
-        result = plugin_client.send_message("-what is 2+2?")
+        with benchmark_case("basic_arithmetic") as case:
+            result = _benchmark_send(
+                case, plugin_client, plugin_client.nick, prompt
+            )
 
     handle_ai_message.assert_called_once()
-    assert handle_ai_message.call_args.args[3] == "-what is 2+2?"
-    _assert_ai_reply(result, scripted_text="4")
+    assert handle_ai_message.call_args.args[3] == prompt
+    _assert_ai_reply(result, scripted_text="102")
+    assert "102" in case.final_response
+
+
+@pytest.mark.benchmark
+def test_basic_factual_answer(plugin_client, service_transport, benchmark_case):
+    prompt = f"{_bot_nick(plugin_client)}: What is the capital of Michigan?"
+    with benchmark_case("basic_fact") as case:
+        result = _benchmark_send(case, plugin_client, plugin_client.nick, prompt)
+
+    _assert_ai_reply(result, scripted_text="Lansing")
+    assert "lansing" in case.final_response.lower()
+
+
+@pytest.mark.benchmark
+def test_speaker_attribution(plugin_client, service_transport, benchmark_case):
+    first_nick = "BenchNickOne"
+    second_nick = "BenchNickTwo"
+    bot_nick = _bot_nick(plugin_client)
+    prompts = [
+        f"{bot_nick}: Remember this: my favorite made-up fruit is a glimmerpear.",
+        f"{bot_nick}: Who said their favorite made-up fruit was a glimmerpear?",
+    ]
+    with benchmark_case("speaker_attribution") as case:
+        first = _benchmark_send(case, plugin_client, first_nick, prompts[0])
+        second = _benchmark_send(case, plugin_client, second_nick, prompts[1])
+
+    _assert_ai_reply(first)
+    _assert_ai_reply(second, scripted_text=first_nick)
+    assert first_nick.lower() in case.final_response.lower()
 
 
 def test_bare_private_message(terra, plugin_client, service_transport):
@@ -66,13 +126,32 @@ def test_current_information_prompt(plugin_client, service_transport):
     )
 
 
-def test_weather_tool_round_trip(plugin_client, service_transport):
-    plugin_client.send_message("-noisy")
+@pytest.mark.benchmark
+def test_weather_tool_round_trip(
+    plugin_client, service_transport, benchmark_case
+):
+    plugin_client.send_message(f"{_command_prefix(plugin_client)}noisy")
     plugin_client.bot.notices.clear()
+    prompt = f"{_bot_nick(plugin_client)}: What's the weather in North Branch, MI?"
 
-    result = plugin_client.send_message("TerraAI: weather Detroit")
+    with benchmark_case("weather_north_branch_michigan") as case:
+        result = _benchmark_send(case, plugin_client, plugin_client.nick, prompt)
 
-    _assert_ai_reply(result, scripted_text="Detroit" if service_transport else None)
+    _assert_ai_reply(
+        result,
+        scripted_text="North Branch" if service_transport else None,
+    )
+    response = case.final_response.lower()
+    assert "north branch" in response
+    assert "minnesota" not in response
+    assert "could not resolve" not in response
+    assert "couldn't resolve" not in response
+    weather_markers = (
+        "°", "temperature", "high", "low", "wind", "rain", "snow",
+        "cloud", "clear", "forecast", "humidity",
+    )
+    assert any(marker in response for marker in weather_markers)
+
     notices = " ".join(message for _, message in plugin_client.bot.notices)
     assert "Thinking" in notices
     assert any(word in notices.lower() for word in ("weather", "forecast", "fetching"))
@@ -199,8 +278,9 @@ def test_tool_management_round_trip(plugin_client, service_transport):
         assert service_transport.requests == []
 
 
+@pytest.mark.benchmark
 def test_history_is_composed_into_the_next_provider_call(
-    terra, plugin_client, service_transport, monkeypatch
+    terra, plugin_client, service_transport, monkeypatch, benchmark_case
 ):
     provider = terra.registry.get()
     original_chat = provider.chat
@@ -211,13 +291,24 @@ def test_history_is_composed_into_the_next_provider_call(
         return original_chat(messages, *args, **kwargs)
 
     monkeypatch.setattr(provider, "chat", observe_chat)
-    first = plugin_client.send_message("TerraAI: remember token cobalt-7")
-    second = plugin_client.send_message("TerraAI: what token did I mention?")
+    bot_nick = _bot_nick(plugin_client)
+    prompts = [
+        f"{bot_nick}: Remember that my cat is named Miso.",
+        f"{bot_nick}: What is my cat's name?",
+    ]
+    with benchmark_case("conversation_memory") as case:
+        first = _benchmark_send(
+            case, plugin_client, plugin_client.nick, prompts[0]
+        )
+        second = _benchmark_send(
+            case, plugin_client, plugin_client.nick, prompts[1]
+        )
 
     _assert_ai_reply(first)
-    _assert_ai_reply(second)
+    _assert_ai_reply(second, scripted_text="Miso")
+    assert "miso" in case.final_response.lower()
     last_contents = [message.content for message in observed_messages[-1]]
-    assert "<tester> remember token cobalt-7" in last_contents
+    assert "<tester> Remember that my cat is named Miso." in last_contents
 
 
 def test_context_free_ai_excludes_history_and_does_not_persist(

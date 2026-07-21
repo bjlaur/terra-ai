@@ -2,6 +2,22 @@
 
 ## 0.0.3 — Model-agnostic + test-infra hardening
 
+### Real-world model benchmarking
+- Added shared test-model selection with precedence `--model` →
+  `TERRAI_TEST_MODEL` → `config/sopel-test.cfg`, used by real, Ergo, and
+  manual SOPEL workflows.
+- Upgraded existing live identity, arithmetic, factual-answer, history, and
+  weather tests into benchmark-aware scenarios; added speaker-attribution and
+  Ergo conversation-memory coverage without creating a second API client.
+- Added pytest-side end-to-end timing and exact response capture using one
+  `messages[]` / `responses[]` record shape for single- and multi-turn tests.
+- Added JSONL/JSON/Markdown report generation and `scripts/benchmark-models`,
+  which runs the complete normal real and Ergo suites once per selected model.
+- Added deterministic tests for model precedence, recording, aggregation,
+  report rendering, and infrastructure failures.
+
+— OWL
+
 ### Model-agnostic (no hardcoded model default)
 - `terra_ai/config.py` — `[terraai] model` default is now `None`; TerraAI is
   model-agnostic and the operator MUST set `model` in the SOPEL `.cfg`.

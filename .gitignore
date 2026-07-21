@@ -13,3 +13,5 @@ config/sopel-sopel-test.pid
 ircd/
 test_tool/screenshots/
 .pytest_cache/
+
+benchmark-results/

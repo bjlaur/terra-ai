@@ -1,11 +1,12 @@
 """Shared configuration for automated and manual SOPEL/Ergo testing."""
 
-import configparser
 import os
 import tempfile
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+
+from tests.model_selection import resolve_test_model
 
 
 ERGO_HOST = "127.0.0.1"
@@ -41,18 +42,9 @@ def get_test_run_directory(mode: str = "ergo") -> Path:
     return directory
 
 
-def load_test_model(project_dir: Path) -> str:
-    config_path = project_dir / "config" / "sopel-test.cfg"
-    if not config_path.exists():
-        raise RuntimeError(
-            "config/sopel-test.cfg not found; copy the example and set the model"
-        )
-    parser = configparser.ConfigParser()
-    parser.read(config_path)
-    model = parser.get("terraai", "model", fallback="").strip()
-    if not model:
-        raise RuntimeError("[terraai] model is empty in config/sopel-test.cfg")
-    return model
+def load_test_model(project_dir: Path, *, cli_model: str | None = None) -> str:
+    """Resolve the shared real-service model override and fallback config."""
+    return resolve_test_model(project_dir, cli_model=cli_model)
 
 
 def write_sopel_test_config(

@@ -1,6 +1,5 @@
 """Shared pytest configuration and explicitly owned application fixtures."""
 
-import configparser
 import os
 import socket
 from datetime import datetime, timezone
@@ -16,6 +15,8 @@ from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.registry import ProviderRegistry
 from tests.support import PluginTestClient, build_fake_bot
 from tests.http_fakes import ScriptedServices
+from tests.benchmarking import BenchmarkCase, OUTPUT_ENV_VAR, write_record
+from tests.model_selection import resolve_test_model
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +56,27 @@ def pytest_sessionfinish(session, exitstatus):
     _write_test_progress(f"SESSION END exitstatus={exitstatus}")
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Attach pytest's final outcome to any captured benchmark scenario."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call":
+        return
+
+    record = getattr(item, "_terra_benchmark_record", None)
+    if record is None:
+        return
+
+    record["passed"] = report.passed
+    if not report.passed:
+        record["failure_reason"] = str(report.longrepr)
+
+    output_path = os.environ.get(OUTPUT_ENV_VAR)
+    if output_path:
+        write_record(Path(output_path), record)
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--real",
@@ -67,6 +89,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Run the always-real Ergo/SOPEL system tests",
+    )
+    parser.addoption(
+        "--model",
+        default=None,
+        metavar="MODEL",
+        help="Override the real-service test model",
     )
 
 
@@ -89,19 +117,10 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_real)
 
 
-def _load_sopel_test_cfg():
-    """Return the configured real-service model and current API key."""
-    cfg_path = PROJECT_ROOT / "config" / "sopel-test.cfg"
-    if not cfg_path.exists():
-        raise RuntimeError(
-            "config/sopel-test.cfg not found. Copy the example and set "
-            "[terraai] model before running real-service tests."
-        )
-    parser = configparser.ConfigParser()
-    parser.read(cfg_path)
-    model = parser.get("terraai", "model", fallback="").strip()
-    if not model:
-        raise RuntimeError("[terraai] model is empty in config/sopel-test.cfg")
+def _load_sopel_test_cfg(pytest_config=None):
+    """Return the resolved real-service model and current API key."""
+    cli_model = pytest_config.getoption("--model") if pytest_config else None
+    model = resolve_test_model(PROJECT_ROOT, cli_model=cli_model)
     return model, os.environ.get("OPENROUTER_API_KEY", "")
 
 
@@ -155,15 +174,18 @@ def terra(tmp_path, request):
         and not request.node.get_closest_marker("mock")
     )
     if use_real:
-        model, api_key = _load_sopel_test_cfg()
+        model, api_key = _load_sopel_test_cfg(request.config)
         if not api_key:
             pytest.fail("OPENROUTER_API_KEY is required with --real")
+        provider_timeout = int(os.environ.get("TERRAI_TEST_TIMEOUT", "30"))
     else:
         model, api_key = "test/model", "test-key"
+        provider_timeout = 30
 
     config = _make_test_config(
         model=model,
         api_key=api_key,
+        provider_timeout=provider_timeout,
         sqlite_path=str(tmp_path / "terraai.db"),
     )
     provider = OpenRouterProvider(
@@ -180,6 +202,37 @@ def terra(tmp_path, request):
     finally:
         terra_plugin._terrai = previous
         instance.close()
+
+
+@pytest.fixture
+def benchmark_case(request):
+    """Create one timed benchmark record for the current pytest item."""
+    is_ergo = request.config.getoption("--ergo")
+    is_real = request.config.getoption("--real")
+    suite = "ergo" if is_ergo else "real"
+    model = (
+        resolve_test_model(
+            PROJECT_ROOT,
+            cli_model=request.config.getoption("--model"),
+        )
+        if is_real or is_ergo
+        else "test/model"
+    )
+    created = False
+
+    def create(scenario: str) -> BenchmarkCase:
+        nonlocal created
+        if created:
+            raise RuntimeError("only one benchmark case is allowed per test")
+        created = True
+        return BenchmarkCase(
+            request.node,
+            scenario=scenario,
+            suite=suite,
+            model=model,
+        )
+
+    return create
 
 
 @pytest.fixture

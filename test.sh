@@ -48,6 +48,8 @@ Modes:
   ergo   Start Ergo, run always-real IRC/SOPEL system tests, then stop Ergo
   manual Start the Ergo/SOPEL system-test bot for interactive irssi testing
   all    Run fast, real, and Ergo in order
+
+Real and Ergo tests accept --model MODEL.
 EOF
 }
 
@@ -61,9 +63,13 @@ load_test_env() {
     local had_key=0 old_key=""
     local had_timeout=0 old_timeout=""
     local had_ergo_conf=0 old_ergo_conf=""
+    local had_test_model=0 old_test_model=""
+    local had_benchmark_output=0 old_benchmark_output=""
     if [[ -v OPENROUTER_API_KEY ]]; then had_key=1; old_key="$OPENROUTER_API_KEY"; fi
     if [[ -v TERRAI_TEST_TIMEOUT ]]; then had_timeout=1; old_timeout="$TERRAI_TEST_TIMEOUT"; fi
     if [[ -v ERGO_CONF ]]; then had_ergo_conf=1; old_ergo_conf="$ERGO_CONF"; fi
+    if [[ -v TERRAI_TEST_MODEL ]]; then had_test_model=1; old_test_model="$TERRAI_TEST_MODEL"; fi
+    if [[ -v TERRAI_BENCHMARK_OUTPUT ]]; then had_benchmark_output=1; old_benchmark_output="$TERRAI_BENCHMARK_OUTPUT"; fi
 
     set -a
     # shellcheck disable=SC1090
@@ -73,6 +79,8 @@ load_test_env() {
     if (( had_key )); then export OPENROUTER_API_KEY="$old_key"; fi
     if (( had_timeout )); then export TERRAI_TEST_TIMEOUT="$old_timeout"; fi
     if (( had_ergo_conf )); then export ERGO_CONF="$old_ergo_conf"; fi
+    if (( had_test_model )); then export TERRAI_TEST_MODEL="$old_test_model"; fi
+    if (( had_benchmark_output )); then export TERRAI_BENCHMARK_OUTPUT="$old_benchmark_output"; fi
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
         echo "ERROR: OPENROUTER_API_KEY is not set in the environment or .env" >&2
         exit 1

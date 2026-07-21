@@ -6,6 +6,7 @@ the exercised path.
 """
 
 import json
+import re
 
 import httpx
 
@@ -63,6 +64,8 @@ class ScriptedServices:
             for message in messages
             if message.get("role") == "user"
         ).lower()
+        bot_name = self._bot_name(messages)
+        user_nick = self._latest_user_nick(messages)
         if "simulate provider failure" in user_text:
             return httpx.Response(503, json={"error": "scripted provider failure"})
 
@@ -91,9 +94,14 @@ class ScriptedServices:
                     "content": "The weather tool failed cleanly.",
                 }
             else:
+                location = (
+                    "North Branch, Michigan"
+                    if "north branch" in user_text
+                    else "Detroit"
+                )
                 message = {
                     "role": "assistant",
-                    "content": "Detroit weather forecast: 70°F and clear.",
+                    "content": f"{location} weather forecast: 70°F and clear.",
                 }
         elif hybrid_weather_search:
             message = {
@@ -130,9 +138,12 @@ class ScriptedServices:
                 for tool in tools
             )
             if ("weather" in user_text or "rain" in user_text) and weather_enabled:
-                location = (
-                    "Xyzzyville, ZZ" if "xyzzyville" in user_text else "Detroit, MI"
-                )
+                if "xyzzyville" in user_text:
+                    location = "Xyzzyville, ZZ"
+                elif "north branch" in user_text:
+                    location = "North Branch, MI"
+                else:
+                    location = "Detroit, MI"
                 message = {
                     "role": "assistant",
                     "content": None,
@@ -154,6 +165,25 @@ class ScriptedServices:
                     "role": "assistant",
                     "content": "The local weather tool is disabled.",
                 }
+            elif "who are you" in user_text and "irc nickname" in user_text:
+                message = {
+                    "role": "assistant",
+                    "content": (
+                        f"I am {bot_name}, and your IRC nickname is {user_nick}."
+                    ),
+                }
+            elif "17 times 6" in user_text:
+                message = {"role": "assistant", "content": "102"}
+            elif "capital of michigan" in user_text:
+                message = {"role": "assistant", "content": "Lansing"}
+            elif "who said" in user_text and "glimmerpear" in user_text:
+                message = {"role": "assistant", "content": "BenchNickOne said it."}
+            elif "what is my cat's name" in user_text and "miso" in user_text:
+                message = {"role": "assistant", "content": "Your cat's name is Miso."}
+            elif "remember that my cat is named miso" in user_text:
+                message = {"role": "assistant", "content": "Okay, I will remember Miso."}
+            elif "favorite made-up fruit is a glimmerpear" in user_text:
+                message = {"role": "assistant", "content": "Okay, I will remember that."}
             elif "2+2" in user_text:
                 message = {"role": "assistant", "content": "4"}
             elif "current" in user_text or "latest" in user_text:
@@ -168,6 +198,28 @@ class ScriptedServices:
             200,
             json={"choices": [{"message": message}], "usage": usage},
         )
+
+    @staticmethod
+    def _bot_name(messages) -> str:
+        for message in messages:
+            if message.get("role") != "system":
+                continue
+            content = str(message.get("content") or "")
+            match = re.search(r"Your name is ([^.]+)", content)
+            if match:
+                return match.group(1).strip()
+        return "the configured IRC bot"
+
+    @staticmethod
+    def _latest_user_nick(messages) -> str:
+        for message in reversed(messages):
+            if message.get("role") != "user":
+                continue
+            content = str(message.get("content") or "")
+            match = re.match(r"<([^>]+)>", content)
+            if match:
+                return match.group(1)
+        return "the current user"
 
     @staticmethod
     def _forecast(request: httpx.Request) -> dict:

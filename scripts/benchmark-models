@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Run TerraAI's normal real and Ergo pytest suites once per selected model.
+
+set -uo pipefail
+
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$project_dir"
+
+default_models=(
+    "nvidia/nemotron-3-super-120b-a12b:free"
+    "google/gemma-4-31b-it:free"
+    "nvidia/nemotron-3-nano-30b-a3b:free"
+    "poolside/laguna-s-2.1:free"
+)
+models=()
+output_dir=""
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/benchmark-models [--model MODEL]... [--output-dir DIR]
+
+Runs the normal real and Ergo pytest suites once per model. Benchmark-aware
+tests preserve exact responses in JSONL while all existing live tests still run.
+Repeating --model benchmarks only those models instead of the default four.
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --model)
+            [[ $# -ge 2 ]] || { echo "ERROR: --model requires a value" >&2; exit 2; }
+            models+=("$2")
+            shift 2
+            ;;
+        --output-dir)
+            [[ $# -ge 2 ]] || { echo "ERROR: --output-dir requires a value" >&2; exit 2; }
+            output_dir="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if ((${#models[@]} == 0)); then
+    models=("${default_models[@]}")
+fi
+
+if [[ -z "$output_dir" ]]; then
+    output_dir="$project_dir/benchmark-results/$(date -u +%Y%m%d-%H%M%S)"
+elif [[ "$output_dir" != /* ]]; then
+    output_dir="$project_dir/$output_dir"
+fi
+
+if [[ -e "$output_dir" ]] && [[ -n "$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+    echo "ERROR: output directory is not empty: $output_dir" >&2
+    exit 2
+fi
+mkdir -p "$output_dir"
+chmod 700 "$output_dir"
+
+benchmark_timeout="${TERRAI_TEST_TIMEOUT:-30}"
+overall_status=0
+
+run_suite() {
+    local model="$1"
+    local safe_model="$2"
+    local suite="$3"
+    local model_dir="$output_dir/$safe_model"
+    local response_file="$model_dir/${suite}-responses.jsonl"
+    local log_file="$model_dir/${suite}.log"
+    local status
+
+    mkdir -p "$model_dir"
+    chmod 700 "$model_dir"
+    printf '%s\n' "$model" > "$model_dir/model.txt"
+
+    echo
+    echo "==> $model [$suite]"
+    set +e
+    if [[ "$suite" == "real" ]]; then
+        TERRAI_TEST_MODEL="$model" \
+        TERRAI_TEST_TIMEOUT="$benchmark_timeout" \
+        TERRAI_BENCHMARK_OUTPUT="$response_file" \
+            ./test.sh real 2>&1 | tee "$log_file"
+    else
+        TERRAI_TEST_MODEL="$model" \
+        TERRAI_TEST_TIMEOUT="$benchmark_timeout" \
+        TERRAI_BENCHMARK_OUTPUT="$response_file" \
+            ./test.sh ergo 2>&1 | tee "$log_file"
+    fi
+    status=${PIPESTATUS[0]}
+
+    if (( status != 0 )); then
+        overall_status=1
+        if [[ ! -s "$response_file" ]] || ! grep -q '"passed": false' "$response_file"; then
+            python3 -m tests.benchmarking add-failure "$response_file" \
+                --model "$model" \
+                --suite "$suite" \
+                --reason "pytest exited with status $status; see ${suite}.log"
+        fi
+    elif [[ ! -s "$response_file" ]]; then
+        overall_status=1
+        python3 -m tests.benchmarking add-failure "$response_file" \
+            --model "$model" \
+            --suite "$suite" \
+            --reason "pytest passed but produced no benchmark response records"
+    fi
+}
+
+for model in "${models[@]}"; do
+    safe_model="$(printf '%s' "$model" | tr '/:' '__' | tr -c 'A-Za-z0-9._-' '_')"
+    run_suite "$model" "$safe_model" real
+    run_suite "$model" "$safe_model" ergo
+done
+
+python3 -m tests.benchmarking combine "$output_dir"
+
+echo
+echo "Benchmark results: $output_dir"
+echo "Markdown report:  $output_dir/benchmark-results.md"
+echo "Raw JSONL:        $output_dir/benchmark-results.jsonl"
+exit "$overall_status"

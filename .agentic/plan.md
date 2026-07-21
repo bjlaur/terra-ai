@@ -1,8 +1,8 @@
 # TerraAI — Implementation Plan
 
-> **Status:** 0.0.1 released, 0.0.2 substantially complete (carry-over + SOPEL-native cleanup done). 0.0.3 planned
+> **Status:** 0.0.1 released, 0.0.2 substantially complete, 0.0.3 benchmark workflow implemented pending live execution
 > **Agent:** OWL
-> **Last updated:** 2026-06-26
+> **Last updated:** 2026-07-21
 
 ---
 
@@ -18,6 +18,17 @@ We are building **TerraAI** — a SOPEL plugin that turns an IRC bot into a prov
 
 Package name in config files / disk: **terra-ai**  
 Class / module name: **TerraAI**
+
+### 1.0 Current benchmark workflow
+
+- Normal `./test.sh real` and `./test.sh ergo` remain the benchmark execution
+  paths; no parallel TerraAI client was added.
+- Model selection precedence is CLI, `TERRAI_TEST_MODEL`, then
+  `config/sopel-test.cfg`.
+- Pytest records exact user-visible responses and end-to-end elapsed time for
+  benchmark-aware scenarios while all normal live tests continue to run.
+- `scripts/benchmark-models` iterates the approved four-model list and produces
+  JSONL, JSON, Markdown, and per-suite logs for Codex to return.
 
 ### 1.1 User and Environment
 
