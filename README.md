@@ -74,7 +74,7 @@ TERRAI_TEST_MODEL=google/gemma-4-31b-it:free ./test.sh real
 ./test.sh all
 
 # Run the normal real and Ergo suites once for each benchmark model.
-# Exact user-visible responses and end-to-end timings are written under
+# Test records, provider attempts, and end-to-end timings are written under
 # benchmark-results/.
 scripts/benchmark-models
 
@@ -92,7 +92,10 @@ python -m compileall -q terra_ai tests
 `./test.sh real` and `./test.sh ergo` continue to run their full normal live
 suites. Tests marked `benchmark` additionally record their prompts, exact
 responses, pytest outcome, and send-to-final-response wall-clock latency when
-`TERRAI_BENCHMARK_OUTPUT` is set by `scripts/benchmark-models`.
+`TERRAI_BENCHMARK_OUTPUT` is set by `scripts/benchmark-models`. Direct `--real`
+tests also receive an enriched provider-attempt sink through
+`TERRAI_BENCHMARK_PROVIDER_OUTPUT`; Ergo remains an integration result set and
+is not used for provider-performance statistics.
 
 ## OpenRouter request pacing
 
@@ -109,9 +112,48 @@ The effective interval is the stricter of `60 / provider_requests_per_minute`
 and `provider_min_interval`. A value of zero disables that individual
 constraint. When pacing is enabled, an HTTP 429 or 503 is retried twice,
 waiting one effective interval before each retry. Noisy mode shows a notice for
-those retries; routine pacing waits are log-only. With pacing disabled, TerraAI
-returns the first 429/503 without immediate retries. Pacing is process-local and does not coordinate
-multiple TerraAI processes that share an OpenRouter API key.
+every actual pacing wait, with retry waits using the more specific retry notice.
+With pacing disabled, TerraAI returns the first 429/503 without immediate
+retries. Pacing is process-local and does not coordinate multiple TerraAI
+processes that share an OpenRouter API key.
+
+## Provider telemetry and benchmark artifacts
+
+Normal TerraAI operation writes two rotating files under `log_dir`:
+
+```text
+provider-calls.jsonl      # one compact analytics row per OpenRouter HTTP attempt
+openrouter-trace.jsonl    # full redacted request/response wire events
+```
+
+Compact provider logging is enabled by default and can be configured with:
+
+```ini
+provider_call_log_enabled = true
+provider_call_log_max_bytes = 26214400
+provider_call_log_backup_count = 2
+```
+
+A benchmark model directory contains:
+
+```text
+model.txt
+real.log
+real-tests.jsonl
+real-provider-calls.jsonl
+ergo.log
+ergo-tests.jsonl
+benchmark-results.json
+```
+
+`real-tests.jsonl` records one completed direct benchmark test per line.
+`real-provider-calls.jsonl` records one enriched OpenRouter attempt per line.
+After both suites finish, those streams are joined into the model's canonical
+`benchmark-results.json`. The run-level `benchmark-results.json` then stitches
+the completed per-model files together and recomputes aggregate min, mean,
+median, nearest-rank p95, and max statistics. Ergo records remain under the
+top-level `ergo` key and do not contribute provider-performance measurements.
+
 
 ## Commands
 
@@ -153,6 +195,8 @@ terra_ai/               # SOPEL plugin package (loaded from repo root)
 │   ├── base.py         # AIProvider / Message
 │   ├── registry.py     # Active-provider holder
 │   ├── openrouter.py   # Active OpenRouter runtime
+│   ├── pacing.py      # Shared request-start pacing and cooldowns
+│   ├── telemetry.py   # Structured provider-attempt sinks
 │   ├── openai.py       # Experimental, not runtime-selectable
 │   └── ollama.py       # Experimental, not runtime-selectable
 ├── tools/              # Provider-neutral local tools

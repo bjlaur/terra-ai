@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Iterable
 
-from terra_ai.errors import current_correlation_id, new_correlation_id
+from terra_ai.errors import current_correlation_id, log_expected_error, new_correlation_id
 
 
 TRACE = 5
@@ -49,21 +52,6 @@ class RedactingFormatter(logging.Formatter):
 class TraceOnlyFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return record.name == TRACE_LOGGER_NAME and record.levelno == TRACE
-
-
-class PrivateRotatingFileHandler(RotatingFileHandler):
-    """Keep newly created files private after every rotation."""
-
-    def _open(self):
-        stream = super()._open()
-        Path(self.baseFilename).chmod(0o600)
-        return stream
-
-
-def _private_file(path: Path) -> None:
-    descriptor = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
-    os.close(descriptor)
-    path.chmod(0o600)
 
 
 def _owned(handler: logging.Handler) -> logging.Handler:
@@ -106,12 +94,9 @@ def configure_logging(
     shutdown_logging()
 
     directory = Path(log_dir)
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory.chmod(0o700)
+    directory.mkdir(parents=True, exist_ok=True)
     operational_path = directory / "terra-ai.log"
-    trace_path = directory / "openrouter-trace.log"
-    _private_file(operational_path)
-    _private_file(trace_path)
+    trace_path = directory / "openrouter-trace.jsonl"
 
     context_filter = CorrelationFilter()
     formatter = RedactingFormatter(
@@ -121,7 +106,7 @@ def configure_logging(
     )
 
     operational = _owned(
-        PrivateRotatingFileHandler(
+        RotatingFileHandler(
             operational_path,
             maxBytes=log_max_bytes,
             backupCount=log_backup_count,
@@ -133,7 +118,7 @@ def configure_logging(
     operational.setFormatter(formatter)
 
     trace = _owned(
-        PrivateRotatingFileHandler(
+        RotatingFileHandler(
             trace_path,
             maxBytes=trace_max_bytes,
             backupCount=trace_backup_count,
@@ -143,7 +128,7 @@ def configure_logging(
     trace.setLevel(TRACE)
     trace.addFilter(TraceOnlyFilter())
     trace.addFilter(context_filter)
-    trace.setFormatter(formatter)
+    trace.setFormatter(RedactingFormatter("%(message)s", secrets=secrets))
 
     stream = getattr(sopel_console, "stream", None) or sys.stderr
     console = _owned(logging.StreamHandler(stream))
@@ -164,6 +149,27 @@ def configure_logging(
     return operational_path, trace_path
 
 
-def trace_openrouter(message: str, *args: object) -> None:
-    """Write one exact OpenRouter wire record to the trace-only logger."""
-    logging.getLogger(TRACE_LOGGER_NAME).log(TRACE, message, *args)
+def trace_openrouter(event: Mapping[str, object]) -> None:
+    """Best-effort write of one structured OpenRouter wire event."""
+    try:
+        payload = dict(event)
+        payload.setdefault(
+            "timestamp",
+            datetime.now(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
+        )
+        payload.setdefault("correlation_id", current_correlation_id())
+        rendered = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        )
+        logging.getLogger(TRACE_LOGGER_NAME).log(TRACE, rendered)
+    except Exception as exc:
+        try:
+            log_expected_error(exc, "OpenRouter trace telemetry")
+        except Exception:
+            return

@@ -26,7 +26,7 @@ PLUGIN_LIST = (
 
 @lru_cache
 def get_test_run_directory(mode: str = "ergo") -> Path:
-    """Return the sortable, private artifact directory for this test run."""
+    """Return the sortable artifact directory for this test run."""
     configured = os.environ.get("TERRAI_TEST_RUN_DIR")
     if configured:
         directory = Path(configured)
@@ -37,8 +37,7 @@ def get_test_run_directory(mode: str = "ergo") -> Path:
             / "terraai-tests"
             / f"{stamp}-{mode}-{os.getpid()}"
         )
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory.chmod(0o700)
+    directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
@@ -59,9 +58,9 @@ def write_sopel_test_config(
     provider_min_interval: float = 0.0,
     log_dir: Path | None = None,
 ) -> Path:
-    """Write the private config shared by Ergo tests and manual mode."""
+    """Write the config shared by Ergo tests and manual mode."""
     log_dir = log_dir or get_test_run_directory()
-    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     plugins = "\n    ".join(PLUGIN_LIST)
     content = f"""[core]
 nick = {BOT_NICK}
@@ -92,5 +91,4 @@ log_dir = {log_dir / 'terra-ai'}
 """
     config_file = directory / "sopel.cfg"
     config_file.write_text(content)
-    config_file.chmod(0o600)
     return config_file

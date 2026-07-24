@@ -393,8 +393,6 @@ class TestErgoSopelBot:
         stdout_path = run_directory / "sopel-stdout.log"
         stdout_file = open(stdout_path, "w")
         stderr_file = open(stderr_path, "w")
-        stdout_path.chmod(0o600)
-        stderr_path.chmod(0o600)
         try:
             proc = subprocess.Popen(
                 ["sopel", "-c", str(sopel_config)],
@@ -444,7 +442,7 @@ class TestErgoSopelBot:
 
         plugins_lines = "\n    ".join(self.PLUGIN_LIST)
         bad_provider_log_dir = get_test_run_directory() / "sopel-bad-provider"
-        bad_provider_log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        bad_provider_log_dir.mkdir(parents=True, exist_ok=True)
         config_content = f"""[core]
 nick = {self.BAD_PROVIDER_BOT_NICK}
 host = {self.ERGO_HOST}
@@ -470,7 +468,6 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
 """
         config_file = tmp / "sopel.cfg"
         config_file.write_text(config_content)
-        config_file.chmod(0o600)
 
         try:
             yield config_file
@@ -491,8 +488,6 @@ log_dir = {bad_provider_log_dir / 'terra-ai'}
         err_stderr_path = run_directory / "sopel-bad-provider-stderr.log"
         stdout_file = open(err_stdout_path, "w")
         stderr_file = open(err_stderr_path, "w")
-        err_stdout_path.chmod(0o600)
-        err_stderr_path.chmod(0o600)
         try:
             proc = subprocess.Popen(
                 ["sopel", "-c", str(sopel_config_bad_provider)],

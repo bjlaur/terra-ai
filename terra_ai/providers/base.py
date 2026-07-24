@@ -65,7 +65,8 @@ class AIProvider(ABC):
     @abstractmethod
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
-             noisy_callback: Callable[[str], None] | None = None) -> str:
+             noisy_callback: Callable[[str], None] | None = None,
+             request_kind: str = "initial") -> str:
         """Send messages and get a complete response.
 
         Args:
@@ -74,6 +75,7 @@ class AIProvider(ABC):
             effort: Effort level ('low', 'medium', 'high', 'xhigh', 'max').
             tools: Local function-tool schemas to include in the request.
             noisy_callback: Optional progress callback.
+            request_kind: Logical caller intent for provider telemetry.
 
         Returns:
             The AI's response text.

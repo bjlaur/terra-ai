@@ -3,6 +3,7 @@
 import functools
 import logging
 import re
+from pathlib import Path
 
 from sopel import plugin as sopel_plugin
 from sopel.trigger import Trigger
@@ -14,6 +15,10 @@ from terra_ai.logging_config import configure_logging, shutdown_logging
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.pacing import RequestPacer
 from terra_ai.providers.registry import ProviderRegistry
+from terra_ai.providers.telemetry import (
+    NoOpProviderCallSink,
+    RotatingJsonlProviderCallSink,
+)
 
 logger = logging.getLogger("terraai")
 
@@ -80,16 +85,32 @@ def _openrouter_registry(config) -> ProviderRegistry:
         raise ValueError("[terraai] base_url must not be empty")
     if config.provider_timeout <= 0:
         raise ValueError("[terraai] provider_timeout must be greater than zero")
+    for name, value in (
+        ("provider_call_log_max_bytes", config.provider_call_log_max_bytes),
+        ("provider_call_log_backup_count", config.provider_call_log_backup_count),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"[terraai] {name} must be a positive integer")
     request_pacer = RequestPacer(
         requests_per_minute=config.provider_requests_per_minute,
         min_interval=config.provider_min_interval,
     )
+    if config.provider_call_log_enabled:
+        provider_call_sink = RotatingJsonlProviderCallSink(
+            Path(config.log_dir) / "provider-calls.jsonl",
+            max_bytes=config.provider_call_log_max_bytes,
+            backup_count=config.provider_call_log_backup_count,
+            secrets=(config.api_key,),
+        )
+    else:
+        provider_call_sink = NoOpProviderCallSink()
     provider = OpenRouterProvider(
         model=config.model,
         api_key=config.api_key,
         base_url=config.base_url,
         timeout=config.provider_timeout,
         request_pacer=request_pacer,
+        provider_call_sink=provider_call_sink,
     )
     return ProviderRegistry(provider)
 

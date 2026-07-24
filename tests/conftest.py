@@ -14,9 +14,22 @@ from terra_ai.bot import TerraAI
 from terra_ai.providers.openrouter import OpenRouterProvider
 from terra_ai.providers.pacing import RequestPacer
 from terra_ai.providers.registry import ProviderRegistry
+from terra_ai.providers.telemetry import (
+    CompositeProviderCallSink,
+    ContextEnrichingProviderCallSink,
+    JsonlProviderCallSink,
+    NoOpProviderCallSink,
+    RotatingJsonlProviderCallSink,
+)
 from tests.support import PluginTestClient, build_fake_bot
 from tests.http_fakes import ScriptedServices
-from tests.benchmarking import BenchmarkCase, OUTPUT_ENV_VAR, write_record
+from tests.benchmarking import (
+    BenchmarkCase,
+    OUTPUT_ENV_VAR,
+    PROVIDER_OUTPUT_ENV_VAR,
+    current_benchmark_context,
+    write_record,
+)
 from tests.model_selection import resolve_test_model
 
 
@@ -69,8 +82,12 @@ def pytest_runtest_makereport(item, call):
     if record is None:
         return
 
+    if hasattr(report, "wasxfail"):
+        record["status"] = "xpassed" if report.passed else "xfailed"
+    else:
+        record["status"] = "passed" if report.passed else "failed"
     record["passed"] = report.passed
-    if not report.passed:
+    if record["status"] in {"failed", "xpassed"}:
         record["failure_reason"] = str(report.longrepr)
 
     output_path = os.environ.get(OUTPUT_ENV_VAR)
@@ -134,6 +151,10 @@ def _make_test_config(**overrides):
         "provider_timeout": 30,
         "provider_requests_per_minute": 0.0,
         "provider_min_interval": 0.0,
+        "provider_call_log_enabled": False,
+        "provider_call_log_max_bytes": 25 * 1024 * 1024,
+        "provider_call_log_backup_count": 2,
+        "log_dir": "data/logs",
         "bot_nick": "TerraAI",
         "effort": "high",
         "sqlite_path": "data/test-terraai.db",
@@ -183,8 +204,34 @@ def real_request_pacer():
     )
 
 
+@pytest.fixture(scope="session")
+def real_provider_call_sink(pytestconfig):
+    """One normal plus optional benchmark sink shared by direct real tests."""
+    if not pytestconfig.getoption("--real"):
+        return NoOpProviderCallSink()
+    secrets = (os.environ.get("OPENROUTER_API_KEY", ""),)
+    run_dir = Path(os.environ.get("TERRAI_TEST_RUN_DIR", "."))
+    normal_sink = RotatingJsonlProviderCallSink(
+        run_dir / "provider-calls.jsonl",
+        max_bytes=25 * 1024 * 1024,
+        backup_count=2,
+        secrets=secrets,
+    )
+    output = os.environ.get(PROVIDER_OUTPUT_ENV_VAR)
+    if not output:
+        return normal_sink
+    benchmark_sink = ContextEnrichingProviderCallSink(
+        JsonlProviderCallSink(
+            Path(output),
+            secrets=secrets,
+        ),
+        current_benchmark_context,
+    )
+    return CompositeProviderCallSink(normal_sink, benchmark_sink)
+
+
 @pytest.fixture
-def terra(tmp_path, request, real_request_pacer):
+def terra(tmp_path, request, real_request_pacer, real_provider_call_sink):
     """One TerraAI instance, one database connection, and deterministic teardown."""
     use_real = bool(
         (
@@ -221,6 +268,7 @@ def terra(tmp_path, request, real_request_pacer):
         base_url=config.base_url,
         timeout=config.provider_timeout,
         request_pacer=real_request_pacer if use_real else None,
+        provider_call_sink=real_provider_call_sink if use_real else None,
     )
     instance = TerraAI(config, ProviderRegistry(provider))
     previous = terra_plugin._terrai

@@ -40,7 +40,7 @@ class TestTerraAI:
     def test_handle_ai_message_mock(self, terra):
         """Mock version: handle_ai_message returns mocked response."""
         provider = terra.registry.get()
-        provider.chat = lambda messages, system_prompt=None, effort="high", tools=None, max_tool_rounds=3, noisy_callback=None: "Hello!"
+        provider.chat = lambda messages, system_prompt=None, effort="high", tools=None, max_tool_rounds=3, noisy_callback=None, request_kind="initial": "Hello!"
 
         result = terra.handle_ai_message("irc.example.com", "#chan", "nick", "hi")
         assert result == "Hello!"
@@ -113,13 +113,36 @@ class TestPluginRules:
 
         assert terra_plugin._terrai is None
         operational_log = tmp_path / "data" / "logs" / "terra-ai.log"
-        trace_log = tmp_path / "data" / "logs" / "openrouter-trace.log"
+        trace_log = tmp_path / "data" / "logs" / "openrouter-trace.jsonl"
+        provider_call_log = tmp_path / "data" / "logs" / "provider-calls.jsonl"
         assert operational_log.exists()
         assert trace_log.exists()
+        assert provider_call_log.exists()
         assert "TerraAI setup complete" in operational_log.read_text()
         assert "TerraAI plugin unloaded" in operational_log.read_text()
         with pytest.raises(RuntimeError, match="closed"):
             instance.db.fetchone("SELECT 1")
+
+
+    def test_provider_call_logging_can_be_disabled(self, tmp_path):
+        from terra_ai import plugin as terra_plugin
+        from terra_ai.providers.telemetry import NoOpProviderCallSink
+
+        config = SimpleNamespace(
+            model="test/model",
+            api_key="test-key",
+            base_url="https://openrouter.example/v1",
+            provider_timeout=15,
+            provider_requests_per_minute=0.0,
+            provider_min_interval=0.0,
+            provider_call_log_enabled=False,
+            provider_call_log_max_bytes=1024,
+            provider_call_log_backup_count=1,
+            log_dir=tmp_path / "logs",
+        )
+        provider = terra_plugin._openrouter_registry(config).get()
+        assert isinstance(provider._provider_call_sink, NoOpProviderCallSink)
+        assert not (tmp_path / "logs" / "provider-calls.jsonl").exists()
 
     def test_setup_failure_is_traced_and_logging_is_torn_down(self, tmp_path):
         from terra_ai import plugin as terra_plugin
@@ -218,7 +241,8 @@ class TestEffortWire:
         original_chat = provider.chat
 
         def spy_chat(messages, system_prompt=None, effort="high",
-                     tools=None, max_tool_rounds=3, noisy_callback=None):
+                     tools=None, max_tool_rounds=3, noisy_callback=None,
+                     request_kind="initial"):
             captured["effort"] = effort
             return "ok"
 

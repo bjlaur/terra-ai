@@ -14,7 +14,6 @@ prepare_run_dir() {
     run_stamp="$(date -u +%Y%m%d-%H%M%S-%N)"
     export TERRAI_TEST_RUN_DIR="$log_root/${run_stamp}-${test_mode}-$$"
     mkdir -p "$TERRAI_TEST_RUN_DIR"
-    chmod 700 "$TERRAI_TEST_RUN_DIR"
     echo "Test artifacts:  $TERRAI_TEST_RUN_DIR" >&2
 }
 
@@ -25,7 +24,6 @@ prepare_test_logs() {
     export TERRAI_PYTEST_PROGRESS_FILE="$TERRAI_TEST_RUN_DIR/progress.log"
     : > "$test_output_log"
     : > "$TERRAI_PYTEST_PROGRESS_FILE"
-    chmod 600 "$test_output_log" "$TERRAI_PYTEST_PROGRESS_FILE"
     echo "Pytest output:   $test_output_log" >&2
     echo "Test progress:   $TERRAI_PYTEST_PROGRESS_FILE" >&2
     echo "Follow progress: tail -f $TERRAI_PYTEST_PROGRESS_FILE" >&2
@@ -85,6 +83,7 @@ load_test_env() {
     local had_ergo_conf=0 old_ergo_conf=""
     local had_test_model=0 old_test_model=""
     local had_benchmark_output=0 old_benchmark_output=""
+    local had_benchmark_provider_output=0 old_benchmark_provider_output=""
     local had_provider_rpm=0 old_provider_rpm=""
     local had_provider_min_interval=0 old_provider_min_interval=""
     local had_live_progress=0 old_live_progress=""
@@ -93,6 +92,7 @@ load_test_env() {
     if [[ -v ERGO_CONF ]]; then had_ergo_conf=1; old_ergo_conf="$ERGO_CONF"; fi
     if [[ -v TERRAI_TEST_MODEL ]]; then had_test_model=1; old_test_model="$TERRAI_TEST_MODEL"; fi
     if [[ -v TERRAI_BENCHMARK_OUTPUT ]]; then had_benchmark_output=1; old_benchmark_output="$TERRAI_BENCHMARK_OUTPUT"; fi
+    if [[ -v TERRAI_BENCHMARK_PROVIDER_OUTPUT ]]; then had_benchmark_provider_output=1; old_benchmark_provider_output="$TERRAI_BENCHMARK_PROVIDER_OUTPUT"; fi
     if [[ -v TERRAI_TEST_PROVIDER_RPM ]]; then had_provider_rpm=1; old_provider_rpm="$TERRAI_TEST_PROVIDER_RPM"; fi
     if [[ -v TERRAI_TEST_PROVIDER_MIN_INTERVAL ]]; then had_provider_min_interval=1; old_provider_min_interval="$TERRAI_TEST_PROVIDER_MIN_INTERVAL"; fi
     if [[ -v TERRAI_TEST_LIVE_PROGRESS ]]; then had_live_progress=1; old_live_progress="$TERRAI_TEST_LIVE_PROGRESS"; fi
@@ -107,6 +107,7 @@ load_test_env() {
     if (( had_ergo_conf )); then export ERGO_CONF="$old_ergo_conf"; fi
     if (( had_test_model )); then export TERRAI_TEST_MODEL="$old_test_model"; fi
     if (( had_benchmark_output )); then export TERRAI_BENCHMARK_OUTPUT="$old_benchmark_output"; fi
+    if (( had_benchmark_provider_output )); then export TERRAI_BENCHMARK_PROVIDER_OUTPUT="$old_benchmark_provider_output"; fi
     if (( had_provider_rpm )); then export TERRAI_TEST_PROVIDER_RPM="$old_provider_rpm"; fi
     if (( had_provider_min_interval )); then export TERRAI_TEST_PROVIDER_MIN_INTERVAL="$old_provider_min_interval"; fi
     if (( had_live_progress )); then export TERRAI_TEST_LIVE_PROGRESS="$old_live_progress"; fi

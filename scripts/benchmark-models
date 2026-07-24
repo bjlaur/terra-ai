@@ -23,7 +23,7 @@ Usage: scripts/benchmark-models [--model MODEL]... [--output-dir DIR]
                                 [--rpm RPM] [--min-interval SECONDS] [--verbose]
 
 Runs the normal real and Ergo pytest suites once per model. Benchmark-aware
-tests preserve exact responses in JSONL while all existing live tests still run.
+tests preserve complete test records in JSONL while all existing live tests still run.
 Repeating --model benchmarks only those models instead of the default list.
 --rpm and --min-interval pace every OpenRouter request start; the stricter
 constraint wins. With --verbose, prints active tests and elapsed-time heartbeats.
@@ -113,7 +113,6 @@ if [[ -e "$output_dir" ]] && [[ -n "$(find "$output_dir" -mindepth 1 -maxdepth 1
     exit 2
 fi
 mkdir -p "$output_dir"
-chmod 700 "$output_dir"
 
 benchmark_timeout="${TERRAI_TEST_TIMEOUT:-30}"
 overall_status=0
@@ -123,12 +122,12 @@ run_suite() {
     local safe_model="$2"
     local suite="$3"
     local model_dir="$output_dir/$safe_model"
-    local response_file="$model_dir/${suite}-responses.jsonl"
+    local test_file="$model_dir/${suite}-tests.jsonl"
+    local provider_file="$model_dir/real-provider-calls.jsonl"
     local log_file="$model_dir/${suite}.log"
     local status
 
     mkdir -p "$model_dir"
-    chmod 700 "$model_dir"
     printf '%s\n' "$model" > "$model_dir/model.txt"
 
     echo
@@ -140,7 +139,8 @@ run_suite() {
         TERRAI_TEST_PROVIDER_RPM="$rpm" \
         TERRAI_TEST_PROVIDER_MIN_INTERVAL="$min_interval" \
         TERRAI_TEST_LIVE_PROGRESS="$verbose" \
-        TERRAI_BENCHMARK_OUTPUT="$response_file" \
+        TERRAI_BENCHMARK_OUTPUT="$test_file" \
+        TERRAI_BENCHMARK_PROVIDER_OUTPUT="$provider_file" \
             ./test.sh real 2>&1 | tee "$log_file"
     else
         TERRAI_TEST_MODEL="$model" \
@@ -148,22 +148,22 @@ run_suite() {
         TERRAI_TEST_PROVIDER_RPM="$rpm" \
         TERRAI_TEST_PROVIDER_MIN_INTERVAL="$min_interval" \
         TERRAI_TEST_LIVE_PROGRESS="$verbose" \
-        TERRAI_BENCHMARK_OUTPUT="$response_file" \
+        TERRAI_BENCHMARK_OUTPUT="$test_file" \
             ./test.sh ergo 2>&1 | tee "$log_file"
     fi
     status=${PIPESTATUS[0]}
 
     if (( status != 0 )); then
         overall_status=1
-        if [[ ! -s "$response_file" ]] || ! grep -q '"passed": false' "$response_file"; then
-            python3 -m tests.benchmarking add-failure "$response_file" \
+        if [[ ! -s "$test_file" ]] || ! grep -Eq '"status": "(failed|xpassed)"' "$test_file"; then
+            python3 -m tests.benchmarking add-failure "$test_file" \
                 --model "$model" \
                 --suite "$suite" \
                 --reason "pytest exited with status $status; see ${suite}.log"
         fi
-    elif [[ ! -s "$response_file" ]]; then
+    elif [[ ! -s "$test_file" ]]; then
         overall_status=1
-        python3 -m tests.benchmarking add-failure "$response_file" \
+        python3 -m tests.benchmarking add-failure "$test_file" \
             --model "$model" \
             --suite "$suite" \
             --reason "pytest passed but produced no benchmark response records"
@@ -190,12 +190,20 @@ for model in "${models[@]}"; do
     run_suite "$model" "$safe_model" real
     pace_suite_boundary
     run_suite "$model" "$safe_model" ergo
+    if ! python3 -m tests.benchmarking combine-model "$output_dir/$safe_model" \
+        --model "$model" --rpm "$rpm" --min-interval "$min_interval"; then
+        echo "ERROR: failed to assemble results for $model" >&2
+        overall_status=1
+    fi
 done
 
-python3 -m tests.benchmarking combine "$output_dir"
+if ! python3 -m tests.benchmarking combine "$output_dir"; then
+    echo "ERROR: failed to assemble run-level benchmark results" >&2
+    overall_status=1
+fi
 
 echo
 echo "Benchmark results: $output_dir"
 echo "Markdown report:  $output_dir/benchmark-results.md"
-echo "Raw JSONL:        $output_dir/benchmark-results.jsonl"
+echo "Per-model JSON:    <model>/benchmark-results.json"
 exit "$overall_status"

@@ -42,7 +42,7 @@ def _configure(tmp_path, stream, *, secret="super-secret-key", **overrides):
     return configure_logging(**options)
 
 
-def test_levels_correlation_redaction_and_private_files(tmp_path):
+def test_levels_correlation_redaction_and_separate_files(tmp_path):
     console = io.StringIO()
     operational_path, trace_path = _configure(tmp_path, console)
     logger = logging.getLogger("terraai.component")
@@ -51,8 +51,16 @@ def test_levels_correlation_redaction_and_private_files(tmp_path):
         logger.debug("debug detail api_key=super-secret-key")
         logger.info("prompt line one\nline two")
         trace_openrouter(
-            "request=%s",
-            {"authorization": "Bearer super-secret-key", "prompt": "private"},
+            {
+                "event_type": "request",
+                "call_id": "call-1",
+                "round": 0,
+                "attempt": 1,
+                "request": {
+                    "authorization": "Bearer super-secret-key",
+                    "prompt": "private",
+                },
+            }
         )
         try:
             raise RuntimeError("Bearer super-secret-key")
@@ -71,24 +79,22 @@ def test_levels_correlation_redaction_and_private_files(tmp_path):
     assert "prompt line one" in operational
     assert "provider failed" in operational
     assert "Traceback" in operational
-    assert "request=" not in operational
+    assert '"event_type":"request"' not in operational
     assert "debug detail" not in stderr
-    assert "request=" not in stderr
+    assert '"event_type":"request"' not in stderr
     assert "prompt line one" in stderr
     assert "provider failed" in stderr
-    assert "request=" in trace
+    [trace_event] = [json.loads(line) for line in trace.splitlines() if line.strip()]
+    assert trace_event["event_type"] == "request"
+    assert trace_event["correlation_id"] == correlation_id
+    assert trace_event["request"]["prompt"] == "private"
     assert "debug detail" not in trace
     assert "prompt line one" not in trace
     for output in (operational, trace, stderr):
         assert "super-secret-key" not in output
     assert "[REDACTED]" in operational
     assert "[REDACTED]" in trace
-    assert operational_path.parent.stat().st_mode & 0o777 == 0o700
-    assert operational_path.stat().st_mode & 0o777 == 0o600
-    assert trace_path.stat().st_mode & 0o777 == 0o600
-
-
-def test_setup_is_reload_safe_and_rotation_stays_private(tmp_path):
+def test_setup_is_reload_safe_and_rotation_works(tmp_path):
     console = io.StringIO()
     operational_path, _ = _configure(
         tmp_path,
@@ -115,8 +121,6 @@ def test_setup_is_reload_safe_and_rotation_stays_private(tmp_path):
 
     rotated = operational_path.with_name("terra-ai.log.1")
     assert rotated.exists()
-    assert operational_path.stat().st_mode & 0o777 == 0o600
-    assert rotated.stat().st_mode & 0o777 == 0o600
     assert console.getvalue().count("rotation payload") == 1
 
 
@@ -175,10 +179,14 @@ def test_openrouter_request_and_response_are_trace_only(
         secret="provider-secret",
     )
     response_data = {"choices": [{"message": {"content": "wire answer"}}]}
-    response = MagicMock()
-    response.text = json.dumps(response_data)
-    response.json.return_value = response_data
-    response.raise_for_status.return_value = None
+    response = __import__("httpx").Response(
+        200,
+        json=response_data,
+        headers={"X-Generation-Id": "gen-wire"},
+        request=__import__("httpx").Request(
+            "POST", "https://openrouter.ai/api/v1/chat/completions"
+        ),
+    )
     client = MagicMock()
     client.post.return_value = response
     mock_client_class.return_value.__enter__.return_value = client
@@ -191,14 +199,93 @@ def test_openrouter_request_and_response_are_trace_only(
     shutdown_logging()
 
     operational = operational_path.read_text()
-    trace = trace_path.read_text()
+    trace_events = [
+        json.loads(line) for line in trace_path.read_text().splitlines() if line.strip()
+    ]
     assert "wire-private-prompt" not in operational
-    assert "request_json=" in trace
-    assert "response_body=" in trace
-    assert "wire-private-prompt" in trace
-    assert "wire answer" in trace
+    assert [event["event_type"] for event in trace_events] == ["request", "response"]
+    assert trace_events[0]["request"]["messages"][-1]["content"] == "wire-private-prompt"
+    assert "wire answer" in trace_events[1]["response_body"]
+    assert trace_events[1]["safe_response_headers"] == {
+        "X-Generation-Id": "gen-wire"
+    }
     assert "provider-secret" not in operational
-    assert "provider-secret" not in trace
+    assert "provider-secret" not in trace_path.read_text()
+
+
+@patch("terra_ai.providers.openrouter.httpx.Client")
+def test_trace_jsonl_keeps_multiline_bodies_on_one_line(
+    mock_client_class, tmp_path
+):
+    _, trace_path = _configure(tmp_path, io.StringIO())
+    response_data = {
+        "choices": [{"message": {"content": "line one\nline two"}}]
+    }
+    response = __import__("httpx").Response(
+        200,
+        json=response_data,
+        request=__import__("httpx").Request(
+            "POST", "https://openrouter.ai/api/v1/chat/completions"
+        ),
+    )
+    client = MagicMock()
+    client.post.return_value = response
+    mock_client_class.return_value.__enter__.return_value = client
+
+    provider = OpenRouterProvider(model="test-model", api_key="key")
+    assert provider.chat([Message("user", "hello")]) == "line one\nline two"
+    shutdown_logging()
+
+    lines = trace_path.read_text().splitlines()
+    assert len(lines) == 2
+    events = [json.loads(line) for line in lines]
+    assert events[1]["event_type"] == "response"
+    decoded_body = json.loads(events[1]["response_body"])
+    assert decoded_body["choices"][0]["message"]["content"] == "line one\nline two"
+
+
+@patch("terra_ai.providers.openrouter.httpx.Client")
+def test_transport_error_trace_is_structured_jsonl(mock_client_class, tmp_path):
+    _, trace_path = _configure(tmp_path, io.StringIO())
+    client = MagicMock()
+    client.post.side_effect = __import__("httpx").ConnectError("offline")
+    mock_client_class.return_value.__enter__.return_value = client
+
+    provider = OpenRouterProvider(model="test-model", api_key="key")
+    with pytest.raises(Exception, match="offline"):
+        provider.chat([Message("user", "hello")])
+    shutdown_logging()
+
+    events = [
+        json.loads(line) for line in trace_path.read_text().splitlines() if line.strip()
+    ]
+    assert [event["event_type"] for event in events] == [
+        "request",
+        "transport_error",
+    ]
+    assert events[1]["error"]["type"] == "ConnectError"
+
+
+@patch("terra_ai.providers.openrouter.httpx.Client")
+def test_unserializable_trace_event_does_not_change_provider_response(
+    mock_client_class, monkeypatch
+):
+    client = MagicMock()
+    client.post.return_value = __import__("httpx").Response(
+        200,
+        json={"choices": [{"message": {"content": "answer"}}]},
+        request=__import__("httpx").Request(
+            "POST", "https://openrouter.ai/api/v1/chat/completions"
+        ),
+    )
+    mock_client_class.return_value.__enter__.return_value = client
+    monkeypatch.setattr(
+        "terra_ai.providers.openrouter.OPENROUTER_WEB_SEARCH_TOOL",
+        {"type": "openrouter:web_search", "bad_trace_value": object()},
+    )
+
+    provider = OpenRouterProvider(model="test-model", api_key="key")
+    assert provider.chat([Message("user", "hello")]) == "answer"
 
 
 def test_shutdown_failure_is_traced_before_handlers_close(tmp_path):

@@ -407,6 +407,27 @@ class TestOpenRouterProvider:
         assert client.post.call_count == 2
         assert fake.sleeps == pytest.approx([3.0])
 
+    @patch("terra_ai.providers.openrouter.httpx.Client")
+    def test_routine_pacing_wait_notifies_noisy_mode(self, mock_client_cls):
+        response = http_response(
+            200, payload={"choices": [{"message": {"content": "done"}}]}
+        )
+        client = MagicMock()
+        client.post.return_value = response
+        mock_client_cls.return_value.__enter__.return_value = client
+        provider, fake = paced_provider(rpm=20)
+        notices = MagicMock()
+
+        provider.chat([Message("user", "one")], noisy_callback=notices)
+        provider.chat([Message("user", "two")], noisy_callback=notices)
+
+        assert fake.sleeps == pytest.approx([3.0])
+        assert notices.call_args_list == [
+            call("Thinking..."),
+            call("Thinking..."),
+            call("OpenRouter pacing: waiting 3.0 seconds before sending request..."),
+        ]
+
     @patch("terra_ai.providers.openrouter.trace_openrouter")
     @patch("terra_ai.providers.openrouter.httpx.Client")
     def test_traces_only_allowlisted_response_headers(
@@ -460,20 +481,21 @@ class TestOpenRouterProvider:
         assert "secret-cookie" not in error_text
         assert "Bearer secret" not in error_text
 
-        header_payloads = [
-            call.args[1]
+        response_events = [
+            call.args[0]
             for call in mock_trace.call_args_list
-            if call.args and call.args[0] == "response_headers=%s"
+            if call.args and call.args[0].get("event_type") == "response"
         ]
-        assert header_payloads == [
-            (
-                '{"Retry-After":"60","RateLimit-Remaining":"0",'
-                '"X-RateLimit-Reset":"1750000000",'
-                '"X-Generation-Id":"gen-test"}'
-            )
-        ]
-        assert "secret-cookie" not in header_payloads[0]
-        assert "Bearer secret" not in header_payloads[0]
+        assert len(response_events) == 1
+        assert response_events[0]["safe_response_headers"] == {
+            "Retry-After": "60",
+            "RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": "1750000000",
+            "X-Generation-Id": "gen-test",
+        }
+        rendered_event = str(response_events[0])
+        assert "secret-cookie" not in rendered_event
+        assert "Bearer secret" not in rendered_event
 
 
 class TestProviderRegistry:

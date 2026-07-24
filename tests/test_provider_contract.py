@@ -39,6 +39,7 @@ class InProcessProvider(AIProvider):
         effort: str = "high",
         tools: list[dict] | None = None,
         noisy_callback=None,
+        request_kind: str = "initial",
     ) -> str:
         self.calls.append(
             {
@@ -47,6 +48,7 @@ class InProcessProvider(AIProvider):
                 "effort": effort,
                 "tools": tools,
                 "noisy_callback": noisy_callback,
+                "request_kind": request_kind,
             }
         )
         return "in-process answer"

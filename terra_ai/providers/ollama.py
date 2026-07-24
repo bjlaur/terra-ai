@@ -43,7 +43,7 @@ class OllamaProvider(AIProvider):
 
     def chat(self, messages: list[Message], system_prompt: str | None = None,
              effort: str = "high", tools: list[dict] | None = None,
-             noisy_callback=None) -> str:
+             noisy_callback=None, request_kind: str = "initial") -> str:
         if tools:
             raise UnsupportedProviderOptionError(
                 "OllamaProvider does not implement local tool calling"

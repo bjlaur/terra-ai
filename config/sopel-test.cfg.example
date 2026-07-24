@@ -44,6 +44,9 @@ base_url = https://openrouter.ai/api/v1
 provider_timeout = 30
 provider_requests_per_minute = 0
 provider_min_interval = 0
+provider_call_log_enabled = true
+provider_call_log_max_bytes = 26214400
+provider_call_log_backup_count = 2
 
 # Bot behavior
 bot_nick = TerraAI

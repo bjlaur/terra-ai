@@ -60,6 +60,18 @@ class TerraAISection(types.StaticSection):
     )
     """Minimum seconds between provider request starts; 0 disables."""
 
+    provider_call_log_enabled = types.BooleanAttribute(
+        'provider_call_log_enabled', default=True,
+    )
+    """Write compact structured provider-attempt telemetry."""
+
+    provider_call_log_max_bytes = types.ValidatedAttribute(
+        'provider_call_log_max_bytes', parse=int, default=25 * 1024 * 1024,
+    )
+    provider_call_log_backup_count = types.ValidatedAttribute(
+        'provider_call_log_backup_count', parse=int, default=2,
+    )
+
     # ── Bot behavior ───────────────────────────────────────────────────
 
     bot_nick = types.ValidatedAttribute(

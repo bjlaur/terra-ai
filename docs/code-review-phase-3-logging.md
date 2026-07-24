@@ -2,7 +2,7 @@
 
 Phase 3 replaces TerraAI's borrowed SOPEL handler with owned, rotating,
 correlated logging. It also consolidates the automated and manual SOPEL test
-artifacts under one sortable private run directory.
+artifacts under one sortable run directory.
 
 ## Runtime logging
 
@@ -11,18 +11,17 @@ stream:
 
 - `terra-ai.log` receives DEBUG, INFO, WARNING, ERROR, and CRITICAL records.
   TRACE records are excluded.
-- `openrouter-trace.log` receives only OpenRouter TRACE records containing the
+- `openrouter-trace.jsonl` receives only OpenRouter TRACE records containing the
   complete request JSON and response body for every provider round.
 - SOPEL stderr receives INFO, WARNING, ERROR, and CRITICAL TerraAI records.
   DEBUG and TRACE remain file-only even when SOPEL itself runs at DEBUG.
 
 Both files rotate independently. Defaults are 10 MiB with five backups for
-`terra-ai.log`, and 25 MiB with two backups for `openrouter-trace.log`. The
+`terra-ai.log`, and 25 MiB with two backups for `openrouter-trace.jsonl`. The
 default `log_dir = data/logs` is resolved relative to SOPEL's configuration
 home by `FilenameAttribute`; an absolute path can be configured when desired.
-The directory is mode `0700`, current and newly rotated TerraAI files are mode
-`0600`, and setup rejects empty paths or non-positive rotation settings before
-creating files.
+Setup rejects empty paths or non-positive rotation settings before creating
+files.
 
 Setup removes only handlers owned by TerraAI before reinstalling them, which
 prevents duplicated records after plugin reload. Shutdown records failures
@@ -77,8 +76,7 @@ Trace records may contain private conversation and tool data by design.
 
 Pytest output and progress, SOPEL stdout/stderr, SOPEL's own logs, and both
 TerraAI logs live beneath that directory. Automated and manual SOPEL configs
-explicitly point both logging systems there. The run directory is mode `0700`,
-and directly owned harness output is mode `0600`. Legacy ignored files under
+explicitly point both logging systems there. Legacy ignored files under
 `config/logs/` were removed with explicit user approval.
 
 ## Verification

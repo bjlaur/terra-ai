@@ -143,6 +143,7 @@ class TerraAI:
         response = provider.chat(
             msg_objs, effort=self.prompts.effort, tools=tools,
             noisy_callback=noisy_callback,
+            request_kind="initial",
         )
         if not isinstance(response, str) or not response.strip():
             raise ValueError(
@@ -193,6 +194,7 @@ class TerraAI:
             response = provider.chat(
                 retry_msgs, effort=self.prompts.effort, tools=tools,
                 noisy_callback=noisy_callback,
+                request_kind="concise_rewrite",
             )
             logger.debug(
                 "AI response after concise rewrite #%d: model=%s length=%d text=%s",
