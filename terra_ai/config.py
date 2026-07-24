@@ -50,6 +50,16 @@ class TerraAISection(types.StaticSection):
     )
     """HTTP timeout for provider API calls (seconds)."""
 
+    provider_requests_per_minute = types.ValidatedAttribute(
+        'provider_requests_per_minute', parse=float, default=0.0,
+    )
+    """Maximum evenly spaced provider request starts per minute; 0 disables."""
+
+    provider_min_interval = types.ValidatedAttribute(
+        'provider_min_interval', parse=float, default=0.0,
+    )
+    """Minimum seconds between provider request starts; 0 disables."""
+
     # ── Bot behavior ───────────────────────────────────────────────────
 
     bot_nick = types.ValidatedAttribute(

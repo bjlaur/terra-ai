@@ -88,6 +88,8 @@ class TestPluginRules:
                     "api_key = test-key",
                     "base_url = https://openrouter.example/v1",
                     "provider_timeout = 15",
+                    "provider_requests_per_minute = 20",
+                    "provider_min_interval = 4",
                     f"sqlite_path = {tmp_path / 'terraai.db'}",
                 ]
             )
@@ -102,6 +104,9 @@ class TestPluginRules:
         try:
             assert isinstance(instance.config, TerraAISection)
             assert instance.config.provider_timeout == 15
+            assert instance.config.provider_requests_per_minute == 20
+            assert instance.config.provider_min_interval == 4
+            assert instance.registry.get()._request_pacer.interval == pytest.approx(4.0)
             assert instance.config.bot_nick == "TerraAI"
         finally:
             terra_plugin.shutdown(bot)

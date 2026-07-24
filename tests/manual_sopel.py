@@ -39,6 +39,12 @@ def main(argv=None) -> int:
             api_key=api_key,
             sqlite_path=directory / "terra_ai.db",
             provider_timeout=timeout,
+            provider_requests_per_minute=float(
+                os.environ.get("TERRAI_TEST_PROVIDER_RPM", "0")
+            ),
+            provider_min_interval=float(
+                os.environ.get("TERRAI_TEST_PROVIDER_MIN_INTERVAL", "0")
+            ),
             log_dir=run_directory / "sopel",
         )
         print(

@@ -42,6 +42,8 @@ model = tencent/hy3:free
 api_key = ${OPENROUTER_API_KEY}
 base_url = https://openrouter.ai/api/v1
 provider_timeout = 30
+provider_requests_per_minute = 0
+provider_min_interval = 0
 
 # Bot behavior
 bot_nick = TerraAI

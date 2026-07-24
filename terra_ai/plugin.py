@@ -12,6 +12,7 @@ from terra_ai.config import TerraAISection
 from terra_ai.errors import event_error_scope, report_terminal_error
 from terra_ai.logging_config import configure_logging, shutdown_logging
 from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.pacing import RequestPacer
 from terra_ai.providers.registry import ProviderRegistry
 
 logger = logging.getLogger("terraai")
@@ -79,11 +80,16 @@ def _openrouter_registry(config) -> ProviderRegistry:
         raise ValueError("[terraai] base_url must not be empty")
     if config.provider_timeout <= 0:
         raise ValueError("[terraai] provider_timeout must be greater than zero")
+    request_pacer = RequestPacer(
+        requests_per_minute=config.provider_requests_per_minute,
+        min_interval=config.provider_min_interval,
+    )
     provider = OpenRouterProvider(
         model=config.model,
         api_key=config.api_key,
         base_url=config.base_url,
         timeout=config.provider_timeout,
+        request_pacer=request_pacer,
     )
     return ProviderRegistry(provider)
 

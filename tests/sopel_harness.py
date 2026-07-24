@@ -55,6 +55,8 @@ def write_sopel_test_config(
     api_key: str,
     sqlite_path: Path,
     provider_timeout: int,
+    provider_requests_per_minute: float = 0.0,
+    provider_min_interval: float = 0.0,
     log_dir: Path | None = None,
 ) -> Path:
     """Write the private config shared by Ergo tests and manual mode."""
@@ -81,6 +83,8 @@ model = {model}
 api_key = {api_key}
 base_url = https://openrouter.ai/api/v1
 provider_timeout = {provider_timeout}
+provider_requests_per_minute = {provider_requests_per_minute}
+provider_min_interval = {provider_min_interval}
 bot_nick = {BOT_NICK}
 effort = high
 sqlite_path = {sqlite_path}

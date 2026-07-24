@@ -2,20 +2,37 @@
 
 import json
 import logging
+import math
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
 from terra_ai.errors import report_recoverable_error
 from terra_ai.logging_config import trace_openrouter
 from terra_ai.providers.base import AIProvider, Message, ProviderCapabilities
+from terra_ai.providers.pacing import RequestPacer
 from terra_ai.tools.executor import execute_tool
 
 logger = logging.getLogger("terraai")
 
+TRACE_RESPONSE_HEADERS = (
+    "Retry-After",
+    "RateLimit-Limit",
+    "RateLimit-Remaining",
+    "RateLimit-Reset",
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+    "X-Generation-Id",
+)
+
 # Cap on tool-call round-trips per chat() call. Prevents infinite loops if
 # the model keeps requesting tools without converging on a final answer.
 MAX_TOOL_ROUNDS = 3
+MAX_TRANSIENT_RETRIES = 2
+TRANSIENT_HTTP_STATUSES = frozenset({429, 503})
 
 OPENROUTER_WEB_SEARCH_TOOL = {
     "type": "openrouter:web_search",
@@ -164,6 +181,90 @@ def _reasoning_for_model(model: str, effort: str) -> dict | None:
     return None
 
 
+def _safe_response_headers(response: httpx.Response) -> dict[str, str]:
+    """Return only explicitly allowlisted, non-secret response headers."""
+    selected = {}
+    for name in TRACE_RESPONSE_HEADERS:
+        value = response.headers.get(name)
+        if isinstance(value, str):
+            selected[name] = value
+    return selected
+
+
+def _trace_safe_response_headers(response: httpx.Response) -> None:
+    """Trace allowlisted response headers when the trace logger is configured."""
+    selected = _safe_response_headers(response)
+    if selected:
+        trace_openrouter(
+            "response_headers=%s",
+            json.dumps(selected, ensure_ascii=False, separators=(",", ":")),
+        )
+
+
+def _safe_error_metadata(response: httpx.Response) -> dict[str, str | int]:
+    """Return allowlisted OpenRouter error metadata without leaking payloads."""
+    try:
+        data = response.json()
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return {}
+    metadata = error.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+
+    selected: dict[str, str | int] = {}
+    for name in ("error_type", "provider_code"):
+        value = metadata.get(name)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (str, int)):
+            selected[name] = value
+    return selected
+
+
+def _retry_after_delay_seconds(
+    response: httpx.Response,
+    *,
+    now: datetime | None = None,
+) -> float | None:
+    """Return a valid Retry-After delay in seconds, if one was supplied."""
+    value = response.headers.get("Retry-After")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
+        return None
+
+    try:
+        delay = float(value)
+    except ValueError:
+        delay = None
+    if delay is not None:
+        if math.isfinite(delay) and delay >= 0:
+            return delay
+        return None
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if retry_at.tzinfo is None:
+        return None
+
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    return max(
+        0.0,
+        (retry_at.astimezone(timezone.utc) - current.astimezone(timezone.utc))
+        .total_seconds(),
+    )
+
+
 class OpenRouterProvider(AIProvider):
     """OpenRouter AI provider.
 
@@ -177,11 +278,13 @@ class OpenRouterProvider(AIProvider):
 
     def __init__(self, model: str, api_key: str | None = None,
                  base_url: str = "https://openrouter.ai/api/v1",
-                 timeout: int = 30):
+                 timeout: int = 30,
+                 request_pacer: RequestPacer | None = None):
         self._model = model
         self._api_key = api_key
         self._base_url = base_url
         self._timeout = int(timeout)
+        self._request_pacer = request_pacer or RequestPacer()
 
     @property
     def name(self) -> str:
@@ -273,20 +376,108 @@ class OpenRouterProvider(AIProvider):
                 if noisy_callback:
                     noisy_callback("Thinking...")
 
-                api_start = time.time()
-                try:
-                    trace_openrouter(
-                        "request_json=%s",
-                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                    )
-                    response = client.post(url, json=payload, headers=headers)
-                    trace_openrouter("response_body=%s", response.text)
-                    response.raise_for_status()
-                except httpx.HTTPError as exc:
+                response = None
+                for retry_idx in range(MAX_TRANSIENT_RETRIES + 1):
+                    waited = self._request_pacer.wait()
+                    if waited:
+                        logger.debug(
+                            "OpenRouter request pacing: round=%d waited_ms=%d "
+                            "interval_seconds=%.3f",
+                            round_idx,
+                            int(waited * 1000),
+                            self._request_pacer.interval,
+                        )
+
+                    api_start = time.monotonic()
+                    try:
+                        trace_openrouter(
+                            "request_json=%s",
+                            json.dumps(
+                                payload,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ),
+                        )
+                        response = client.post(url, json=payload, headers=headers)
+                        _trace_safe_response_headers(response)
+                        trace_openrouter("response_body=%s", response.text)
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as exc:
+                        status = exc.response.status_code
+                        if (
+                            status in TRANSIENT_HTTP_STATUSES
+                            and self._request_pacer.enabled
+                            and retry_idx < MAX_TRANSIENT_RETRIES
+                        ):
+                            retry_number = retry_idx + 1
+                            retry_after = _retry_after_delay_seconds(exc.response)
+                            retry_delay = max(
+                                self._request_pacer.interval,
+                                retry_after if retry_after is not None else 0.0,
+                            )
+                            self._request_pacer.defer_for(retry_delay)
+                            reason = exc.response.reason_phrase or "HTTP error"
+                            logger.warning(
+                                "OpenRouter transient failure: round=%d status=%d "
+                                "retry=%d/%d delay_seconds=%.3f "
+                                "retry_after_seconds=%s",
+                                round_idx,
+                                status,
+                                retry_number,
+                                MAX_TRANSIENT_RETRIES,
+                                retry_delay,
+                                (
+                                    f"{retry_after:.3f}"
+                                    if retry_after is not None
+                                    else "none"
+                                ),
+                            )
+                            if noisy_callback:
+                                noisy_callback(
+                                    f"OpenRouter returned {status} {reason}. "
+                                    f"Retrying in {retry_delay:.1f} seconds "
+                                    f"({retry_number}/{MAX_TRANSIENT_RETRIES})..."
+                                )
+                            continue
+
+                        safe_headers = _safe_response_headers(exc.response)
+                        safe_metadata = _safe_error_metadata(exc.response)
+                        error_context = ""
+                        if safe_headers:
+                            error_context += (
+                                "; response_headers="
+                                + json.dumps(
+                                    safe_headers,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                )
+                            )
+                        if safe_metadata:
+                            error_context += (
+                                "; error_metadata="
+                                + json.dumps(
+                                    safe_metadata,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                )
+                            )
+                        raise OpenRouterTransportError(
+                            f"OpenRouter request failed in round {round_idx} "
+                            f"after {retry_idx + 1} attempt(s): "
+                            f"{exc}{error_context}"
+                        ) from exc
+                    except httpx.HTTPError as exc:
+                        raise OpenRouterTransportError(
+                            f"OpenRouter request failed in round {round_idx}: {exc}"
+                        ) from exc
+
+                    api_ms = int((time.monotonic() - api_start) * 1000)
+                    break
+
+                if response is None:
                     raise OpenRouterTransportError(
-                        f"OpenRouter request failed in round {round_idx}: {exc}"
-                    ) from exc
-                api_ms = int((time.time() - api_start) * 1000)
+                        f"OpenRouter request failed in round {round_idx} without a response"
+                    )
                 try:
                     data = response.json()
                 except ValueError as exc:

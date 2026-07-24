@@ -79,8 +79,11 @@ TERRAI_TEST_MODEL=google/gemma-4-31b-it:free ./test.sh real
 scripts/benchmark-models
 
 # Benchmark a single model or choose an output directory
-scripts/benchmark-models --model google/gemma-4-31b-it:free
+scripts/benchmark-models --model inclusionai/ling-3.0-flash:free
 scripts/benchmark-models --output-dir benchmark-results/my-run
+
+# Pace OpenRouter request starts at 20 RPM (one start every 3 seconds)
+scripts/benchmark-models --model inclusionai/ling-3.0-flash:free --rpm 20
 
 # Check compilation
 python -m compileall -q terra_ai tests
@@ -90,6 +93,25 @@ python -m compileall -q terra_ai tests
 suites. Tests marked `benchmark` additionally record their prompts, exact
 responses, pytest outcome, and send-to-final-response wall-clock latency when
 `TERRAI_BENCHMARK_OUTPUT` is set by `scripts/benchmark-models`.
+
+## OpenRouter request pacing
+
+TerraAI can evenly space OpenRouter request starts across concurrent SOPEL
+handlers, local tool rounds, and concise rewrites. Existing installations remain
+unpaced unless one of these `[terraai]` settings is enabled:
+
+```ini
+provider_requests_per_minute = 20
+provider_min_interval = 0
+```
+
+The effective interval is the stricter of `60 / provider_requests_per_minute`
+and `provider_min_interval`. A value of zero disables that individual
+constraint. When pacing is enabled, an HTTP 429 or 503 is retried twice,
+waiting one effective interval before each retry. Noisy mode shows a notice for
+those retries; routine pacing waits are log-only. With pacing disabled, TerraAI
+returns the first 429/503 without immediate retries. Pacing is process-local and does not coordinate
+multiple TerraAI processes that share an OpenRouter API key.
 
 ## Commands
 

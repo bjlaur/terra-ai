@@ -33,9 +33,29 @@ prepare_test_logs() {
 
 run_pytest() {
     local test_mode="$1"
+    local pytest_status
+    local progress_reporter_pid=""
     shift
     prepare_test_logs "$test_mode"
+
+    if [[ "${TERRAI_TEST_LIVE_PROGRESS:-0}" == "1" ]]; then
+        python3 -m tests.progress_reporter \
+            "$TERRAI_PYTEST_PROGRESS_FILE" \
+            --heartbeat-seconds "${TERRAI_TEST_HEARTBEAT_SECONDS:-15}" &
+        progress_reporter_pid=$!
+    fi
+
+    set +e
     python3 -m pytest "$@" 2>&1 | tee "$test_output_log"
+    pytest_status=${PIPESTATUS[0]}
+    set -e
+
+    if [[ -n "$progress_reporter_pid" ]]; then
+        kill -TERM "$progress_reporter_pid" 2>/dev/null || true
+        wait "$progress_reporter_pid" 2>/dev/null || true
+    fi
+
+    return "$pytest_status"
 }
 
 usage() {
@@ -65,11 +85,17 @@ load_test_env() {
     local had_ergo_conf=0 old_ergo_conf=""
     local had_test_model=0 old_test_model=""
     local had_benchmark_output=0 old_benchmark_output=""
+    local had_provider_rpm=0 old_provider_rpm=""
+    local had_provider_min_interval=0 old_provider_min_interval=""
+    local had_live_progress=0 old_live_progress=""
     if [[ -v OPENROUTER_API_KEY ]]; then had_key=1; old_key="$OPENROUTER_API_KEY"; fi
     if [[ -v TERRAI_TEST_TIMEOUT ]]; then had_timeout=1; old_timeout="$TERRAI_TEST_TIMEOUT"; fi
     if [[ -v ERGO_CONF ]]; then had_ergo_conf=1; old_ergo_conf="$ERGO_CONF"; fi
     if [[ -v TERRAI_TEST_MODEL ]]; then had_test_model=1; old_test_model="$TERRAI_TEST_MODEL"; fi
     if [[ -v TERRAI_BENCHMARK_OUTPUT ]]; then had_benchmark_output=1; old_benchmark_output="$TERRAI_BENCHMARK_OUTPUT"; fi
+    if [[ -v TERRAI_TEST_PROVIDER_RPM ]]; then had_provider_rpm=1; old_provider_rpm="$TERRAI_TEST_PROVIDER_RPM"; fi
+    if [[ -v TERRAI_TEST_PROVIDER_MIN_INTERVAL ]]; then had_provider_min_interval=1; old_provider_min_interval="$TERRAI_TEST_PROVIDER_MIN_INTERVAL"; fi
+    if [[ -v TERRAI_TEST_LIVE_PROGRESS ]]; then had_live_progress=1; old_live_progress="$TERRAI_TEST_LIVE_PROGRESS"; fi
 
     set -a
     # shellcheck disable=SC1090
@@ -81,6 +107,9 @@ load_test_env() {
     if (( had_ergo_conf )); then export ERGO_CONF="$old_ergo_conf"; fi
     if (( had_test_model )); then export TERRAI_TEST_MODEL="$old_test_model"; fi
     if (( had_benchmark_output )); then export TERRAI_BENCHMARK_OUTPUT="$old_benchmark_output"; fi
+    if (( had_provider_rpm )); then export TERRAI_TEST_PROVIDER_RPM="$old_provider_rpm"; fi
+    if (( had_provider_min_interval )); then export TERRAI_TEST_PROVIDER_MIN_INTERVAL="$old_provider_min_interval"; fi
+    if (( had_live_progress )); then export TERRAI_TEST_LIVE_PROGRESS="$old_live_progress"; fi
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
         echo "ERROR: OPENROUTER_API_KEY is not set in the environment or .env" >&2
         exit 1

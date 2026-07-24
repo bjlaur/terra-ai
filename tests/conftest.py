@@ -12,6 +12,7 @@ import pytest
 from terra_ai import plugin as terra_plugin
 from terra_ai.bot import TerraAI
 from terra_ai.providers.openrouter import OpenRouterProvider
+from terra_ai.providers.pacing import RequestPacer
 from terra_ai.providers.registry import ProviderRegistry
 from tests.support import PluginTestClient, build_fake_bot
 from tests.http_fakes import ScriptedServices
@@ -131,6 +132,8 @@ def _make_test_config(**overrides):
         "api_key": "test-key",
         "base_url": "https://openrouter.ai/api/v1",
         "provider_timeout": 30,
+        "provider_requests_per_minute": 0.0,
+        "provider_min_interval": 0.0,
         "bot_nick": "TerraAI",
         "effort": "high",
         "sqlite_path": "data/test-terraai.db",
@@ -162,8 +165,26 @@ def deny_unselected_network(request, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", blocked_connect)
 
 
+def _test_pacing_values() -> tuple[float, float]:
+    """Return live-test pacing values from the test-only environment."""
+    return (
+        float(os.environ.get("TERRAI_TEST_PROVIDER_RPM", "0")),
+        float(os.environ.get("TERRAI_TEST_PROVIDER_MIN_INTERVAL", "0")),
+    )
+
+
+@pytest.fixture(scope="session")
+def real_request_pacer():
+    """One request pacer shared by every direct real-test provider."""
+    requests_per_minute, min_interval = _test_pacing_values()
+    return RequestPacer(
+        requests_per_minute=requests_per_minute,
+        min_interval=min_interval,
+    )
+
+
 @pytest.fixture
-def terra(tmp_path, request):
+def terra(tmp_path, request, real_request_pacer):
     """One TerraAI instance, one database connection, and deterministic teardown."""
     use_real = bool(
         (
@@ -186,6 +207,12 @@ def terra(tmp_path, request):
         model=model,
         api_key=api_key,
         provider_timeout=provider_timeout,
+        provider_requests_per_minute=(
+            real_request_pacer.requests_per_minute if use_real else 0.0
+        ),
+        provider_min_interval=(
+            real_request_pacer.min_interval if use_real else 0.0
+        ),
         sqlite_path=str(tmp_path / "terraai.db"),
     )
     provider = OpenRouterProvider(
@@ -193,6 +220,7 @@ def terra(tmp_path, request):
         api_key=config.api_key,
         base_url=config.base_url,
         timeout=config.provider_timeout,
+        request_pacer=real_request_pacer if use_real else None,
     )
     instance = TerraAI(config, ProviderRegistry(provider))
     previous = terra_plugin._terrai

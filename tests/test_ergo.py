@@ -296,6 +296,12 @@ class TestErgoSopelBot:
             api_key=api_key,
             sqlite_path=tmp / "terra_ai.db",
             provider_timeout=int(_test_timeout(6)),
+            provider_requests_per_minute=float(
+                os.environ.get("TERRAI_TEST_PROVIDER_RPM", "0")
+            ),
+            provider_min_interval=float(
+                os.environ.get("TERRAI_TEST_PROVIDER_MIN_INTERVAL", "0")
+            ),
             log_dir=get_test_run_directory() / "sopel",
         )
 
